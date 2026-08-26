@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Asistente de renta</title>
+  <link rel="stylesheet" href="/static/estilos.css">
+</head>
+<body>
+
+  <header class="cabecera">
+    <div class="contenedor">
+      <h1>Asistente de renta</h1>
+      <p class="subtitulo">Organización de documentos · prototipo</p>
+    </div>
+  </header>
+
+  <main class="contenedor">
+
+    <!-- ---------- Agregar cliente ---------- -->
+    <section class="seccion">
+      <h2>Agregar cliente</h2>
+
+      <div class="tarjeta">
+        <div id="aviso" class="aviso oculto" role="alert"></div>
+
+        <form id="formulario-cliente" novalidate>
+          <div class="fila">
+            <div class="campo">
+              <label for="nombre">Nombre del cliente</label>
+              <input type="text" id="nombre" name="nombre"
+                     autocomplete="off" placeholder="Ej: María Gómez">
+            </div>
+
+            <div class="campo campo-corto">
+              <label for="digitos">Últimos 2 dígitos</label>
+              <input type="text" id="digitos" name="digitos"
+                     inputmode="numeric" maxlength="2"
+                     autocomplete="off" placeholder="07">
+            </div>
+
+            <div class="campo">
+              <label for="fecha">Fecha de vencimiento</label>
+              <input type="date" id="fecha" name="fecha">
+            </div>
+
+            <button type="submit" class="boton">Agregar</button>
+          </div>
+
+          <p class="ayuda" style="margin-top:12px">
+            La fecha la escribe usted según el calendario oficial. El sistema
+            todavía no la calcula solo, y siempre se puede cambiar después.
+          </p>
+        </form>
+      </div>
+    </section>
+
+    <!-- ---------- Lista de clientes ---------- -->
+    <section class="seccion">
+      <h2>Clientes</h2>
+      <div id="lista-clientes" class="lista">
+        <div class="vacio">Cargando…</div>
+      </div>
+    </section>
+
+    <p class="nota-prototipo">
+      Prototipo en construcción. Los archivos y los datos se guardan únicamente
+      en este computador.
+    </p>
+
+  </main>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>

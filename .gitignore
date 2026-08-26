@@ -1,0 +1,79 @@
+# ==========================================================
+# Datos confidenciales de terceros — NUNCA se suben a git
+# ==========================================================
+
+# Carpeta completa de datos: documentos subidos y base de datos
+datos/
+
+# Base de datos SQLite, esté donde esté
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite3
+
+# Credenciales (API key de Anthropic, configuración local)
+.env
+.env.*
+!.env.ejemplo
+
+# ==========================================================
+# Documentos de clientes
+# Red de seguridad: si algún archivo se guarda por fuera de
+# datos/ por error, igual queda excluido.
+# ==========================================================
+*.pdf
+*.xml
+*.zip
+*.rar
+*.7z
+*.jpg
+*.jpeg
+*.png
+*.gif
+*.webp
+*.heic
+*.heif
+*.tiff
+*.doc
+*.docx
+*.xls
+*.xlsx
+*.csv
+
+# ...menos los recursos de la interfaz, que sí son parte del código
+!static/**
+
+# ==========================================================
+# Python
+# ==========================================================
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+env/
+*.egg-info/
+.pytest_cache/
+
+# ==========================================================
+# Basura del sistema operativo
+# ==========================================================
+
+# Mac
+.DS_Store
+._*
+.Spotlight-V100
+.Trashes
+
+# Windows
+Thumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# ==========================================================
+# Editores
+# ==========================================================
+.vscode/
+.idea/
+*.swp

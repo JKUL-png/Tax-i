@@ -1,0 +1,6 @@
+# Normaliza los saltos de línea para que el proyecto viaje bien entre Mac y Windows.
+* text=auto eol=lf
+
+# Excepción: los .bat de Windows necesitan saltos de línea CRLF.
+# Con LF, cmd.exe puede fallar al leer las etiquetas (goto) del archivo.
+*.bat text eol=crlf

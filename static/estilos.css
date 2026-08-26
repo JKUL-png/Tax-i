@@ -1,0 +1,376 @@
+/* ==========================================================
+   Sistema visual del asistente de renta
+
+   Principios:
+   - Minimalista y neutro. El contenido manda, la interfaz no estorba.
+   - Legible a cualquier edad: texto grande, mucho contraste, mucho aire.
+   - Nada escondido: sin menús que aparecen al pasar el mouse,
+     sin botones que son solo un icono.
+   ========================================================== */
+
+:root {
+  /* --- Colores --- */
+  --fondo: #FAFAF8;              /* blanco cálido, fondo de la página */
+  --superficie: #FFFFFF;         /* tarjetas y campos */
+  --texto: #171717;              /* negro suave */
+  --texto-secundario: #4B5563;   /* gris legible (7.2:1 de contraste) */
+  --texto-tenue: #6B7280;        /* solo para etiquetas pequeñas */
+  --borde: #E5E7EB;
+  --borde-fuerte: #D1D5DB;
+
+  --primary: #10805F;            /* verde oscuro: pasa contraste con texto blanco */
+  --primary-hover: #0C6549;
+  --primary-acento: #16A37A;     /* verde vivo: solo adornos, nunca texto */
+  --primary-tenue: #ECFDF5;
+
+  --info: #3B82F6;               /* azul: marca lo que viene de la IA */
+  --info-fondo: #EFF6FF;
+  --info-texto: #1D4ED8;
+
+  --exito-fondo: #ECFDF5;
+  --exito-texto: #15803D;
+
+  --alerta-fondo: #FFFBEB;
+  --alerta-texto: #B45309;
+
+  --error: #EF4444;
+  --error-fondo: #FEF2F2;
+  --error-texto: #B91C1C;
+
+  /* --- Medidas --- */
+  --radio: 10px;
+  --radio-chico: 6px;
+  --sombra: 0 1px 2px rgba(23, 23, 23, 0.05);
+  --ancho-maximo: 880px;
+  --alto-control: 46px;          /* alto mínimo de botones y campos */
+}
+
+/* ==========================================================
+   Base
+   ========================================================== */
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--fondo);
+  color: var(--texto);
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  font-size: 17px;               /* base grande a propósito */
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+}
+
+.contenedor {
+  max-width: var(--ancho-maximo);
+  margin: 0 auto;
+  padding: 0 24px;
+}
+
+h1, h2, h3 {
+  margin: 0;
+  line-height: 1.3;
+  font-weight: 600;
+}
+
+h1 { font-size: 1.35rem; }
+h2 { font-size: 1.15rem; }
+h3 { font-size: 1.05rem; }
+
+/* Se oculta visualmente pero los lectores de pantalla lo leen. */
+.solo-lectores {
+  position: absolute;
+  width: 1px; height: 1px;
+  padding: 0; margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+/* ==========================================================
+   Cabecera
+   ========================================================== */
+
+.cabecera {
+  background: var(--superficie);
+  border-bottom: 1px solid var(--borde);
+  padding: 20px 0;
+  margin-bottom: 36px;
+}
+
+.cabecera .contenedor {
+  display: flex;
+  align-items: baseline;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.subtitulo {
+  margin: 0;
+  color: var(--texto-tenue);
+  font-size: 0.9rem;
+}
+
+/* ==========================================================
+   Tarjetas
+   ========================================================== */
+
+.tarjeta {
+  background: var(--superficie);
+  border: 1px solid var(--borde);
+  border-radius: var(--radio);
+  box-shadow: var(--sombra);
+  padding: 24px;
+}
+
+.seccion {
+  margin-bottom: 36px;
+}
+
+.seccion > h2 {
+  margin-bottom: 14px;
+}
+
+/* ==========================================================
+   Formularios
+   ========================================================== */
+
+.campo {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+label {
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: var(--texto-secundario);
+}
+
+.ayuda {
+  font-size: 0.82rem;
+  color: var(--texto-tenue);
+  margin: 0;
+}
+
+input[type="text"],
+input[type="date"] {
+  height: var(--alto-control);
+  padding: 0 12px;
+  font-family: inherit;
+  font-size: 1rem;
+  color: var(--texto);
+  background: var(--superficie);
+  border: 1px solid var(--borde-fuerte);
+  border-radius: var(--radio-chico);
+  width: 100%;
+}
+
+input:focus-visible,
+button:focus-visible {
+  outline: 3px solid var(--primary-acento);
+  outline-offset: 2px;
+}
+
+input[type="text"]:focus,
+input[type="date"]:focus {
+  border-color: var(--primary);
+  outline: 3px solid var(--primary-tenue);
+  outline-offset: 0;
+}
+
+/* Fila de campos que se apila sola en pantallas angostas */
+.fila {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+  align-items: flex-end;
+}
+
+.fila .campo {
+  flex: 1 1 200px;
+}
+
+.fila .campo-corto {
+  flex: 0 0 130px;
+}
+
+/* ==========================================================
+   Botones
+   ========================================================== */
+
+button {
+  font-family: inherit;
+  font-size: 1rem;
+  cursor: pointer;
+}
+
+.boton {
+  height: var(--alto-control);
+  padding: 0 22px;
+  background: var(--primary);
+  color: #FFFFFF;
+  border: 1px solid var(--primary);
+  border-radius: var(--radio-chico);
+  font-weight: 500;
+}
+
+.boton:hover {
+  background: var(--primary-hover);
+  border-color: var(--primary-hover);
+}
+
+.boton[disabled] {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.boton-secundario {
+  height: var(--alto-control);
+  padding: 0 18px;
+  background: var(--superficie);
+  color: var(--texto);
+  border: 1px solid var(--borde-fuerte);
+  border-radius: var(--radio-chico);
+}
+
+.boton-secundario:hover {
+  background: var(--fondo);
+}
+
+/* Botón discreto, para acciones poco frecuentes como eliminar */
+.boton-texto {
+  background: none;
+  border: none;
+  padding: 8px 10px;
+  color: var(--texto-secundario);
+  text-decoration: underline;
+  border-radius: var(--radio-chico);
+}
+
+.boton-texto:hover {
+  color: var(--error-texto);
+  background: var(--error-fondo);
+}
+
+/* ==========================================================
+   Etiquetas de estado
+   ========================================================== */
+
+.etiqueta {
+  display: inline-block;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 0.82rem;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.etiqueta-neutra { background: var(--fondo);        color: var(--texto-secundario); border: 1px solid var(--borde); }
+.etiqueta-exito  { background: var(--exito-fondo);  color: var(--exito-texto); }
+.etiqueta-alerta { background: var(--alerta-fondo); color: var(--alerta-texto); }
+.etiqueta-error  { background: var(--error-fondo);  color: var(--error-texto); }
+
+/* Reservada para datos leídos por IA. Todo lo que lleve esta etiqueta
+   debe decir "verificar" — es una obligación del proyecto, no un adorno. */
+.etiqueta-ia     { background: var(--info-fondo);   color: var(--info-texto); }
+
+/* ==========================================================
+   Lista de clientes
+   ========================================================== */
+
+.lista {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.cliente {
+  background: var(--superficie);
+  border: 1px solid var(--borde);
+  border-radius: var(--radio);
+  box-shadow: var(--sombra);
+  padding: 18px 22px;
+  display: flex;
+  gap: 20px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.cliente-datos {
+  flex: 1 1 220px;
+  min-width: 0;
+}
+
+.cliente-nombre {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.cliente-cedula {
+  margin: 2px 0 0;
+  font-size: 0.88rem;
+  color: var(--texto-secundario);
+}
+
+.cliente-fecha {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 190px;
+}
+
+.cliente-fecha input[type="date"] {
+  height: 40px;
+}
+
+.cliente-acciones {
+  flex: 0 0 auto;
+}
+
+/* ==========================================================
+   Estado vacío y avisos
+   ========================================================== */
+
+.vacio {
+  background: var(--superficie);
+  border: 1px dashed var(--borde-fuerte);
+  border-radius: var(--radio);
+  padding: 40px 24px;
+  text-align: center;
+  color: var(--texto-secundario);
+}
+
+.aviso {
+  border-radius: var(--radio-chico);
+  padding: 12px 16px;
+  font-size: 0.92rem;
+  margin-bottom: 18px;
+}
+
+.aviso-error { background: var(--error-fondo); color: var(--error-texto); }
+.aviso-exito { background: var(--exito-fondo); color: var(--exito-texto); }
+
+.oculto {
+  display: none;
+}
+
+/* Nota fija sobre el estado del prototipo */
+.nota-prototipo {
+  margin-top: 48px;
+  padding: 16px 20px;
+  border-top: 1px solid var(--borde);
+  font-size: 0.85rem;
+  color: var(--texto-tenue);
+}
+
+/* ==========================================================
+   Respeta a quien pide menos movimiento en el sistema
+   ========================================================== */
+
+@media (prefers-reduced-motion: reduce) {
+  * { transition: none !important; animation: none !important; }
+}
