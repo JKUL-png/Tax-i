@@ -1,0 +1,9 @@
+# Herramientas para DESARROLLAR y probar. NO hacen falta para usar el
+# programa: el contador solo instala lo de requirements.txt.
+#
+# Instalar con:
+#   .venv/bin/python -m pip install -r requirements-dev.txt
+#   .venv/bin/python -m playwright install chromium
+
+# Abre un navegador de verdad para revisar que las pantallas funcionen.
+playwright

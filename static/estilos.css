@@ -372,8 +372,15 @@ button {
 .aviso-fechas { background: var(--alerta-fondo); color: var(--alerta-texto); margin-top: 10px; }
 .aviso-exito { background: var(--exito-fondo); color: var(--exito-texto); }
 
+/* Esconder algo tiene que ganarle SIEMPRE a cualquier otra regla.
+
+   Sin el !important, una regla escrita más abajo en este archivo que
+   también diga "display" le gana a esta por ser la última, y el
+   elemento se queda visible aunque el JavaScript le haya puesto la
+   clase "oculto". Eso ya pasó una vez con el visor de documentos:
+   aparecía un cuadro blanco vacío tapando la pantalla del cliente. */
 .oculto {
-  display: none;
+  display: none !important;
 }
 
 /* Nota fija sobre el estado del prototipo */
@@ -651,6 +658,13 @@ a {
 .columna-marca { width: 60px; text-align: center; }
 .columna-corta { width: 90px; }
 .columna-fecha { width: 170px; }
+
+/* El nombre necesita espacio: "Juan Pérez Ñáñez" no puede salir cortado
+   justo cuando el contador lo está revisando. Si no cabe, la tabla se
+   desplaza de lado dentro de su marco. */
+.tabla-revision .campo-nombre {
+  min-width: 220px;
+}
 
 .tabla-revision .campo-digitos {
   text-align: center;
