@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Documentos del cliente · Asistente de renta</title>
+  <link rel="stylesheet" href="/static/estilos.css">
+</head>
+<body>
+
+  <header class="cabecera">
+    <div class="contenedor">
+      <h1>Asistente de renta</h1>
+      <p class="subtitulo">Documentos del cliente</p>
+    </div>
+  </header>
+
+  <main class="contenedor">
+
+    <p class="migas"><a href="/">← Volver a la lista de clientes</a></p>
+
+    <!-- ---------- Quién es el cliente ---------- -->
+    <section class="seccion">
+      <div class="tarjeta">
+        <h2 id="nombre-cliente">Cargando…</h2>
+        <p id="datos-cliente" class="cliente-cedula"></p>
+      </div>
+    </section>
+
+    <!-- ---------- Subir documentos ---------- -->
+    <section class="seccion">
+      <h2>Subir documentos</h2>
+
+      <div id="aviso" class="aviso oculto" role="alert"></div>
+
+      <div id="zona-arrastre" class="zona-arrastre">
+        <p class="zona-titulo">Arrastre aquí los archivos o la carpeta</p>
+        <p class="ayuda">
+          PDF, fotos (JPG, PNG, HEIC) y XML. Si arrastra un ZIP, se abre solo
+          y se guarda lo que trae adentro.
+        </p>
+
+        <div class="zona-botones">
+          <button type="button" class="boton" id="boton-archivos">
+            Elegir archivos
+          </button>
+          <button type="button" class="boton-secundario" id="boton-carpeta">
+            Elegir una carpeta
+          </button>
+        </div>
+
+        <!-- Los dos campos de archivo están escondidos: los botones de
+             arriba son los que se ven, porque el campo de archivo del
+             navegador es feo y dice "Sin archivos seleccionados". -->
+        <input type="file" id="campo-archivos" multiple class="oculto">
+        <input type="file" id="campo-carpeta" webkitdirectory directory
+               multiple class="oculto">
+      </div>
+
+      <div id="progreso" class="progreso oculto">
+        <p id="progreso-texto">Subiendo…</p>
+      </div>
+
+      <div id="informe" class="informe oculto"></div>
+    </section>
+
+    <!-- ---------- Documentos ya subidos ---------- -->
+    <section class="seccion">
+      <h2>Documentos recibidos <span id="conteo" class="conteo"></span></h2>
+      <div id="lista-documentos" class="lista">
+        <div class="vacio">Cargando…</div>
+      </div>
+    </section>
+
+    <p class="nota-prototipo">
+      Los archivos se guardan únicamente en este computador, en la carpeta
+      <code>datos/archivos/</code>. Todavía no hay clasificación automática:
+      los documentos se ven tal como llegaron.
+    </p>
+
+  </main>
+
+  <script src="/static/cliente.js"></script>
+</body>
+</html>

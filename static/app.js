@@ -113,13 +113,23 @@ function dibujarCliente(cliente) {
   const datos = document.createElement("div");
   datos.className = "cliente-datos";
 
+  // El nombre es un enlace a la pantalla de documentos del cliente.
   const nombre = document.createElement("h3");
   nombre.className = "cliente-nombre";
-  nombre.textContent = cliente.nombre;
+  const enlaceNombre = document.createElement("a");
+  enlaceNombre.href = "/cliente?id=" + cliente.id;
+  enlaceNombre.textContent = cliente.nombre;
+  nombre.appendChild(enlaceNombre);
 
   const cedula = document.createElement("p");
   cedula.className = "cliente-cedula";
-  cedula.textContent = "Cédula termina en " + cliente.dos_digitos;
+  let detalle = "Cédula termina en " + cliente.dos_digitos;
+  if (cliente.documentos === 1) {
+    detalle += " · 1 documento";
+  } else {
+    detalle += " · " + (cliente.documentos || 0) + " documentos";
+  }
+  cedula.textContent = detalle;
 
   datos.appendChild(nombre);
   datos.appendChild(cedula);
@@ -158,9 +168,15 @@ function dibujarCliente(cliente) {
   const acciones = document.createElement("div");
   acciones.className = "cliente-acciones";
 
+  const enlaceDocumentos = document.createElement("a");
+  enlaceDocumentos.className = "boton-texto";
+  enlaceDocumentos.href = "/cliente?id=" + cliente.id;
+  enlaceDocumentos.textContent = "Documentos";
+  acciones.appendChild(enlaceDocumentos);
+
   const botonEliminar = document.createElement("button");
   botonEliminar.type = "button";
-  botonEliminar.className = "boton-texto";
+  botonEliminar.className = "boton-texto boton-texto-peligro";
   botonEliminar.textContent = "Eliminar";
   botonEliminar.addEventListener("click", function () {
     eliminarCliente(cliente);
@@ -251,7 +267,9 @@ async function guardarFecha(idCliente, fecha) {
 
 async function eliminarCliente(cliente) {
   const seguro = confirm(
-    "¿Eliminar a " + cliente.nombre + "?\n\nEsta acción no se puede deshacer."
+    "¿Eliminar a " + cliente.nombre + "?\n\n" +
+    "Se borran también todos sus documentos del computador. " +
+    "Esta acción no se puede deshacer."
   );
   if (!seguro) return;
 

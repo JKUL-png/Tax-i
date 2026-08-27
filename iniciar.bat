@@ -5,16 +5,20 @@ REM Doble clic. Prepara todo y prende el servidor.
 REM Nos paramos en la carpeta del proyecto, sin importar desde donde se ejecute.
 cd /d "%~dp0"
 
-REM La primera vez crea el entorno e instala lo necesario. Las siguientes lo salta.
+REM La primera vez crea el entorno. Las siguientes lo salta.
 if not exist ".venv" goto instalar
-goto arrancar
+goto revisar
 
 :instalar
 echo Primera vez: preparando el entorno (esto puede tardar un minuto)...
 py -m venv .venv
 if errorlevel 1 goto sin_python
 .venv\Scripts\python.exe -m pip install --upgrade pip
-.venv\Scripts\python.exe -m pip install -r requirements.txt
+
+:revisar
+REM Esto se revisa SIEMPRE, no solo la primera vez: si el proyecto agrego una
+REM libreria nueva, aqui se instala. Cuando ya esta todo, tarda un segundo.
+.venv\Scripts\python.exe -m pip install -q -r requirements.txt
 if errorlevel 1 goto error
 
 :arrancar

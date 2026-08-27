@@ -3,23 +3,25 @@ Servidor del asistente de organización documental para renta.
 
 Corre en http://localhost:8000 y sirve dos cosas:
   - las páginas de la interfaz (carpeta static/)
-  - una pequeña API para leer y guardar clientes
+  - una pequeña API para leer y guardar clientes y sus documentos
 
 Nota: no se registra en los logs ningún nombre de cliente ni contenido de
 documentos. Solo errores técnicos.
 """
 
+import mimetypes
 from contextlib import asynccontextmanager
 from datetime import date
 from pathlib import Path
-from typing import Optional
+from typing import List, Optional
+from urllib.parse import quote
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, field_validator
 
-from app import db
+from app import db, documentos
 
 # Raíz del proyecto. Este archivo vive en app/, así que subimos un nivel.
 # Se usa pathlib (y no texto pegado con / o \) para que las rutas funcionen
@@ -48,8 +50,14 @@ app.mount("/static", StaticFiles(directory=CARPETA_STATIC), name="static")
 
 @app.get("/")
 def inicio():
-    """Entrega la página principal."""
+    """Entrega la página principal: la lista de clientes."""
     return FileResponse(CARPETA_STATIC / "index.html")
+
+
+@app.get("/cliente")
+def pagina_cliente():
+    """Entrega la página de un cliente. El id va en la dirección: /cliente?id=3"""
+    return FileResponse(CARPETA_STATIC / "cliente.html")
 
 
 # ----------------------------------------------------------
@@ -148,7 +156,20 @@ class ClienteCambios(BaseModel):
 
 @app.get("/api/clientes")
 def api_listar_clientes():
-    return db.listar_clientes()
+    """Lista los clientes, agregándole a cada uno cuántos documentos tiene."""
+    clientes = db.listar_clientes()
+    conteos = db.contar_documentos()
+    for cliente in clientes:
+        cliente["documentos"] = conteos.get(cliente["id"], 0)
+    return clientes
+
+
+@app.get("/api/clientes/{id_cliente}")
+def api_obtener_cliente(id_cliente: int):
+    cliente = db.obtener_cliente(id_cliente)
+    if cliente is None:
+        raise HTTPException(status_code=404, detail="Ese cliente no existe.")
+    return cliente
 
 
 @app.post("/api/clientes", status_code=201)
@@ -181,3 +202,158 @@ def api_actualizar_cliente(id_cliente: int, cambios: ClienteCambios):
 def api_eliminar_cliente(id_cliente: int):
     if not db.eliminar_cliente(id_cliente):
         raise HTTPException(status_code=404, detail="Ese cliente no existe.")
+    # Los documentos de la base se van solos (ON DELETE CASCADE), pero los
+    # archivos del disco hay que borrarlos a mano. Son datos confidenciales:
+    # no se pueden quedar ahí después de eliminar al cliente.
+    documentos.eliminar_carpeta_cliente(id_cliente)
+
+
+# ----------------------------------------------------------
+# API de documentos
+# ----------------------------------------------------------
+
+
+def con_tipo(documento):
+    """Le agrega al documento el nombre del tipo para mostrarlo en pantalla."""
+    documento = dict(documento)
+    documento["tipo"] = documentos.tipo_legible(documento["extension"])
+    return documento
+
+
+def guardar_y_registrar(id_cliente, nombre_original, contenido, venia_en_zip=None):
+    """Escribe el archivo en el disco y lo anota en la base de datos."""
+    nombre_guardado, tamano = documentos.guardar_contenido(
+        id_cliente, nombre_original, contenido
+    )
+    registro = db.crear_documento(
+        cliente_id=id_cliente,
+        nombre_original=nombre_original,
+        nombre_guardado=nombre_guardado,
+        extension=Path(nombre_guardado).suffix.lower(),
+        tamano=tamano,
+        venia_en_zip=venia_en_zip,
+    )
+    return con_tipo(registro)
+
+
+@app.get("/api/clientes/{id_cliente}/documentos")
+def api_listar_documentos(id_cliente: int):
+    if db.obtener_cliente(id_cliente) is None:
+        raise HTTPException(status_code=404, detail="Ese cliente no existe.")
+    return [con_tipo(documento) for documento in db.listar_documentos(id_cliente)]
+
+
+@app.post("/api/clientes/{id_cliente}/documentos")
+async def api_subir_documentos(
+    id_cliente: int,
+    archivos: List[UploadFile] = File(...),
+):
+    """Recibe uno o varios archivos y los guarda en la carpeta del cliente.
+
+    Los ZIP se abren y se guarda lo que traen adentro, no el ZIP.
+    Lo que no se pueda guardar se devuelve en la lista `ignorados`, con el
+    motivo, para poder mostrárselo al contador en vez de fallar en silencio.
+    """
+    if db.obtener_cliente(id_cliente) is None:
+        raise HTTPException(status_code=404, detail="Ese cliente no existe.")
+
+    guardados = []
+    ignorados = []
+
+    for archivo in archivos:
+        nombre_completo = archivo.filename or "documento"
+
+        # Basura del sistema: se salta sin avisar, no es un documento.
+        if documentos.es_basura(nombre_completo):
+            continue
+
+        # El navegador puede mandar la ruta de la carpeta cuando se arrastra
+        # una carpeta completa. Aquí solo interesa el nombre del archivo.
+        nombre = nombre_completo.replace("\\", "/").split("/")[-1]
+        extension = Path(nombre).suffix.lower()
+
+        # --- Caso ZIP: se abre y se guarda lo de adentro ---
+        if extension == ".zip":
+            contenido = await documentos.leer_con_limite(
+                archivo, documentos.LIMITE_ZIP
+            )
+            if contenido is None:
+                ignorados.append(nombre + " — el ZIP pesa más de 100 MB.")
+                continue
+
+            encontrados, motivos = documentos.abrir_zip(contenido)
+            ignorados.extend(motivos)
+
+            if not encontrados and not motivos:
+                ignorados.append(nombre + " — el ZIP no traía documentos útiles.")
+
+            for nombre_interno, datos in encontrados:
+                guardados.append(
+                    guardar_y_registrar(id_cliente, nombre_interno, datos, nombre)
+                )
+            continue
+
+        # --- Caso archivo suelto ---
+        if extension not in documentos.EXTENSIONES_PERMITIDAS:
+            ignorados.append(nombre + " — tipo de archivo no admitido.")
+            continue
+
+        contenido = await documentos.leer_con_limite(
+            archivo, documentos.LIMITE_ARCHIVO
+        )
+        if contenido is None:
+            ignorados.append(nombre + " — pesa más de 25 MB.")
+            continue
+        if not contenido:
+            ignorados.append(nombre + " — el archivo está vacío.")
+            continue
+
+        guardados.append(guardar_y_registrar(id_cliente, nombre, contenido))
+
+    return {"guardados": guardados, "ignorados": ignorados}
+
+
+@app.get("/api/documentos/{id_documento}/archivo")
+def api_abrir_documento(id_documento: int):
+    """Entrega el archivo original para verlo en el navegador."""
+    documento = db.obtener_documento(id_documento)
+    if documento is None:
+        raise HTTPException(status_code=404, detail="Ese documento no existe.")
+
+    ruta = documentos.ruta_del_documento(
+        documento["cliente_id"], documento["nombre_guardado"]
+    )
+    if ruta is None or not ruta.is_file():
+        raise HTTPException(
+            status_code=404,
+            detail="El archivo ya no está en el disco.",
+        )
+
+    tipo, _ = mimetypes.guess_type(documento["nombre_guardado"])
+
+    # "inline" pide que el navegador lo muestre en vez de descargarlo.
+    # El nombre va codificado (filename*=UTF-8) para que las tildes y las
+    # eñes no se dañen.
+    disposicion = "inline; filename*=UTF-8''" + quote(documento["nombre_original"])
+
+    return FileResponse(
+        ruta,
+        media_type=tipo or "application/octet-stream",
+        headers={"Content-Disposition": disposicion},
+    )
+
+
+@app.delete("/api/documentos/{id_documento}", status_code=204)
+def api_eliminar_documento(id_documento: int):
+    documento = db.obtener_documento(id_documento)
+    if documento is None:
+        raise HTTPException(status_code=404, detail="Ese documento no existe.")
+
+    # Primero el archivo del disco, después el registro de la base.
+    ruta = documentos.ruta_del_documento(
+        documento["cliente_id"], documento["nombre_guardado"]
+    )
+    if ruta is not None and ruta.is_file():
+        ruta.unlink()
+
+    db.eliminar_documento(id_documento)
