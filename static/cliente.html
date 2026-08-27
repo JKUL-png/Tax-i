@@ -19,6 +19,9 @@
 
     <p class="migas"><a href="/">← Volver a la lista de clientes</a></p>
 
+    <!-- Cómo está configurado el programa. Lo llena cliente.js. -->
+    <div id="aviso-modo" class="aviso-modo oculto"></div>
+
     <!-- ---------- Quién es el cliente ---------- -->
     <section class="seccion">
       <div class="tarjeta">
@@ -151,6 +154,26 @@
     </p>
 
   </main>
+
+  <!-- ---------- Visor de documentos ----------
+       Se abre encima de la pantalla al hacer clic en "Ver". -->
+  <div id="visor" class="visor oculto" role="dialog" aria-modal="true"
+       aria-labelledby="visor-titulo">
+    <div class="visor-caja">
+      <div class="visor-barra">
+        <p id="visor-titulo" class="visor-titulo"></p>
+        <div class="visor-acciones">
+          <a id="visor-abrir" class="boton-texto" target="_blank" rel="noopener">
+            Abrir aparte
+          </a>
+          <button type="button" class="boton-texto" id="visor-cerrar">
+            Cerrar
+          </button>
+        </div>
+      </div>
+      <div id="visor-contenido" class="visor-contenido"></div>
+    </div>
+  </div>
 
   <script src="/static/cliente.js"></script>
 </body>

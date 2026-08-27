@@ -21,7 +21,7 @@ from fastapi.responses import FileResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, field_validator
 
-from app import checklist, db, documentos, exportar, importar
+from app import checklist, configuracion, db, documentos, exportar, importar, lectura
 
 # Raíz del proyecto. Este archivo vive en app/, así que subimos un nivel.
 # Se usa pathlib (y no texto pegado con / o \) para que las rutas funcionen
@@ -64,6 +64,16 @@ def pagina_cliente():
 def pagina_resumen():
     """Entrega el resumen para imprimir. El id va en la dirección: /resumen?id=3"""
     return FileResponse(CARPETA_STATIC / "resumen.html")
+
+
+@app.get("/api/configuracion")
+def api_configuracion():
+    """Cómo está configurado el programa ahora mismo.
+
+    La pantalla lo usa para mostrarle al contador si la IA está apagada.
+    Nunca incluye la llave.
+    """
+    return configuracion.CONFIG.como_diccionario()
 
 
 # ----------------------------------------------------------
@@ -233,13 +243,15 @@ def api_eliminar_cliente(id_cliente: int):
 
 
 def con_tipo(documento):
-    """Le agrega al documento el nombre del tipo para mostrarlo en pantalla."""
+    """Le agrega al documento lo que la pantalla necesita para mostrarlo."""
     documento = dict(documento)
     documento["tipo"] = documentos.tipo_legible(documento["extension"])
+    documento["vista"] = documentos.como_se_previsualiza(documento["extension"])
     return documento
 
 
-def guardar_y_registrar(id_cliente, nombre_original, contenido, venia_en_zip=None):
+def guardar_y_registrar(id_cliente, nombre_original, contenido,
+                        huella, venia_en_zip=None):
     """Escribe el archivo en el disco y lo anota en la base de datos."""
     nombre_guardado, tamano = documentos.guardar_contenido(
         id_cliente, nombre_original, contenido
@@ -250,6 +262,7 @@ def guardar_y_registrar(id_cliente, nombre_original, contenido, venia_en_zip=Non
         nombre_guardado=nombre_guardado,
         extension=Path(nombre_guardado).suffix.lower(),
         tamano=tamano,
+        huella=huella,
         venia_en_zip=venia_en_zip,
     )
     return con_tipo(registro)
@@ -259,7 +272,26 @@ def guardar_y_registrar(id_cliente, nombre_original, contenido, venia_en_zip=Non
 def api_listar_documentos(id_cliente: int):
     if db.obtener_cliente(id_cliente) is None:
         raise HTTPException(status_code=404, detail="Ese cliente no existe.")
-    return [con_tipo(documento) for documento in db.listar_documentos(id_cliente)]
+
+    renglones = db.listar_checklist(id_cliente)
+    salida = []
+
+    for documento in db.listar_documentos(id_cliente):
+        documento = con_tipo(documento)
+
+        # A los que todavía nadie asignó se les propone un renglón, mirando
+        # las palabras del nombre del archivo. Es una sugerencia hecha con
+        # código, no con IA, y la pantalla la muestra marcada como tal.
+        documento["sugerencia"] = None
+        if documento["renglon_id"] is None:
+            sugerido, _ = lectura.sugerir_renglon(
+                documento["nombre_original"], renglones
+            )
+            documento["sugerencia"] = sugerido
+
+        salida.append(documento)
+
+    return salida
 
 
 @app.post("/api/clientes/{id_cliente}/documentos")
@@ -307,8 +339,18 @@ async def api_subir_documentos(
                 ignorados.append(nombre + " — el ZIP no traía documentos útiles.")
 
             for nombre_interno, datos in encontrados:
+                huella = documentos.huella_del_contenido(datos)
+                repetido = db.buscar_documento_por_huella(id_cliente, huella)
+                if repetido:
+                    ignorados.append(
+                        nombre_interno + " — ya estaba subido como \""
+                        + repetido["nombre_original"] + "\"."
+                    )
+                    continue
                 guardados.append(
-                    guardar_y_registrar(id_cliente, nombre_interno, datos, nombre)
+                    guardar_y_registrar(
+                        id_cliente, nombre_interno, datos, huella, nombre
+                    )
                 )
             continue
 
@@ -327,7 +369,20 @@ async def api_subir_documentos(
             ignorados.append(nombre + " — el archivo está vacío.")
             continue
 
-        guardados.append(guardar_y_registrar(id_cliente, nombre, contenido))
+        # ¿Este cliente ya mandó exactamente este mismo archivo?
+        # Se compara el contenido, no el nombre.
+        huella = documentos.huella_del_contenido(contenido)
+        repetido = db.buscar_documento_por_huella(id_cliente, huella)
+        if repetido:
+            ignorados.append(
+                nombre + " — ya estaba subido como \""
+                + repetido["nombre_original"] + "\"."
+            )
+            continue
+
+        guardados.append(
+            guardar_y_registrar(id_cliente, nombre, contenido, huella)
+        )
 
     return {"guardados": guardados, "ignorados": ignorados}
 
@@ -497,7 +552,11 @@ class RenglonCambios(BaseModel):
 def api_listar_checklist(id_cliente: int):
     if db.obtener_cliente(id_cliente) is None:
         raise HTTPException(status_code=404, detail="Ese cliente no existe.")
-    return db.listar_checklist(id_cliente)
+    renglones = db.listar_checklist(id_cliente)
+    conteos = db.contar_documentos_por_renglon(id_cliente)
+    for renglon in renglones:
+        renglon["documentos"] = conteos.get(renglon["id"], 0)
+    return renglones
 
 
 @app.post("/api/clientes/{id_cliente}/checklist", status_code=201)
@@ -544,8 +603,12 @@ def api_actualizar_renglon(id_renglon: int, cambios: RenglonCambios):
 
 @app.delete("/api/checklist/{id_renglon}", status_code=204)
 def api_eliminar_renglon(id_renglon: int):
-    if not db.eliminar_renglon(id_renglon):
+    if db.obtener_renglon(id_renglon) is None:
         raise HTTPException(status_code=404, detail="Ese renglón no existe.")
+    # Los documentos que estaban asignados a este renglón NO se borran:
+    # quedan sueltos para que el contador los reasigne.
+    db.desasignar_renglon(id_renglon)
+    db.eliminar_renglon(id_renglon)
 
 
 # ----------------------------------------------------------
@@ -604,3 +667,141 @@ def api_mensaje(id_cliente: int):
 
     renglones = db.listar_checklist(id_cliente)
     return {"texto": exportar.mensaje_de_faltantes(cliente, renglones)}
+
+
+# ----------------------------------------------------------
+# Asignar un documento a un renglón del checklist
+#
+# Esto es lo que conecta las dos mitades del programa: el archivo que
+# llegó y la casilla que lo estaba esperando. Por ahora lo hace el
+# contador a mano; más adelante se le puede sugerir automáticamente.
+# ----------------------------------------------------------
+
+
+class DocumentoCambios(BaseModel):
+    # Se usa el truco de `...` para distinguir "no me mandaron el campo"
+    # de "me mandaron null para soltar el documento".
+    renglon_id: Optional[int] = None
+
+
+@app.patch("/api/documentos/{id_documento}")
+def api_asignar_documento(id_documento: int, cambios: DocumentoCambios):
+    documento = db.obtener_documento(id_documento)
+    if documento is None:
+        raise HTTPException(status_code=404, detail="Ese documento no existe.")
+
+    renglon_id = cambios.renglon_id
+
+    if renglon_id is not None:
+        renglon = db.obtener_renglon(renglon_id)
+        if renglon is None:
+            raise HTTPException(status_code=404, detail="Ese renglón no existe.")
+        if renglon["cliente_id"] != documento["cliente_id"]:
+            raise HTTPException(
+                status_code=400,
+                detail="Ese renglón es de otro cliente.",
+            )
+        # Asignar un documento a un renglón es decir "esto ya llegó",
+        # así que el renglón se marca recibido solo.
+        db.actualizar_renglon(renglon_id, estado=checklist.RECIBIDO)
+
+    return con_tipo(db.asignar_documento(id_documento, renglon_id))
+
+
+# ----------------------------------------------------------
+# Vista previa de un documento
+#
+# La idea es que el contador pueda mirar qué es un archivo sin tener
+# que descargarlo y abrirlo en otro programa.
+# ----------------------------------------------------------
+
+# Cuánto se muestra de una hoja de cálculo o de un XML en la vista previa.
+# Es una mirada rápida, no el archivo completo.
+FILAS_EN_VISTA = 60
+COLUMNAS_EN_VISTA = 15
+LETRAS_EN_VISTA = 20000
+
+
+@app.get("/api/documentos/{id_documento}/vista")
+def api_vista_documento(id_documento: int):
+    """Prepara lo que hace falta para mostrar el documento en pantalla.
+
+    Los PDF y las imágenes los sabe mostrar el navegador solo, así que
+    para esos basta con devolver la dirección del archivo. El XML y las
+    hojas de cálculo hay que leerlos aquí.
+    """
+    documento = db.obtener_documento(id_documento)
+    if documento is None:
+        raise HTTPException(status_code=404, detail="Ese documento no existe.")
+
+    vista = documentos.como_se_previsualiza(documento["extension"])
+    direccion = "/api/documentos/" + str(id_documento) + "/archivo"
+
+    if vista in ("pdf", "imagen"):
+        return {"vista": vista, "url": direccion}
+
+    if vista == "sin_vista":
+        return {
+            "vista": "sin_vista",
+            "url": direccion,
+            "motivo": (
+                "Las fotos de iPhone (.heic) no las muestra el navegador."
+                if documento["extension"] in (".heic", ".heif")
+                else "Este tipo de archivo no se puede ver aquí."
+            ),
+        }
+
+    ruta = documentos.ruta_del_documento(
+        documento["cliente_id"], documento["nombre_guardado"]
+    )
+    if ruta is None or not ruta.is_file():
+        raise HTTPException(
+            status_code=404, detail="El archivo ya no está en el disco."
+        )
+
+    contenido = ruta.read_bytes()
+
+    # --- XML: se muestra el texto tal cual ---
+    if vista == "texto":
+        texto = None
+        for codificacion in ("utf-8", "cp1252", "latin-1"):
+            try:
+                texto = contenido.decode(codificacion)
+                break
+            except UnicodeDecodeError:
+                continue
+        if texto is None:
+            return {"vista": "sin_vista", "url": direccion,
+                    "motivo": "No se pudo leer el texto del archivo."}
+
+        recortado = len(texto) > LETRAS_EN_VISTA
+        return {
+            "vista": "texto",
+            "url": direccion,
+            "texto": texto[:LETRAS_EN_VISTA],
+            "recortado": recortado,
+            # Si es una factura electrónica, el código saca los campos
+            # exactos del XML. Esto NO pasa por ninguna IA: el formato ya
+            # trae cada dato con su nombre.
+            "leido": lectura.leer_xml(contenido),
+        }
+
+    # --- Hojas de cálculo: se arma una tabla ---
+    try:
+        filas = importar.leer_archivo(documento["nombre_guardado"], contenido)
+    except ValueError as error:
+        return {"vista": "sin_vista", "url": direccion, "motivo": str(error)}
+
+    recortado = len(filas) > FILAS_EN_VISTA
+    filas_visibles = [
+        [importar.texto_de_casilla(casilla) for casilla in fila[:COLUMNAS_EN_VISTA]]
+        for fila in filas[:FILAS_EN_VISTA]
+    ]
+
+    return {
+        "vista": "tabla",
+        "url": direccion,
+        "filas": filas_visibles,
+        "total_filas": len(filas),
+        "recortado": recortado,
+    }

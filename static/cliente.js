@@ -75,6 +75,10 @@ function fechaHoraEnPalabras(texto) {
    Dibujar
    ---------------------------------------------------------- */
 
+/* Los renglones del checklist del cliente. Se guardan aquí porque la
+   lista de documentos los necesita para armar el selector de asignación. */
+let renglonesDelCliente = [];
+
 function dibujarDocumentos(documentos) {
   contenedorLista.innerHTML = "";
   conteo.textContent = documentos.length > 0 ? "(" + documentos.length + ")" : "";
@@ -124,16 +128,63 @@ function dibujarDocumento(documento) {
   datos.appendChild(nombre);
   datos.appendChild(detalle);
 
+  /* --- A qué renglón del checklist pertenece --- */
+  const asignacion = document.createElement("div");
+  asignacion.className = "documento-asignacion";
+
+  const selector = document.createElement("select");
+  selector.className = "selector-renglon";
+  selector.setAttribute("aria-label", "Asignar a un renglón del checklist");
+
+  const vacia = document.createElement("option");
+  vacia.value = "";
+  vacia.textContent = "— sin asignar —";
+  selector.appendChild(vacia);
+
+  renglonesDelCliente.forEach(function (renglon) {
+    const opcion = document.createElement("option");
+    opcion.value = renglon.id;
+    opcion.textContent = renglon.titulo;
+    selector.appendChild(opcion);
+  });
+
+  selector.value = documento.renglon_id || "";
+  selector.addEventListener("change", function () {
+    asignarDocumento(documento.id, selector.value || null);
+  });
+
+  asignacion.appendChild(selector);
+
+  // Si el programa cree saber a qué renglón va, lo propone. La sugerencia
+  // sale del nombre del archivo, con código: no la hizo ninguna IA.
+  if (!documento.renglon_id && documento.sugerencia) {
+    const sugerido = renglonesDelCliente.find(function (r) {
+      return r.id === documento.sugerencia;
+    });
+    if (sugerido) {
+      const propuesta = document.createElement("button");
+      propuesta.type = "button";
+      propuesta.className = "sugerencia";
+      propuesta.textContent = "¿Es \"" + sugerido.titulo + "\"?";
+      propuesta.title = "Sugerencia por el nombre del archivo. Confirme usted.";
+      propuesta.addEventListener("click", function () {
+        asignarDocumento(documento.id, sugerido.id);
+      });
+      asignacion.appendChild(propuesta);
+    }
+  }
+
   /* --- Acciones --- */
   const acciones = document.createElement("div");
   acciones.className = "documento-acciones";
 
-  const enlaceAbrir = document.createElement("a");
-  enlaceAbrir.className = "boton-texto";
-  enlaceAbrir.href = "/api/documentos/" + documento.id + "/archivo";
-  enlaceAbrir.target = "_blank";
-  enlaceAbrir.rel = "noopener";
-  enlaceAbrir.textContent = "Abrir";
+  const botonVer = document.createElement("button");
+  botonVer.type = "button";
+  botonVer.className = "boton-texto";
+  botonVer.textContent = "Ver";
+  botonVer.addEventListener("click", function () {
+    abrirVisor(documento);
+  });
 
   const botonEliminar = document.createElement("button");
   botonEliminar.type = "button";
@@ -143,12 +194,17 @@ function dibujarDocumento(documento) {
     eliminarDocumento(documento);
   });
 
-  acciones.appendChild(enlaceAbrir);
+  acciones.appendChild(botonVer);
   acciones.appendChild(botonEliminar);
 
-  tarjeta.appendChild(tipo);
-  tarjeta.appendChild(datos);
-  tarjeta.appendChild(acciones);
+  const arriba = document.createElement("div");
+  arriba.className = "documento-arriba";
+  arriba.appendChild(tipo);
+  arriba.appendChild(datos);
+  arriba.appendChild(acciones);
+
+  tarjeta.appendChild(arriba);
+  tarjeta.appendChild(asignacion);
   return tarjeta;
 }
 
@@ -453,7 +509,8 @@ if (!idCliente) {
   lineaDatos.textContent = "Vuelva a la lista y entre a un cliente.";
 } else {
   cargarCliente();
-  cargarDocumentos();
+  // Los documentos se cargan más abajo, después del checklist: cada
+  // documento necesita la lista de renglones para armar su selector.
 }
 
 
@@ -563,6 +620,15 @@ function dibujarRenglon(renglon) {
     guardarTitulo(renglon, titulo);
   });
 
+  /* --- Cuántos archivos tiene asignados este renglón --- */
+  const archivos = document.createElement("span");
+  archivos.className = "renglon-archivos";
+  if (renglon.documentos > 0) {
+    archivos.textContent = renglon.documentos === 1
+      ? "1 archivo"
+      : renglon.documentos + " archivos";
+  }
+
   /* --- La etiqueta de estado --- */
   const etiqueta = document.createElement("span");
   if (renglon.estado === "recibido") {
@@ -584,6 +650,7 @@ function dibujarRenglon(renglon) {
 
   fila.appendChild(marca);
   fila.appendChild(titulo);
+  fila.appendChild(archivos);
   fila.appendChild(etiqueta);
   fila.appendChild(botonQuitar);
   return fila;
@@ -598,7 +665,8 @@ async function cargarChecklist() {
   try {
     const respuesta = await fetch("/api/clientes/" + idCliente + "/checklist");
     if (!respuesta.ok) throw new Error();
-    dibujarChecklist(await respuesta.json());
+    renglonesDelCliente = await respuesta.json();
+    dibujarChecklist(renglonesDelCliente);
   } catch (e) {
     contenedorChecklist.innerHTML =
       '<div class="vacio">No se pudo cargar el checklist.</div>';
@@ -636,6 +704,7 @@ async function guardarTitulo(renglon, entrada) {
     return;
   }
   cargarChecklist();
+  cargarDocumentos();
   refrescarMensaje();
 }
 
@@ -656,6 +725,7 @@ async function agregarRenglon(evento) {
   campoTituloRenglon.value = "";
   campoTituloRenglon.focus();   // listo para escribir el siguiente
   cargarChecklist();
+  cargarDocumentos();
   refrescarMensaje();
 }
 
@@ -670,13 +740,18 @@ async function agregarListaBase() {
     return;
   }
   cargarChecklist();
+  cargarDocumentos();
   refrescarMensaje();
 }
 
 async function quitarRenglon(renglon) {
-  const seguro = confirm(
-    "¿Quitar \"" + renglon.titulo + "\" del checklist de este cliente?"
-  );
+  let advertencia = "¿Quitar \"" + renglon.titulo +
+                   "\" del checklist de este cliente?";
+  if (renglon.documentos > 0) {
+    advertencia += "\n\nLos " + renglon.documentos +
+      " archivo(s) asignados NO se borran: quedan sin asignar.";
+  }
+  const seguro = confirm(advertencia);
   if (!seguro) return;
 
   const respuesta = await fetch("/api/checklist/" + renglon.id, {
@@ -688,13 +763,16 @@ async function quitarRenglon(renglon) {
     return;
   }
   cargarChecklist();
+  cargarDocumentos();
   refrescarMensaje();
 }
 
 formularioRenglon.addEventListener("submit", agregarRenglon);
 
 if (idCliente) {
-  cargarChecklist();
+  // Primero el checklist y DESPUÉS los documentos: el selector de cada
+  // documento se arma con los renglones, así que tienen que existir ya.
+  cargarChecklist().then(cargarDocumentos);
 }
 
 
@@ -793,3 +871,215 @@ if (idCliente) {
   enlaceTxt.href = "/api/clientes/" + idCliente + "/resumen.txt";
   cargarMensaje();
 }
+
+
+/* ==========================================================
+   Asignar un documento a un renglón del checklist
+   ========================================================== */
+
+async function asignarDocumento(idDocumento, idRenglon) {
+  const respuesta = await fetch("/api/documentos/" + idDocumento, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      renglon_id: idRenglon ? Number(idRenglon) : null
+    })
+  });
+
+  if (!respuesta.ok) {
+    mostrarAviso(await textoDelError(respuesta), "error");
+    cargarDocumentos();   // se devuelve a como estaba
+    return;
+  }
+
+  // Asignar un documento marca su renglón como recibido, así que hay
+  // que recargar las dos listas y rehacer el mensaje.
+  await cargarChecklist();
+  cargarDocumentos();
+  refrescarMensaje();
+}
+
+
+/* ==========================================================
+   Visor de documentos
+
+   Abre el archivo encima de la pantalla, sin salir del cliente.
+   Cada tipo se muestra a su manera: los PDF y las fotos los dibuja
+   el navegador, el XML y los Excel los prepara el servidor.
+   ========================================================== */
+
+const visor = document.getElementById("visor");
+const visorTitulo = document.getElementById("visor-titulo");
+const visorContenido = document.getElementById("visor-contenido");
+const visorAbrir = document.getElementById("visor-abrir");
+const visorCerrar = document.getElementById("visor-cerrar");
+
+function cerrarVisor() {
+  visor.className = "visor oculto";
+  visorContenido.innerHTML = "";   // suelta el PDF o la imagen de la memoria
+}
+
+visorCerrar.addEventListener("click", cerrarVisor);
+
+// Clic en el fondo oscuro: cierra. Clic dentro de la caja: no.
+visor.addEventListener("click", function (evento) {
+  if (evento.target === visor) cerrarVisor();
+});
+
+document.addEventListener("keydown", function (evento) {
+  if (evento.key === "Escape" && !visor.classList.contains("oculto")) {
+    cerrarVisor();
+  }
+});
+
+/* Dibuja un mensaje simple dentro del visor. */
+function mensajeEnVisor(texto) {
+  const parrafo = document.createElement("p");
+  parrafo.className = "visor-mensaje";
+  parrafo.textContent = texto;
+  return parrafo;
+}
+
+/* Los campos que el código sacó de un XML de factura electrónica. */
+function bloqueDeLectura(leido) {
+  const caja = document.createElement("div");
+  caja.className = "lectura-xml";
+
+  const titulo = document.createElement("p");
+  titulo.className = "lectura-titulo";
+  titulo.textContent = "Leído del archivo (exacto, sin IA)";
+  caja.appendChild(titulo);
+
+  const NOMBRES = {
+    numero: "Número", fecha: "Fecha", cufe: "CUFE",
+    emisor: "Emisor", nit_emisor: "NIT del emisor",
+    receptor: "Receptor", total: "Total", moneda: "Moneda"
+  };
+
+  const lista = document.createElement("dl");
+  lista.className = "lectura-campos";
+  Object.keys(leido).forEach(function (campo) {
+    const nombre = document.createElement("dt");
+    nombre.textContent = NOMBRES[campo] || campo;
+    const valor = document.createElement("dd");
+    valor.textContent = leido[campo];
+    lista.appendChild(nombre);
+    lista.appendChild(valor);
+  });
+  caja.appendChild(lista);
+  return caja;
+}
+
+async function abrirVisor(documento) {
+  visorTitulo.textContent = documento.nombre_original;
+  visorAbrir.href = "/api/documentos/" + documento.id + "/archivo";
+  visorContenido.innerHTML = "";
+  visorContenido.appendChild(mensajeEnVisor("Cargando…"));
+  visor.className = "visor";
+
+  let datos;
+  try {
+    const respuesta = await fetch("/api/documentos/" + documento.id + "/vista");
+    if (!respuesta.ok) throw new Error();
+    datos = await respuesta.json();
+  } catch (e) {
+    visorContenido.innerHTML = "";
+    visorContenido.appendChild(
+      mensajeEnVisor("No se pudo cargar la vista del documento.")
+    );
+    return;
+  }
+
+  visorContenido.innerHTML = "";
+
+  if (datos.vista === "pdf") {
+    // El navegador trae su propio lector de PDF.
+    const marco = document.createElement("iframe");
+    marco.className = "visor-pdf";
+    marco.src = datos.url;
+    marco.title = documento.nombre_original;
+    visorContenido.appendChild(marco);
+
+  } else if (datos.vista === "imagen") {
+    const imagen = document.createElement("img");
+    imagen.className = "visor-imagen";
+    imagen.src = datos.url;
+    imagen.alt = documento.nombre_original;
+    visorContenido.appendChild(imagen);
+
+  } else if (datos.vista === "tabla") {
+    if (datos.recortado) {
+      visorContenido.appendChild(mensajeEnVisor(
+        "Mostrando las primeras " + datos.filas.length + " filas de " +
+        datos.total_filas + ". Para verlo completo, abra el archivo aparte."
+      ));
+    }
+    const envoltura = document.createElement("div");
+    envoltura.className = "tabla-envoltura";
+    const tabla = document.createElement("table");
+    tabla.className = "tabla-vista";
+
+    datos.filas.forEach(function (fila, numero) {
+      const renglon = document.createElement("tr");
+      fila.forEach(function (casilla) {
+        // La primera fila se dibuja como encabezado.
+        const celda = document.createElement(numero === 0 ? "th" : "td");
+        celda.textContent = casilla;
+        renglon.appendChild(celda);
+      });
+      tabla.appendChild(renglon);
+    });
+
+    envoltura.appendChild(tabla);
+    visorContenido.appendChild(envoltura);
+
+  } else if (datos.vista === "texto") {
+    if (datos.leido) {
+      visorContenido.appendChild(bloqueDeLectura(datos.leido));
+    }
+    if (datos.recortado) {
+      visorContenido.appendChild(mensajeEnVisor(
+        "El archivo es largo: se muestra solo el comienzo."
+      ));
+    }
+    const bloque = document.createElement("pre");
+    bloque.className = "visor-texto";
+    bloque.textContent = datos.texto;
+    visorContenido.appendChild(bloque);
+
+  } else {
+    visorContenido.appendChild(mensajeEnVisor(
+      datos.motivo || "Este archivo no se puede ver aquí."
+    ));
+    const enlace = document.createElement("a");
+    enlace.className = "boton";
+    enlace.href = datos.url;
+    enlace.target = "_blank";
+    enlace.rel = "noopener";
+    enlace.textContent = "Abrir el archivo aparte";
+    visorContenido.appendChild(enlace);
+  }
+}
+
+
+/* ==========================================================
+   Aviso de cómo está configurado el programa
+   ========================================================== */
+
+async function cargarConfiguracion() {
+  const caja = document.getElementById("aviso-modo");
+  try {
+    const respuesta = await fetch("/api/configuracion");
+    if (!respuesta.ok) return;
+    const config = await respuesta.json();
+
+    caja.textContent = config.motivo;
+    caja.className = config.ia_disponible
+      ? "aviso-modo aviso-modo-ia"
+      : "aviso-modo";
+  } catch (e) {
+    // Si no se puede leer, no se muestra nada. No es crítico.
+  }
+}
+
+cargarConfiguracion();

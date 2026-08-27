@@ -11,6 +11,7 @@ Nada de esto sale del computador. No se escribe en los logs ningún nombre
 de archivo ni de cliente.
 """
 
+import hashlib
 import io
 import re
 import zipfile
@@ -29,7 +30,12 @@ CARPETA_ARCHIVOS = RAIZ / "datos" / "archivos"
 # con un mensaje claro, en vez de guardarlo y que estorbe después.
 EXTENSIONES_DOCUMENTO = {".pdf", ".xml"}
 EXTENSIONES_FOTO = {".jpg", ".jpeg", ".png", ".heic", ".heif", ".webp", ".gif"}
-EXTENSIONES_PERMITIDAS = EXTENSIONES_DOCUMENTO | EXTENSIONES_FOTO
+# Hojas de cálculo: algunos clientes mandan la relación de sus gastos o
+# de sus bienes en un Excel.
+EXTENSIONES_HOJA = {".xlsx", ".csv"}
+EXTENSIONES_PERMITIDAS = (
+    EXTENSIONES_DOCUMENTO | EXTENSIONES_FOTO | EXTENSIONES_HOJA
+)
 
 # Límites. Están para que un archivo enorme o un ZIP mal hecho no dejen
 # el programa colgado ni llenen el disco.
@@ -47,7 +53,41 @@ def tipo_legible(extension):
         return "XML"
     if extension in EXTENSIONES_FOTO:
         return "Foto"
+    if extension in EXTENSIONES_HOJA:
+        return "Hoja"
     return extension.replace(".", "").upper()
+
+
+def como_se_previsualiza(extension):
+    """Dice de qué manera se puede mostrar este archivo en pantalla.
+
+    El navegador sabe mostrar solo o los PDF y las imágenes. El XML y las
+    hojas de cálculo hay que prepararlos aquí para que se vean legibles.
+    Lo que no se puede mostrar se dice claramente en vez de mostrar
+    caracteres raros.
+    """
+    if extension == ".pdf":
+        return "pdf"
+    if extension in {".jpg", ".jpeg", ".png", ".webp", ".gif"}:
+        return "imagen"
+    if extension in {".heic", ".heif"}:
+        # Son fotos de iPhone. Chrome y Firefox no las saben mostrar.
+        return "sin_vista"
+    if extension == ".xml":
+        return "texto"
+    if extension in EXTENSIONES_HOJA:
+        return "tabla"
+    return "sin_vista"
+
+
+def huella_del_contenido(contenido):
+    """Calcula la huella SHA-256 de un archivo.
+
+    Dos archivos con el mismo contenido dan la misma huella, aunque se
+    llamen distinto. Así se detecta que el cliente mandó dos veces lo
+    mismo, que es algo que pasa todo el tiempo por WhatsApp.
+    """
+    return hashlib.sha256(contenido).hexdigest()
 
 
 # ----------------------------------------------------------

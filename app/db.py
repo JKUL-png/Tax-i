@@ -79,6 +79,16 @@ def crear_tablas():
                 nombre_guardado TEXT NOT NULL,
                 extension       TEXT NOT NULL,
                 tamano          INTEGER NOT NULL,
+                -- Huella del contenido (SHA-256). Sirve para darse cuenta
+                -- de que un cliente mandó dos veces el mismo archivo,
+                -- aunque le haya cambiado el nombre.
+                hash            TEXT,
+                -- A qué renglón del checklist pertenece este documento.
+                -- Vacío mientras nadie lo haya asignado. No se pone llave
+                -- foránea a propósito: la tabla checklist se crea después,
+                -- y en las bases que ya existen ALTER TABLE no la puede
+                -- agregar. Se maneja en el código, igual en los dos casos.
+                renglon_id      INTEGER,
                 -- Si salió de un ZIP, aquí queda el nombre del ZIP.
                 venia_en_zip    TEXT,
                 subido_en       TEXT NOT NULL,
@@ -126,6 +136,15 @@ def crear_tablas():
         }
         if "notas" not in columnas:
             conexion.execute("ALTER TABLE clientes ADD COLUMN notas TEXT")
+
+        columnas_doc = {
+            fila["name"]
+            for fila in conexion.execute("PRAGMA table_info(documentos)")
+        }
+        if "hash" not in columnas_doc:
+            conexion.execute("ALTER TABLE documentos ADD COLUMN hash TEXT")
+        if "renglon_id" not in columnas_doc:
+            conexion.execute("ALTER TABLE documentos ADD COLUMN renglon_id INTEGER")
 
 
 # ----------------------------------------------------------
@@ -234,7 +253,7 @@ def listar_documentos(id_cliente):
         filas = conexion.execute(
             """
             SELECT id, cliente_id, nombre_original, nombre_guardado,
-                   extension, tamano, venia_en_zip, subido_en
+                   extension, tamano, hash, renglon_id, venia_en_zip, subido_en
             FROM documentos
             WHERE cliente_id = ?
             ORDER BY subido_en DESC, id DESC
@@ -264,7 +283,7 @@ def obtener_documento(id_documento):
         fila = conexion.execute(
             """
             SELECT id, cliente_id, nombre_original, nombre_guardado,
-                   extension, tamano, venia_en_zip, subido_en
+                   extension, tamano, hash, renglon_id, venia_en_zip, subido_en
             FROM documentos WHERE id = ?
             """,
             (id_documento,),
@@ -273,7 +292,7 @@ def obtener_documento(id_documento):
 
 
 def crear_documento(cliente_id, nombre_original, nombre_guardado,
-                    extension, tamano, venia_en_zip=None):
+                    extension, tamano, huella=None, venia_en_zip=None):
     """Registra en la base un documento que ya se escribió en el disco."""
     subido_en = datetime.now().isoformat(timespec="seconds")
     with conectar() as conexion:
@@ -281,11 +300,11 @@ def crear_documento(cliente_id, nombre_original, nombre_guardado,
             """
             INSERT INTO documentos
                 (cliente_id, nombre_original, nombre_guardado,
-                 extension, tamano, venia_en_zip, subido_en)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
+                 extension, tamano, hash, venia_en_zip, subido_en)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (cliente_id, nombre_original, nombre_guardado,
-             extension, tamano, venia_en_zip, subido_en),
+             extension, tamano, huella, venia_en_zip, subido_en),
         )
         id_nuevo = cursor.lastrowid
     return obtener_documento(id_nuevo)
@@ -435,3 +454,58 @@ def eliminar_renglon(id_renglon):
             "DELETE FROM checklist WHERE id = ?", (id_renglon,)
         )
     return cursor.rowcount > 0
+
+
+def buscar_documento_por_huella(cliente_id, huella):
+    """Busca si este cliente ya tiene un archivo con el mismo contenido.
+
+    Compara la huella (SHA-256) y no el nombre, así que detecta el
+    duplicado aunque el archivo haya llegado con otro nombre.
+    """
+    if not huella:
+        return None
+    with conectar() as conexion:
+        fila = conexion.execute(
+            "SELECT id, nombre_original FROM documentos"
+            " WHERE cliente_id = ? AND hash = ? LIMIT 1",
+            (cliente_id, huella),
+        ).fetchone()
+    return dict(fila) if fila else None
+
+
+def asignar_documento(id_documento, renglon_id):
+    """Asigna un documento a un renglón del checklist.
+
+    Con renglon_id = None se le quita la asignación.
+    """
+    with conectar() as conexion:
+        conexion.execute(
+            "UPDATE documentos SET renglon_id = ? WHERE id = ?",
+            (renglon_id, id_documento),
+        )
+    return obtener_documento(id_documento)
+
+
+def desasignar_renglon(renglon_id):
+    """Deja sin asignar los documentos que apuntaban a un renglón.
+
+    Se llama antes de borrar un renglón del checklist: los documentos
+    NO se borran, solo quedan sueltos para reasignarlos.
+    """
+    with conectar() as conexion:
+        conexion.execute(
+            "UPDATE documentos SET renglon_id = NULL WHERE renglon_id = ?",
+            (renglon_id,),
+        )
+
+
+def contar_documentos_por_renglon(cliente_id):
+    """Cuántos documentos tiene asignado cada renglón: {renglon_id: cantidad}."""
+    with conectar() as conexion:
+        filas = conexion.execute(
+            "SELECT renglon_id, COUNT(*) AS cantidad FROM documentos"
+            " WHERE cliente_id = ? AND renglon_id IS NOT NULL"
+            " GROUP BY renglon_id",
+            (cliente_id,),
+        ).fetchall()
+    return {fila["renglon_id"]: fila["cantidad"] for fila in filas}

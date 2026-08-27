@@ -1027,6 +1027,230 @@ a {
 }
 
 /* ==========================================================
+   Aviso del modo (sin IA / con IA)
+   ========================================================== */
+
+.aviso-modo {
+  margin: -8px 0 24px;
+  padding: 10px 16px;
+  border-radius: var(--radio-chico);
+  background: var(--fondo);
+  border: 1px solid var(--borde);
+  font-size: 0.85rem;
+  color: var(--texto-secundario);
+}
+
+.aviso-modo-ia {
+  background: var(--info-fondo);
+  border-color: transparent;
+  color: var(--info-texto);
+}
+
+/* ==========================================================
+   Documento: asignación al checklist
+   ========================================================== */
+
+.documento {
+  display: block;   /* ahora la tarjeta tiene dos renglones */
+}
+
+.documento-arriba {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.documento-asignacion {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px dashed var(--borde);
+}
+
+.selector-renglon {
+  flex: 1 1 260px;
+  max-width: 100%;
+  padding: 7px 10px;
+  border: 1px solid var(--borde-fuerte);
+  border-radius: var(--radio-chico);
+  background: var(--superficie);
+  font-family: inherit;
+  font-size: 0.88rem;
+  color: var(--texto);
+}
+
+/* La sugerencia se ve claramente como una propuesta que hay que
+   confirmar, no como algo que el programa ya decidió. */
+.sugerencia {
+  flex: 0 1 auto;
+  padding: 6px 12px;
+  border: 1px dashed var(--info);
+  border-radius: 999px;
+  background: var(--info-fondo);
+  color: var(--info-texto);
+  font-family: inherit;
+  font-size: 0.82rem;
+  cursor: pointer;
+  text-align: left;
+}
+
+.sugerencia:hover {
+  background: var(--superficie);
+}
+
+.renglon-archivos {
+  flex: 0 0 auto;
+  font-size: 0.78rem;
+  color: var(--texto-tenue);
+  white-space: nowrap;
+}
+
+/* ==========================================================
+   Visor de documentos
+   ========================================================== */
+
+.visor {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(23, 23, 23, 0.55);
+}
+
+.visor-caja {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-width: 900px;
+  max-height: 100%;
+  background: var(--superficie);
+  border-radius: var(--radio);
+  overflow: hidden;
+}
+
+.visor-barra {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--borde);
+}
+
+.visor-titulo {
+  margin: 0;
+  font-weight: 500;
+  overflow-wrap: anywhere;
+}
+
+.visor-acciones {
+  display: flex;
+  gap: 4px;
+  flex: 0 0 auto;
+}
+
+.visor-acciones .boton-texto {
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.visor-contenido {
+  flex: 1 1 auto;
+  overflow: auto;
+  padding: 16px;
+  min-height: 200px;
+}
+
+.visor-pdf {
+  width: 100%;
+  height: 70vh;
+  border: none;
+}
+
+.visor-imagen {
+  display: block;
+  max-width: 100%;
+  margin: 0 auto;
+}
+
+.visor-texto {
+  margin: 0;
+  padding: 14px;
+  background: var(--fondo);
+  border-radius: var(--radio-chico);
+  font-size: 0.82rem;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.visor-mensaje {
+  margin: 0 0 14px;
+  color: var(--texto-secundario);
+}
+
+.tabla-vista {
+  border-collapse: collapse;
+  font-size: 0.85rem;
+  white-space: nowrap;
+}
+
+.tabla-vista th,
+.tabla-vista td {
+  padding: 6px 12px;
+  border: 1px solid var(--borde);
+  text-align: left;
+}
+
+.tabla-vista th {
+  background: var(--fondo);
+  font-weight: 600;
+  position: sticky;
+  top: 0;
+}
+
+/* Los campos que el código sacó del XML. Se marcan como lectura exacta
+   para distinguirlos de cualquier cosa que en el futuro lea una IA. */
+.lectura-xml {
+  margin-bottom: 16px;
+  padding: 14px 16px;
+  border-radius: var(--radio-chico);
+  background: var(--exito-fondo);
+}
+
+.lectura-titulo {
+  margin: 0 0 8px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--exito-texto);
+}
+
+.lectura-campos {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 4px 16px;
+  margin: 0;
+  font-size: 0.88rem;
+}
+
+.lectura-campos dt {
+  color: var(--texto-secundario);
+}
+
+.lectura-campos dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+/* ==========================================================
    Respeta a quien pide menos movimiento en el sistema
    ========================================================== */
 
