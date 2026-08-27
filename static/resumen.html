@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Resumen del cliente · Asistente de renta</title>
+  <link rel="stylesheet" href="/static/estilos.css">
+</head>
+<body class="pagina-resumen">
+
+  <main class="hoja">
+
+    <!-- Estos dos botones no salen en el papel: se ocultan al imprimir. -->
+    <div class="sin-imprimir barra-resumen">
+      <a href="#" id="volver">← Volver al cliente</a>
+      <button type="button" class="boton" id="boton-imprimir">Imprimir</button>
+    </div>
+
+    <div id="contenido">
+      <p>Cargando…</p>
+    </div>
+
+  </main>
+
+  <script src="/static/resumen.js"></script>
+</body>
+</html>

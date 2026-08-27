@@ -102,6 +102,48 @@
       </div>
     </section>
 
+    <!-- ---------- Exportar ---------- -->
+    <section class="seccion">
+      <h2>Exportar</h2>
+
+      <div class="tarjeta">
+        <h3>Mensaje para el cliente</h3>
+        <p class="ayuda">
+          Un borrador con lo que le falta a este cliente. Léalo, cámbielo si
+          quiere, y cópielo para mandarlo por WhatsApp.
+        </p>
+
+        <textarea id="mensaje" class="campo-mensaje" rows="12"
+                  aria-label="Mensaje para el cliente"></textarea>
+
+        <div class="fila-botones">
+          <button type="button" class="boton" id="boton-copiar">
+            Copiar mensaje
+          </button>
+          <button type="button" class="boton-secundario" id="boton-rehacer">
+            Volver al borrador
+          </button>
+        </div>
+      </div>
+
+      <div class="tarjeta">
+        <h3>Resumen del cliente</h3>
+        <p class="ayuda">
+          La relación completa: qué llegó, qué falta y qué archivos hay
+          guardados.
+        </p>
+
+        <div class="fila-botones">
+          <a class="boton" id="enlace-imprimir" target="_blank" rel="noopener">
+            Ver para imprimir
+          </a>
+          <a class="boton-secundario" id="enlace-txt">
+            Descargar como texto
+          </a>
+        </div>
+      </div>
+    </section>
+
     <p class="nota-prototipo">
       Los archivos se guardan únicamente en este computador, en la carpeta
       <code>datos/archivos/</code>. Todavía no hay clasificación automática:

@@ -764,6 +764,269 @@ a {
 }
 
 /* ==========================================================
+   Exportar (dentro de la pantalla del cliente)
+   ========================================================== */
+
+.campo-mensaje {
+  width: 100%;
+  padding: 14px 16px;
+  border: 1px solid var(--borde-fuerte);
+  border-radius: var(--radio-chico);
+  font-family: inherit;
+  font-size: 0.95rem;
+  line-height: 1.6;
+  resize: vertical;
+  background: var(--superficie);
+  color: var(--texto);
+}
+
+.campo-mensaje:focus {
+  border-color: var(--primary);
+  outline: none;
+}
+
+.fila-botones {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-top: 16px;
+}
+
+/* Los enlaces que se ven como botones necesitan alinearse como tales. */
+.fila-botones .boton,
+.fila-botones .boton-secundario {
+  display: inline-flex;
+  align-items: center;
+  text-decoration: none;
+}
+
+.tarjeta h3 {
+  margin-bottom: 6px;
+}
+
+.tarjeta + .tarjeta {
+  margin-top: 16px;
+}
+
+/* ==========================================================
+   La hoja del resumen
+
+   Esta página está pensada para terminar en papel o en PDF, así
+   que se ve como un documento y no como una pantalla.
+   ========================================================== */
+
+.pagina-resumen {
+  background: var(--fondo);
+  padding: 32px 20px;
+}
+
+.hoja {
+  max-width: 720px;
+  margin: 0 auto;
+  background: var(--superficie);
+  border: 1px solid var(--borde);
+  border-radius: var(--radio);
+  padding: 48px 56px;
+}
+
+.barra-resumen {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 32px;
+  padding-bottom: 20px;
+  border-bottom: 1px solid var(--borde);
+}
+
+.barra-resumen a {
+  color: var(--texto-secundario);
+  text-decoration: none;
+  font-size: 0.92rem;
+}
+
+.resumen-titulo {
+  font-size: 0.82rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--texto-tenue);
+  margin-bottom: 8px;
+}
+
+.resumen-cliente {
+  font-size: 1.6rem;
+  margin-bottom: 8px;
+}
+
+.resumen-datos {
+  margin: 0;
+  color: var(--texto-secundario);
+}
+
+.resumen-referencia {
+  margin: 4px 0 0;
+  font-size: 0.82rem;
+  color: var(--texto-tenue);
+  font-style: italic;
+}
+
+.resumen-notas {
+  margin: 0;
+  color: var(--texto-secundario);
+  white-space: pre-line;   /* respeta los saltos de línea de las notas */
+}
+
+/* El marcador grande: lo primero que se ve al recibir la hoja. */
+.resumen-marcador {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin: 32px 0;
+  padding: 20px 24px;
+  border-radius: var(--radio);
+  background: var(--exito-fondo);
+}
+
+.marcador-pendiente {
+  background: var(--alerta-fondo);
+}
+
+.marcador-numero {
+  font-size: 1.5rem;
+  font-weight: 600;
+  color: var(--exito-texto);
+}
+
+.marcador-pendiente .marcador-numero {
+  color: var(--alerta-texto);
+}
+
+.marcador-texto {
+  color: var(--texto-secundario);
+  font-size: 0.92rem;
+}
+
+.resumen-seccion {
+  margin: 28px 0 10px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--borde);
+  font-size: 0.82rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--texto-secundario);
+}
+
+.resumen-lista {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.resumen-lista li {
+  display: flex;
+  gap: 10px;
+  padding: 5px 0;
+  line-height: 1.5;
+}
+
+.casilla {
+  flex: 0 0 auto;
+  font-size: 1.05rem;
+  line-height: 1.4;
+}
+
+.renglon-si {
+  color: var(--texto-secundario);
+}
+
+.resumen-vacio {
+  margin: 0;
+  color: var(--texto-tenue);
+  font-style: italic;
+}
+
+.tabla-archivos {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+
+.tabla-archivos td {
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--borde);
+  vertical-align: top;
+}
+
+.tabla-archivos .columna-tipo {
+  width: 60px;
+  color: var(--texto-tenue);
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  padding-top: 9px;
+}
+
+.tabla-archivos .columna-detalle {
+  color: var(--texto-tenue);
+  font-size: 0.82rem;
+  white-space: nowrap;
+}
+
+.resumen-pie {
+  margin-top: 40px;
+  padding-top: 20px;
+  border-top: 1px solid var(--borde);
+  font-size: 0.8rem;
+  color: var(--texto-tenue);
+}
+
+.resumen-pie p {
+  margin: 0 0 4px;
+}
+
+/* ==========================================================
+   Al imprimir
+
+   Se quitan los botones, los bordes y los fondos de color, que en
+   papel solo gastan tinta y estorban.
+   ========================================================== */
+
+@media print {
+  .sin-imprimir {
+    display: none !important;
+  }
+
+  .pagina-resumen {
+    background: #FFFFFF;
+    padding: 0;
+  }
+
+  .hoja {
+    max-width: none;
+    border: none;
+    border-radius: 0;
+    padding: 0;
+  }
+
+  .resumen-marcador {
+    background: none;
+    border: 1px solid #000000;
+    padding: 12px 16px;
+  }
+
+  /* Que una lista no se parta a la mitad entre dos hojas. */
+  .resumen-lista,
+  .tabla-archivos {
+    break-inside: avoid;
+  }
+
+  body {
+    font-size: 12pt;
+  }
+}
+
+/* ==========================================================
    Respeta a quien pide menos movimiento en el sistema
    ========================================================== */
 

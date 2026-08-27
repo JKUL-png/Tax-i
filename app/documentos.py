@@ -150,10 +150,15 @@ def nombre_libre(carpeta, nombre):
 # ----------------------------------------------------------
 
 
-def carpeta_del_cliente(id_cliente):
-    """Devuelve (y crea si hace falta) la carpeta de archivos del cliente."""
+def carpeta_del_cliente(id_cliente, crear=False):
+    """Devuelve la carpeta de archivos de un cliente.
+
+    Solo la crea si se le pide con crear=True. Así, con solo mirar un
+    documento no se quedan carpetas vacías regadas en datos/archivos/.
+    """
     carpeta = CARPETA_ARCHIVOS / str(int(id_cliente))
-    carpeta.mkdir(parents=True, exist_ok=True)
+    if crear:
+        carpeta.mkdir(parents=True, exist_ok=True)
     return carpeta
 
 
@@ -198,7 +203,7 @@ def guardar_contenido(id_cliente, nombre_original, contenido):
     distinto del original: se limpió para Windows y se le pudo agregar
     un número si ya existía.
     """
-    carpeta = carpeta_del_cliente(id_cliente)
+    carpeta = carpeta_del_cliente(id_cliente, crear=True)
     nombre = nombre_libre(carpeta, sanitizar_nombre(nombre_original))
     # Modo "wb": bytes crudos. Aquí no aplica encoding porque no es texto.
     (carpeta / nombre).write_bytes(contenido)

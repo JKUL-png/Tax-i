@@ -17,11 +17,11 @@ from typing import List, Optional
 from urllib.parse import quote
 
 from fastapi import FastAPI, File, HTTPException, UploadFile
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, field_validator
 
-from app import checklist, db, documentos, importar
+from app import checklist, db, documentos, exportar, importar
 
 # Raíz del proyecto. Este archivo vive en app/, así que subimos un nivel.
 # Se usa pathlib (y no texto pegado con / o \) para que las rutas funcionen
@@ -58,6 +58,12 @@ def inicio():
 def pagina_cliente():
     """Entrega la página de un cliente. El id va en la dirección: /cliente?id=3"""
     return FileResponse(CARPETA_STATIC / "cliente.html")
+
+
+@app.get("/resumen")
+def pagina_resumen():
+    """Entrega el resumen para imprimir. El id va en la dirección: /resumen?id=3"""
+    return FileResponse(CARPETA_STATIC / "resumen.html")
 
 
 # ----------------------------------------------------------
@@ -540,3 +546,61 @@ def api_actualizar_renglon(id_renglon: int, cambios: RenglonCambios):
 def api_eliminar_renglon(id_renglon: int):
     if not db.eliminar_renglon(id_renglon):
         raise HTTPException(status_code=404, detail="Ese renglón no existe.")
+
+
+# ----------------------------------------------------------
+# Exportar: el resumen y el mensaje para el cliente
+# ----------------------------------------------------------
+
+
+def datos_del_resumen(id_cliente):
+    """Junta todo lo que hace falta para armar el resumen de un cliente."""
+    cliente = db.obtener_cliente(id_cliente)
+    if cliente is None:
+        raise HTTPException(status_code=404, detail="Ese cliente no existe.")
+
+    renglones = db.listar_checklist(id_cliente)
+    archivos = [con_tipo(d) for d in db.listar_documentos(id_cliente)]
+    return cliente, renglones, archivos
+
+
+@app.get("/api/clientes/{id_cliente}/resumen")
+def api_resumen(id_cliente: int):
+    """El resumen del cliente, como datos, para dibujarlo en pantalla."""
+    cliente, renglones, archivos = datos_del_resumen(id_cliente)
+    return exportar.armar_resumen(cliente, renglones, archivos)
+
+
+@app.get("/api/clientes/{id_cliente}/resumen.txt")
+def api_resumen_txt(id_cliente: int):
+    """El mismo resumen como archivo de texto, para guardarlo o archivarlo."""
+    cliente, renglones, archivos = datos_del_resumen(id_cliente)
+    resumen = exportar.armar_resumen(cliente, renglones, archivos)
+    texto = exportar.texto_del_resumen(resumen)
+
+    # El nombre del archivo se limpia igual que los documentos, porque va a
+    # terminar guardado en el disco de alguien (probablemente en Windows).
+    nombre = documentos.sanitizar_nombre("Resumen - " + cliente["nombre"] + ".txt")
+
+    return PlainTextResponse(
+        texto,
+        media_type="text/plain; charset=utf-8",
+        headers={
+            "Content-Disposition": "attachment; filename*=UTF-8''" + quote(nombre)
+        },
+    )
+
+
+@app.get("/api/clientes/{id_cliente}/mensaje")
+def api_mensaje(id_cliente: int):
+    """El borrador del mensaje de 'esto es lo que me falta'.
+
+    Es un borrador a propósito: la pantalla lo muestra en un campo
+    editable para que el contador lo ajuste antes de mandarlo.
+    """
+    cliente = db.obtener_cliente(id_cliente)
+    if cliente is None:
+        raise HTTPException(status_code=404, detail="Ese cliente no existe.")
+
+    renglones = db.listar_checklist(id_cliente)
+    return {"texto": exportar.mensaje_de_faltantes(cliente, renglones)}
