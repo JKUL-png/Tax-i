@@ -27,6 +27,36 @@
       </div>
     </section>
 
+    <!-- ---------- Checklist ---------- -->
+    <section class="seccion">
+      <h2>Qué falta <span id="avance" class="conteo"></span></h2>
+
+      <div id="aviso-checklist" class="aviso oculto" role="alert"></div>
+
+      <div id="lista-checklist" class="lista-checklist">
+        <div class="vacio">Cargando…</div>
+      </div>
+
+      <div class="tarjeta tarjeta-agregar">
+        <form id="formulario-renglon" novalidate>
+          <label for="titulo-renglon">Agregar un documento a la lista</label>
+          <div class="fila">
+            <div class="campo">
+              <input type="text" id="titulo-renglon" autocomplete="off"
+                     maxlength="200"
+                     placeholder="Ej: Certificado de Davivienda">
+            </div>
+            <button type="submit" class="boton">Agregar</button>
+          </div>
+          <p class="ayuda" style="margin-top:12px">
+            Esta lista es suya: agregue lo que este cliente necesite y quite
+            lo que no le aplique. El programa no decide qué documentos son
+            obligatorios, solo lleva la cuenta de lo que usted pidió.
+          </p>
+        </form>
+      </div>
+    </section>
+
     <!-- ---------- Subir documentos ---------- -->
     <section class="seccion">
       <h2>Subir documentos</h2>

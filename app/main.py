@@ -21,7 +21,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, field_validator
 
-from app import db, documentos, importar
+from app import checklist, db, documentos, importar
 
 # Raíz del proyecto. Este archivo vive en app/, así que subimos un nivel.
 # Se usa pathlib (y no texto pegado con / o \) para que las rutas funcionen
@@ -161,8 +161,12 @@ def api_listar_clientes():
     """Lista los clientes, agregándole a cada uno cuántos documentos tiene."""
     clientes = db.listar_clientes()
     conteos = db.contar_documentos()
+    avances = db.contar_checklist()
     for cliente in clientes:
         cliente["documentos"] = conteos.get(cliente["id"], 0)
+        avance = avances.get(cliente["id"], {"total": 0, "recibidos": 0})
+        cliente["checklist_total"] = avance["total"]
+        cliente["checklist_recibidos"] = avance["recibidos"]
     return clientes
 
 
@@ -176,12 +180,16 @@ def api_obtener_cliente(id_cliente: int):
 
 @app.post("/api/clientes", status_code=201)
 def api_crear_cliente(datos: ClienteNuevo):
-    return db.crear_cliente(
+    cliente = db.crear_cliente(
         nombre=datos.nombre,
         dos_digitos=datos.dos_digitos,
         fecha_vencimiento=datos.fecha_vencimiento,
         notas=datos.notas,
     )
+    # Se le arma el checklist sugerido para que no arranque en blanco.
+    # Es un punto de partida: el contador lo ajusta como necesite.
+    db.crear_renglones(cliente["id"], checklist.LISTA_BASE)
+    return cliente
 
 
 @app.patch("/api/clientes/{id_cliente}")
@@ -448,13 +456,87 @@ def api_confirmar_importacion(clientes: List[ClienteImportado]):
             continue
 
         notas = (fila.notas or "").strip() or None
-        creados.append(
-            db.crear_cliente(
-                nombre=nombre,
-                dos_digitos=dos_digitos,
-                fecha_vencimiento=fecha,
-                notas=notas,
-            )
+        cliente = db.crear_cliente(
+            nombre=nombre,
+            dos_digitos=dos_digitos,
+            fecha_vencimiento=fecha,
+            notas=notas,
         )
+        db.crear_renglones(cliente["id"], checklist.LISTA_BASE)
+        creados.append(cliente)
 
     return {"creados": len(creados), "errores": errores}
+
+
+# ----------------------------------------------------------
+# API del checklist
+#
+# El checklist es del contador: él decide qué necesita cada cliente.
+# El programa solo lleva la cuenta, no opina sobre qué debe estar.
+# ----------------------------------------------------------
+
+
+class RenglonNuevo(BaseModel):
+    titulo: str
+
+
+class RenglonCambios(BaseModel):
+    """Todos los campos son opcionales: se cambia solo lo que se manda."""
+
+    titulo: Optional[str] = None
+    estado: Optional[str] = None
+
+
+@app.get("/api/clientes/{id_cliente}/checklist")
+def api_listar_checklist(id_cliente: int):
+    if db.obtener_cliente(id_cliente) is None:
+        raise HTTPException(status_code=404, detail="Ese cliente no existe.")
+    return db.listar_checklist(id_cliente)
+
+
+@app.post("/api/clientes/{id_cliente}/checklist", status_code=201)
+def api_agregar_renglon(id_cliente: int, datos: RenglonNuevo):
+    if db.obtener_cliente(id_cliente) is None:
+        raise HTTPException(status_code=404, detail="Ese cliente no existe.")
+    try:
+        titulo = checklist.limpiar_titulo(datos.titulo)
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error))
+    return db.crear_renglon(id_cliente, titulo)
+
+
+@app.post("/api/clientes/{id_cliente}/checklist/base", status_code=201)
+def api_agregar_lista_base(id_cliente: int):
+    """Agrega la lista sugerida al checklist del cliente.
+
+    Sirve para los clientes que quedaron sin checklist (los creados con
+    una versión anterior del programa) y para el contador que borró todo
+    y quiere volver a empezar.
+    """
+    if db.obtener_cliente(id_cliente) is None:
+        raise HTTPException(status_code=404, detail="Ese cliente no existe.")
+    return db.crear_renglones(id_cliente, checklist.LISTA_BASE)
+
+
+@app.patch("/api/checklist/{id_renglon}")
+def api_actualizar_renglon(id_renglon: int, cambios: RenglonCambios):
+    if db.obtener_renglon(id_renglon) is None:
+        raise HTTPException(status_code=404, detail="Ese renglón no existe.")
+
+    titulo = None
+    estado = None
+    try:
+        if cambios.titulo is not None:
+            titulo = checklist.limpiar_titulo(cambios.titulo)
+        if cambios.estado is not None:
+            estado = checklist.limpiar_estado(cambios.estado)
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error))
+
+    return db.actualizar_renglon(id_renglon, titulo=titulo, estado=estado)
+
+
+@app.delete("/api/checklist/{id_renglon}", status_code=204)
+def api_eliminar_renglon(id_renglon: int):
+    if not db.eliminar_renglon(id_renglon):
+        raise HTTPException(status_code=404, detail="Ese renglón no existe.")

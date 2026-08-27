@@ -131,8 +131,28 @@ function dibujarCliente(cliente) {
   }
   cedula.textContent = detalle;
 
+  // Cuánto le falta del checklist: es lo que el contador quiere ver
+  // de un vistazo sin tener que entrar cliente por cliente.
+  const avanceCliente = document.createElement("p");
+  avanceCliente.className = "cliente-avance";
+  const total = cliente.checklist_total || 0;
+  const recibidos = cliente.checklist_recibidos || 0;
+
+  if (total === 0) {
+    avanceCliente.textContent = "Sin checklist";
+    avanceCliente.classList.add("avance-neutro");
+  } else if (recibidos === total) {
+    avanceCliente.textContent = "Completo: " + recibidos + " de " + total;
+    avanceCliente.classList.add("avance-completo");
+  } else {
+    avanceCliente.textContent =
+      recibidos + " de " + total + " · faltan " + (total - recibidos);
+    avanceCliente.classList.add("avance-pendiente");
+  }
+
   datos.appendChild(nombre);
   datos.appendChild(cedula);
+  datos.appendChild(avanceCliente);
 
   /* --- Fecha de vencimiento, editable --- */
   const bloqueFecha = document.createElement("div");

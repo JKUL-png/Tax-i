@@ -93,6 +93,29 @@ def crear_tablas():
             " ON documentos (cliente_id)"
         )
 
+        conexion.execute(
+            """
+            CREATE TABLE IF NOT EXISTS checklist (
+                id             INTEGER PRIMARY KEY AUTOINCREMENT,
+                cliente_id     INTEGER NOT NULL,
+                -- Lo que se le pidió al cliente, en palabras del contador.
+                titulo         TEXT NOT NULL,
+                -- Solo dos valores: 'faltante' o 'recibido'.
+                estado         TEXT NOT NULL DEFAULT 'faltante',
+                -- Para que los renglones se muestren siempre en el mismo
+                -- orden, sin importar cuándo se agregaron.
+                orden          INTEGER NOT NULL,
+                actualizado_en TEXT NOT NULL,
+                FOREIGN KEY (cliente_id) REFERENCES clientes(id)
+                    ON DELETE CASCADE
+            )
+            """
+        )
+        conexion.execute(
+            "CREATE INDEX IF NOT EXISTS idx_checklist_cliente"
+            " ON checklist (cliente_id)"
+        )
+
         # --- Cambios sobre bases que ya existían ---
         # Si la base se creó con una versión anterior del programa, le falta
         # la columna "notas". Se agrega aquí en vez de pedirle al contador
@@ -277,5 +300,138 @@ def eliminar_documento(id_documento):
     with conectar() as conexion:
         cursor = conexion.execute(
             "DELETE FROM documentos WHERE id = ?", (id_documento,)
+        )
+    return cursor.rowcount > 0
+
+
+# ----------------------------------------------------------
+# Operaciones sobre el checklist
+# ----------------------------------------------------------
+
+
+def listar_checklist(id_cliente):
+    """Devuelve los renglones del checklist de un cliente, en su orden."""
+    with conectar() as conexion:
+        filas = conexion.execute(
+            """
+            SELECT id, cliente_id, titulo, estado, orden, actualizado_en
+            FROM checklist
+            WHERE cliente_id = ?
+            ORDER BY orden, id
+            """,
+            (id_cliente,),
+        ).fetchall()
+    return [dict(fila) for fila in filas]
+
+
+def contar_checklist():
+    """Cuántos renglones tiene cada cliente y cuántos ya llegaron.
+
+    Devuelve {id_cliente: {"total": n, "recibidos": n}}. Sirve para
+    mostrar "7 de 11" en la lista de clientes sin preguntar uno por uno.
+    """
+    with conectar() as conexion:
+        filas = conexion.execute(
+            """
+            SELECT cliente_id,
+                   COUNT(*) AS total,
+                   SUM(CASE WHEN estado = 'recibido' THEN 1 ELSE 0 END)
+                       AS recibidos
+            FROM checklist
+            GROUP BY cliente_id
+            """
+        ).fetchall()
+    return {
+        fila["cliente_id"]: {
+            "total": fila["total"],
+            "recibidos": fila["recibidos"] or 0,
+        }
+        for fila in filas
+    }
+
+
+def obtener_renglon(id_renglon):
+    """Devuelve un renglón del checklist, o None si no existe."""
+    with conectar() as conexion:
+        fila = conexion.execute(
+            "SELECT id, cliente_id, titulo, estado, orden, actualizado_en"
+            " FROM checklist WHERE id = ?",
+            (id_renglon,),
+        ).fetchone()
+    return dict(fila) if fila else None
+
+
+def crear_renglon(cliente_id, titulo, estado="faltante"):
+    """Agrega un renglón al final del checklist de un cliente."""
+    ahora = datetime.now().isoformat(timespec="seconds")
+    with conectar() as conexion:
+        # El siguiente número de orden: uno más que el último que haya.
+        fila = conexion.execute(
+            "SELECT MAX(orden) AS ultimo FROM checklist WHERE cliente_id = ?",
+            (cliente_id,),
+        ).fetchone()
+        orden = (fila["ultimo"] or 0) + 1
+
+        cursor = conexion.execute(
+            "INSERT INTO checklist (cliente_id, titulo, estado, orden, actualizado_en)"
+            " VALUES (?, ?, ?, ?, ?)",
+            (cliente_id, titulo, estado, orden, ahora),
+        )
+        id_nuevo = cursor.lastrowid
+    return obtener_renglon(id_nuevo)
+
+
+def crear_renglones(cliente_id, titulos):
+    """Agrega varios renglones de una vez. Se usa para la lista base."""
+    ahora = datetime.now().isoformat(timespec="seconds")
+    with conectar() as conexion:
+        fila = conexion.execute(
+            "SELECT MAX(orden) AS ultimo FROM checklist WHERE cliente_id = ?",
+            (cliente_id,),
+        ).fetchone()
+        orden = (fila["ultimo"] or 0) + 1
+
+        for titulo in titulos:
+            conexion.execute(
+                "INSERT INTO checklist"
+                " (cliente_id, titulo, estado, orden, actualizado_en)"
+                " VALUES (?, ?, 'faltante', ?, ?)",
+                (cliente_id, titulo, orden, ahora),
+            )
+            orden += 1
+    return listar_checklist(cliente_id)
+
+
+def actualizar_renglon(id_renglon, titulo=None, estado=None):
+    """Cambia el nombre o el estado de un renglón."""
+    campos = []
+    valores = []
+
+    if titulo is not None:
+        campos.append("titulo = ?")
+        valores.append(titulo)
+
+    if estado is not None:
+        campos.append("estado = ?")
+        valores.append(estado)
+
+    if campos:
+        campos.append("actualizado_en = ?")
+        valores.append(datetime.now().isoformat(timespec="seconds"))
+        valores.append(id_renglon)
+        with conectar() as conexion:
+            conexion.execute(
+                f"UPDATE checklist SET {', '.join(campos)} WHERE id = ?",
+                valores,
+            )
+
+    return obtener_renglon(id_renglon)
+
+
+def eliminar_renglon(id_renglon):
+    """Quita un renglón del checklist. Devuelve True si existía."""
+    with conectar() as conexion:
+        cursor = conexion.execute(
+            "DELETE FROM checklist WHERE id = ?", (id_renglon,)
         )
     return cursor.rowcount > 0

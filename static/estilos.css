@@ -322,6 +322,16 @@ button {
   color: var(--texto-secundario);
 }
 
+.cliente-avance {
+  margin: 4px 0 0;
+  font-size: 0.85rem;
+  font-weight: 500;
+}
+
+.avance-completo  { color: var(--exito-texto); }
+.avance-pendiente { color: var(--alerta-texto); }
+.avance-neutro    { color: var(--texto-tenue); font-weight: 400; }
+
 .cliente-fecha {
   flex: 0 0 auto;
   display: flex;
@@ -656,6 +666,101 @@ a {
   display: flex;
   gap: 12px;
   flex-wrap: wrap;
+}
+
+/* ==========================================================
+   Checklist
+
+   Renglones compactos, para poder ver los 11 de un vistazo sin
+   desplazarse. La casilla es grande a propósito: es lo que el
+   contador va a apretar todo el día.
+   ========================================================== */
+
+.lista-checklist {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 20px;
+}
+
+.renglon {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: var(--superficie);
+  border: 1px solid var(--borde);
+  border-radius: var(--radio);
+  box-shadow: var(--sombra);
+  padding: 10px 14px;
+}
+
+/* Lo que ya llegó se atenúa, para que lo que falta salte a la vista. */
+.renglon-recibido {
+  background: var(--exito-fondo);
+  border-color: transparent;
+}
+
+.renglon-marca {
+  flex: 0 0 auto;
+  width: 22px;
+  height: 22px;
+  cursor: pointer;
+}
+
+/* El nombre se ve como texto, no como campo, hasta que se hace clic.
+   Así la lista se lee limpia pero sigue siendo editable. */
+.renglon-titulo {
+  flex: 1 1 auto;
+  min-width: 0;
+  border: 1px solid transparent;
+  background: none;
+  padding: 6px 8px;
+  border-radius: var(--radio-chico);
+  font-family: inherit;
+  font-size: 0.95rem;
+  color: var(--texto);
+}
+
+.renglon-titulo:hover {
+  border-color: var(--borde);
+}
+
+.renglon-titulo:focus {
+  border-color: var(--primary);
+  background: var(--superficie);
+  outline: none;
+}
+
+.renglon-recibido .renglon-titulo {
+  color: var(--texto-secundario);
+}
+
+.renglon .etiqueta {
+  flex: 0 0 auto;
+}
+
+.tarjeta-agregar {
+  background: var(--fondo);
+  border: 1px dashed var(--borde-fuerte);
+  box-shadow: none;
+}
+
+.tarjeta-agregar label {
+  display: block;
+  margin-bottom: 8px;
+  font-size: 0.9rem;
+  font-weight: 500;
+}
+
+/* En pantallas angostas el renglón se parte en dos líneas. */
+@media (max-width: 560px) {
+  .renglon {
+    flex-wrap: wrap;
+  }
+  .renglon-titulo {
+    flex: 1 1 100%;
+    order: 3;
+  }
 }
 
 /* ==========================================================
