@@ -55,6 +55,66 @@
       </div>
     </section>
 
+    <!-- ---------- Importar desde Excel ---------- -->
+    <section class="seccion">
+      <h2>Importar clientes desde un archivo</h2>
+
+      <div class="tarjeta">
+        <p class="ayuda" style="margin-top:0">
+          Suba un Excel (.xlsx) o un CSV con la lista de clientes. El programa
+          lee las columnas, le muestra lo que entendió y usted corrige antes
+          de que se guarde nada.
+        </p>
+        <p class="ayuda">
+          Debe tener una fila de títulos con al menos <strong>Nombre</strong> y
+          <strong>Cédula</strong>. Si trae una columna de fecha de vencimiento,
+          también la lee. De la cédula solo se guardan los dos últimos dígitos:
+          el número completo nunca entra a la base de datos.
+        </p>
+
+        <button type="button" class="boton" id="boton-importar">
+          Elegir archivo
+        </button>
+        <input type="file" id="campo-importar"
+               accept=".xlsx,.csv" class="oculto">
+
+        <div id="aviso-importar" class="aviso oculto" role="alert"></div>
+      </div>
+
+      <!-- Lo que el programa entendió. Nada de esto está guardado todavía. -->
+      <div id="revision" class="revision oculto">
+        <div class="tarjeta">
+          <h3>Revise antes de crear</h3>
+          <p id="revision-resumen" class="ayuda"></p>
+          <div id="revision-columnas" class="ayuda"></div>
+
+          <div class="tabla-envoltura">
+            <table class="tabla-revision">
+              <thead>
+                <tr>
+                  <th class="columna-marca">Crear</th>
+                  <th>Nombre</th>
+                  <th class="columna-corta">Dígitos</th>
+                  <th class="columna-fecha">Vencimiento</th>
+                  <th>Revisar</th>
+                </tr>
+              </thead>
+              <tbody id="revision-filas"></tbody>
+            </table>
+          </div>
+
+          <div class="revision-botones">
+            <button type="button" class="boton" id="boton-confirmar">
+              Crear los clientes marcados
+            </button>
+            <button type="button" class="boton-secundario" id="boton-cancelar">
+              Cancelar
+            </button>
+          </div>
+        </div>
+      </div>
+    </section>
+
     <!-- ---------- Lista de clientes ---------- -->
     <section class="seccion">
       <h2>Clientes</h2>

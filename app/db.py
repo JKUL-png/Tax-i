@@ -93,6 +93,17 @@ def crear_tablas():
             " ON documentos (cliente_id)"
         )
 
+        # --- Cambios sobre bases que ya existían ---
+        # Si la base se creó con una versión anterior del programa, le falta
+        # la columna "notas". Se agrega aquí en vez de pedirle al contador
+        # que borre su base y empiece de cero.
+        columnas = {
+            fila["name"]
+            for fila in conexion.execute("PRAGMA table_info(clientes)")
+        }
+        if "notas" not in columnas:
+            conexion.execute("ALTER TABLE clientes ADD COLUMN notas TEXT")
+
 
 # ----------------------------------------------------------
 # Operaciones sobre clientes
@@ -107,7 +118,7 @@ def listar_clientes():
     with conectar() as conexion:
         filas = conexion.execute(
             """
-            SELECT id, nombre, dos_digitos, fecha_vencimiento, creado_en
+            SELECT id, nombre, dos_digitos, fecha_vencimiento, notas, creado_en
             FROM clientes
             ORDER BY
                 CASE WHEN fecha_vencimiento IS NULL OR fecha_vencimiento = ''
@@ -123,27 +134,29 @@ def obtener_cliente(id_cliente):
     """Devuelve un cliente por su id, o None si no existe."""
     with conectar() as conexion:
         fila = conexion.execute(
-            "SELECT id, nombre, dos_digitos, fecha_vencimiento, creado_en"
+            "SELECT id, nombre, dos_digitos, fecha_vencimiento, notas, creado_en"
             " FROM clientes WHERE id = ?",
             (id_cliente,),
         ).fetchone()
     return dict(fila) if fila else None
 
 
-def crear_cliente(nombre, dos_digitos, fecha_vencimiento=None):
+def crear_cliente(nombre, dos_digitos, fecha_vencimiento=None, notas=None):
     """Guarda un cliente nuevo y devuelve el registro completo."""
     creado_en = datetime.now().isoformat(timespec="seconds")
     with conectar() as conexion:
         cursor = conexion.execute(
-            "INSERT INTO clientes (nombre, dos_digitos, fecha_vencimiento, creado_en)"
-            " VALUES (?, ?, ?, ?)",
-            (nombre, dos_digitos, fecha_vencimiento, creado_en),
+            "INSERT INTO clientes"
+            " (nombre, dos_digitos, fecha_vencimiento, notas, creado_en)"
+            " VALUES (?, ?, ?, ?, ?)",
+            (nombre, dos_digitos, fecha_vencimiento, notas, creado_en),
         )
         id_nuevo = cursor.lastrowid
     return obtener_cliente(id_nuevo)
 
 
-def actualizar_cliente(id_cliente, nombre=None, dos_digitos=None, fecha_vencimiento=...):
+def actualizar_cliente(id_cliente, nombre=None, dos_digitos=None,
+                       fecha_vencimiento=..., notas=...):
     """Modifica los campos que se pasen. Devuelve el cliente actualizado.
 
     Ojo con fecha_vencimiento: su valor por defecto es `...` (y no None)
@@ -164,6 +177,10 @@ def actualizar_cliente(id_cliente, nombre=None, dos_digitos=None, fecha_vencimie
     if fecha_vencimiento is not ...:
         campos.append("fecha_vencimiento = ?")
         valores.append(fecha_vencimiento)
+
+    if notas is not ...:
+        campos.append("notas = ?")
+        valores.append(notas)
 
     if campos:
         valores.append(id_cliente)

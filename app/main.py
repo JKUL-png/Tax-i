@@ -21,7 +21,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, field_validator
 
-from app import db, documentos
+from app import db, documentos, importar
 
 # Raíz del proyecto. Este archivo vive en app/, así que subimos un nivel.
 # Se usa pathlib (y no texto pegado con / o \) para que las rutas funcionen
@@ -109,6 +109,7 @@ class ClienteNuevo(BaseModel):
     nombre: str
     dos_digitos: str
     fecha_vencimiento: Optional[str] = None
+    notas: Optional[str] = None
 
     @field_validator("nombre")
     @classmethod
@@ -132,6 +133,7 @@ class ClienteCambios(BaseModel):
     nombre: Optional[str] = None
     dos_digitos: Optional[str] = None
     fecha_vencimiento: Optional[str] = None
+    notas: Optional[str] = None
 
     @field_validator("nombre")
     @classmethod
@@ -178,6 +180,7 @@ def api_crear_cliente(datos: ClienteNuevo):
         nombre=datos.nombre,
         dos_digitos=datos.dos_digitos,
         fecha_vencimiento=datos.fecha_vencimiento,
+        notas=datos.notas,
     )
 
 
@@ -189,12 +192,14 @@ def api_actualizar_cliente(id_cliente: int, cambios: ClienteCambios):
     # Se distingue "no mandaron el campo" de "lo mandaron vacío para borrarlo".
     enviados = cambios.model_dump(exclude_unset=True)
     fecha = enviados["fecha_vencimiento"] if "fecha_vencimiento" in enviados else ...
+    notas = enviados["notas"] if "notas" in enviados else ...
 
     return db.actualizar_cliente(
         id_cliente,
         nombre=cambios.nombre,
         dos_digitos=cambios.dos_digitos,
         fecha_vencimiento=fecha,
+        notas=notas,
     )
 
 
@@ -357,3 +362,99 @@ def api_eliminar_documento(id_documento: int):
         ruta.unlink()
 
     db.eliminar_documento(id_documento)
+
+
+# ----------------------------------------------------------
+# Importar clientes desde un archivo de Excel o CSV
+#
+# Son dos pasos a propósito:
+#   1. /analizar  lee el archivo y PROPONE una lista. No guarda nada.
+#   2. /confirmar recibe la lista ya revisada por el contador y la guarda.
+#
+# Así el contador siempre ve y corrige antes de que algo entre a la base.
+# ----------------------------------------------------------
+
+
+class ClienteImportado(BaseModel):
+    """Una fila ya revisada por el contador, lista para crearse.
+
+    Aquí no se ponen validadores de pydantic a propósito: si una fila
+    viene mal, se quiere avisar cuál fila fue y seguir con las demás,
+    no rechazar el archivo entero.
+    """
+
+    nombre: str = ""
+    dos_digitos: str = ""
+    fecha_vencimiento: Optional[str] = None
+    notas: Optional[str] = None
+
+
+@app.post("/api/importar/analizar")
+async def api_analizar_importacion(archivo: UploadFile = File(...)):
+    """Lee el archivo y devuelve los clientes propuestos, sin guardar nada."""
+    nombre = archivo.filename or "archivo"
+
+    contenido = await documentos.leer_con_limite(archivo, importar.LIMITE_ARCHIVO)
+    if contenido is None:
+        raise HTTPException(
+            status_code=400,
+            detail="El archivo pesa más de 10 MB.",
+        )
+    if not contenido:
+        raise HTTPException(status_code=400, detail="El archivo está vacío.")
+
+    # Los nombres que ya existen, para poder avisar de los repetidos.
+    existentes = {
+        importar.normalizar(cliente["nombre"])
+        for cliente in db.listar_clientes()
+    }
+
+    try:
+        return importar.analizar(nombre, contenido, existentes)
+    except ValueError as error:
+        # Los mensajes de ValueError están escritos para que los lea el
+        # contador, así que se le pasan tal cual.
+        raise HTTPException(status_code=400, detail=str(error))
+
+
+@app.post("/api/importar/confirmar")
+def api_confirmar_importacion(clientes: List[ClienteImportado]):
+    """Crea los clientes que el contador ya revisó.
+
+    Cada fila se valida por separado: si una tiene un problema, se anota
+    y se sigue con las demás en vez de perder todo el trabajo.
+    """
+    if not clientes:
+        raise HTTPException(
+            status_code=400,
+            detail="No se seleccionó ningún cliente para crear.",
+        )
+    if len(clientes) > importar.LIMITE_FILAS:
+        raise HTTPException(
+            status_code=400,
+            detail="Son demasiados clientes de una sola vez.",
+        )
+
+    creados = []
+    errores = []
+
+    for numero, fila in enumerate(clientes, start=1):
+        try:
+            nombre = limpiar_nombre(fila.nombre)
+            dos_digitos = limpiar_digitos(fila.dos_digitos)
+            fecha = limpiar_fecha(fila.fecha_vencimiento)
+        except ValueError as error:
+            errores.append("Fila " + str(numero) + ": " + str(error))
+            continue
+
+        notas = (fila.notas or "").strip() or None
+        creados.append(
+            db.crear_cliente(
+                nombre=nombre,
+                dos_digitos=dos_digitos,
+                fecha_vencimiento=fecha,
+                notas=notas,
+            )
+        )
+
+    return {"creados": len(creados), "errores": errores}

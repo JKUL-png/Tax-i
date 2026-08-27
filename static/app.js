@@ -291,3 +291,249 @@ async function eliminarCliente(cliente) {
 
 formulario.addEventListener("submit", agregarCliente);
 cargarClientes();
+
+
+/* ==========================================================
+   Importar clientes desde un Excel o un CSV
+
+   Son dos pasos, a propósito:
+     1. Se manda el archivo y el servidor PROPONE una lista.
+        Todavía no se guardó nada.
+     2. El contador revisa y corrige en pantalla, y solo cuando
+        aprieta "Crear" se guardan de verdad.
+   ========================================================== */
+
+const botonImportar = document.getElementById("boton-importar");
+const campoImportar = document.getElementById("campo-importar");
+const avisoImportar = document.getElementById("aviso-importar");
+const revision = document.getElementById("revision");
+const revisionResumen = document.getElementById("revision-resumen");
+const revisionColumnas = document.getElementById("revision-columnas");
+const revisionFilas = document.getElementById("revision-filas");
+const botonConfirmar = document.getElementById("boton-confirmar");
+const botonCancelar = document.getElementById("boton-cancelar");
+
+/* Cómo se llama cada campo en pantalla. */
+const NOMBRES_DE_CAMPO = {
+  nombre: "Nombre",
+  cedula: "Cédula",
+  dos_digitos: "Dos dígitos",
+  fecha_vencimiento: "Fecha de vencimiento"
+};
+
+
+function mostrarAvisoImportar(texto, tipo) {
+  avisoImportar.textContent = texto;
+  avisoImportar.className = "aviso aviso-" + tipo;
+}
+
+function ocultarAvisoImportar() {
+  avisoImportar.className = "aviso oculto";
+  avisoImportar.textContent = "";
+}
+
+function cerrarRevision() {
+  revision.className = "revision oculto";
+  revisionFilas.innerHTML = "";
+}
+
+
+/* ----------------------------------------------------------
+   Dibujar la tabla de revisión
+   ---------------------------------------------------------- */
+
+/* Crea una casilla de la tabla con un campo de texto adentro. */
+function casillaEditable(valor, clase, maximo) {
+  const casilla = document.createElement("td");
+  const entrada = document.createElement("input");
+  entrada.type = "text";
+  entrada.value = valor || "";
+  entrada.className = clase || "";
+  if (maximo) entrada.maxLength = maximo;
+  casilla.appendChild(entrada);
+  return casilla;
+}
+
+function dibujarRevision(datos) {
+  revisionFilas.innerHTML = "";
+
+  const total = datos.propuestas.length;
+  const marcados = datos.propuestas.filter(function (p) { return p.incluir; }).length;
+
+  revisionResumen.textContent =
+    "Se leyeron " + total + (total === 1 ? " fila" : " filas") + ". " +
+    marcados + " están listas para crear. " +
+    "Nada se ha guardado todavía: revise y corrija lo que haga falta.";
+
+  /* --- Qué columnas se reconocieron y cuáles no --- */
+  revisionColumnas.innerHTML = "";
+
+  const reconocidas = Object.keys(datos.columnas_reconocidas)
+    .map(function (campo) { return NOMBRES_DE_CAMPO[campo] || campo; });
+
+  const linea = document.createElement("p");
+  linea.style.margin = "0 0 4px";
+  linea.textContent = "Columnas reconocidas: " + reconocidas.join(", ") + ".";
+  revisionColumnas.appendChild(linea);
+
+  // Aviso sobre el orden de las fechas, cuando el archivo no dejaba claro
+  // si estaban escritas día/mes o mes/día.
+  if (datos.aviso_fechas) {
+    const alerta = document.createElement("p");
+    alerta.className = "aviso aviso-fechas";
+    alerta.textContent = datos.aviso_fechas;
+    revisionColumnas.appendChild(alerta);
+  }
+
+  if (datos.columnas_ignoradas.length > 0) {
+    const otra = document.createElement("p");
+    otra.style.margin = "0 0 16px";
+    otra.textContent =
+      "El resto del archivo (" + datos.columnas_ignoradas.join(", ") +
+      ") se guarda como notas del cliente.";
+    revisionColumnas.appendChild(otra);
+  }
+
+  /* --- Una fila por cliente propuesto --- */
+  datos.propuestas.forEach(function (propuesta) {
+    const fila = document.createElement("tr");
+    if (propuesta.avisos.length > 0) fila.className = "fila-revisar";
+
+    /* Casilla de "crear sí o no" */
+    const casillaMarca = document.createElement("td");
+    const marca = document.createElement("input");
+    marca.type = "checkbox";
+    marca.checked = propuesta.incluir;
+    marca.className = "marca-crear";
+    casillaMarca.appendChild(marca);
+    fila.appendChild(casillaMarca);
+
+    /* Nombre, dígitos y fecha: todos editables aquí mismo */
+    fila.appendChild(casillaEditable(propuesta.nombre, "campo-nombre", 120));
+    fila.appendChild(casillaEditable(propuesta.dos_digitos, "campo-digitos", 2));
+
+    const casillaFecha = document.createElement("td");
+    const entradaFecha = document.createElement("input");
+    entradaFecha.type = "date";
+    entradaFecha.value = propuesta.fecha_vencimiento || "";
+    entradaFecha.className = "campo-fecha";
+    casillaFecha.appendChild(entradaFecha);
+    fila.appendChild(casillaFecha);
+
+    /* Avisos */
+    const casillaAvisos = document.createElement("td");
+    casillaAvisos.className = "casilla-avisos";
+    casillaAvisos.textContent = propuesta.avisos.join(" · ");
+    fila.appendChild(casillaAvisos);
+
+    // Las notas no se muestran en la tabla para no volverla ilegible,
+    // pero viajan con la fila y se guardan con el cliente.
+    fila.dataset.notas = propuesta.notas || "";
+
+    revisionFilas.appendChild(fila);
+  });
+
+  revision.className = "revision";
+}
+
+
+/* ----------------------------------------------------------
+   Conversación con el servidor
+   ---------------------------------------------------------- */
+
+async function analizarArchivo(archivo) {
+  ocultarAvisoImportar();
+  cerrarRevision();
+  mostrarAvisoImportar("Leyendo el archivo…", "exito");
+
+  const formulario = new FormData();
+  formulario.append("archivo", archivo, archivo.name);
+
+  let respuesta;
+  try {
+    respuesta = await fetch("/api/importar/analizar", {
+      method: "POST",
+      body: formulario
+    });
+  } catch (e) {
+    mostrarAvisoImportar("No se pudo conectar con el servidor.", "error");
+    return;
+  }
+
+  if (!respuesta.ok) {
+    mostrarAvisoImportar(await textoDelError(respuesta), "error");
+    return;
+  }
+
+  ocultarAvisoImportar();
+  dibujarRevision(await respuesta.json());
+}
+
+async function confirmarImportacion() {
+  const seleccionados = [];
+
+  Array.from(revisionFilas.children).forEach(function (fila) {
+    if (!fila.querySelector(".marca-crear").checked) return;
+    seleccionados.push({
+      nombre: fila.querySelector(".campo-nombre").value,
+      dos_digitos: fila.querySelector(".campo-digitos").value,
+      fecha_vencimiento: fila.querySelector(".campo-fecha").value || null,
+      notas: fila.dataset.notas || null
+    });
+  });
+
+  if (seleccionados.length === 0) {
+    mostrarAvisoImportar("No hay ninguna fila marcada para crear.", "error");
+    return;
+  }
+
+  botonConfirmar.disabled = true;
+
+  const respuesta = await fetch("/api/importar/confirmar", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(seleccionados)
+  });
+
+  botonConfirmar.disabled = false;
+
+  if (!respuesta.ok) {
+    mostrarAvisoImportar(await textoDelError(respuesta), "error");
+    return;
+  }
+
+  const resultado = await respuesta.json();
+
+  let texto = resultado.creados === 1
+    ? "Se creó 1 cliente."
+    : "Se crearon " + resultado.creados + " clientes.";
+  if (resultado.errores.length > 0) {
+    texto += " " + resultado.errores.length + " fila(s) no se pudieron crear: " +
+             resultado.errores.join(" | ");
+  }
+
+  mostrarAvisoImportar(texto, resultado.errores.length > 0 ? "error" : "exito");
+  cerrarRevision();
+  cargarClientes();
+}
+
+
+/* ----------------------------------------------------------
+   Botones
+   ---------------------------------------------------------- */
+
+botonImportar.addEventListener("click", function () { campoImportar.click(); });
+
+campoImportar.addEventListener("change", function () {
+  if (campoImportar.files.length > 0) {
+    analizarArchivo(campoImportar.files[0]);
+  }
+  campoImportar.value = "";   // permite volver a elegir el mismo archivo
+});
+
+botonConfirmar.addEventListener("click", confirmarImportacion);
+
+botonCancelar.addEventListener("click", function () {
+  cerrarRevision();
+  ocultarAvisoImportar();
+});

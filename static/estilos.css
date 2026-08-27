@@ -359,6 +359,7 @@ button {
 }
 
 .aviso-error { background: var(--error-fondo); color: var(--error-texto); }
+.aviso-fechas { background: var(--alerta-fondo); color: var(--alerta-texto); margin-top: 10px; }
 .aviso-exito { background: var(--exito-fondo); color: var(--exito-texto); }
 
 .oculto {
@@ -564,6 +565,97 @@ a {
     width: 100%;
     justify-content: flex-end;
   }
+}
+
+/* ==========================================================
+   Tabla de revisión de la importación
+
+   Es una tabla y no tarjetas a propósito: aquí el contador está
+   comparando 50 renglones de un vistazo, y para eso las columnas
+   alineadas se leen mucho mejor.
+   ========================================================== */
+
+.revision {
+  margin-top: 20px;
+}
+
+/* Si la tabla no cabe, se desplaza ella sola y no la página entera. */
+.tabla-envoltura {
+  overflow-x: auto;
+  margin: 16px 0;
+  border: 1px solid var(--borde);
+  border-radius: var(--radio);
+}
+
+.tabla-revision {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.92rem;
+}
+
+.tabla-revision th {
+  text-align: left;
+  padding: 10px 12px;
+  background: var(--fondo);
+  border-bottom: 1px solid var(--borde);
+  font-weight: 600;
+  font-size: 0.82rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--texto-secundario);
+  white-space: nowrap;
+}
+
+.tabla-revision td {
+  padding: 6px 12px;
+  border-bottom: 1px solid var(--borde);
+  vertical-align: middle;
+}
+
+.tabla-revision tr:last-child td {
+  border-bottom: none;
+}
+
+/* Las filas con algo que revisar salen sobre fondo ámbar. */
+.fila-revisar {
+  background: var(--alerta-fondo);
+}
+
+.tabla-revision input[type="text"],
+.tabla-revision input[type="date"] {
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid var(--borde-fuerte);
+  border-radius: var(--radio-chico);
+  font-family: inherit;
+  font-size: 0.92rem;
+  background: var(--superficie);
+}
+
+.tabla-revision input[type="checkbox"] {
+  width: 20px;
+  height: 20px;
+  cursor: pointer;
+}
+
+.columna-marca { width: 60px; text-align: center; }
+.columna-corta { width: 90px; }
+.columna-fecha { width: 170px; }
+
+.tabla-revision .campo-digitos {
+  text-align: center;
+}
+
+.casilla-avisos {
+  color: var(--alerta-texto);
+  font-size: 0.85rem;
+  min-width: 200px;
+}
+
+.revision-botones {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
 }
 
 /* ==========================================================
