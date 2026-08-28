@@ -48,6 +48,7 @@ from openpyxl import load_workbook
 from openpyxl.utils import coordinate_to_tuple, get_column_letter
 
 from app.documentos import sanitizar_nombre
+from app.recalcular import celdas_con_error, recalcular
 from app.plantilla_210 import (
     COLUMNAS_VALOR,
     FILA_INICIAL,
@@ -168,8 +169,10 @@ class EscritorPlantilla:
         self.cambios = {}
         self.bitacora = []
         self.guardado = False
-        # Se llena al guardar, con el resultado de la verificación posterior.
+        # Se llenan al guardar, con el resultado de la verificación
+        # posterior y del recálculo.
         self.informe_verificacion = None
+        self.informe_recalculo = None
 
     # -- validación ---------------------------------------------------
 
@@ -289,13 +292,18 @@ class EscritorPlantilla:
 
     # -- guardado -----------------------------------------------------
 
-    def guardar(self):
+    def guardar(self, recalcular_totales=True):
         """Aplica los cambios, verifica el resultado y escribe la bitácora.
 
         El orden importa: primero se escribe, después se verifica, y solo
         si la verificación pasa se deja el archivo y se escribe la bitácora.
         Si la verificación falla, el archivo se borra: es preferible
         quedarse sin archivo que entregar uno con las fórmulas rotas.
+
+        Al final se le pide a LibreOffice que calcule los totales, para que
+        el programa pueda leerlos y mostrarlos en pantalla. Con
+        recalcular_totales=False se salta ese paso (sirve para las pruebas
+        y para cuando solo interesa el archivo).
 
         Devuelve (ruta del archivo, ruta de la bitácora).
         """
@@ -316,6 +324,43 @@ class EscritorPlantilla:
             self.ruta_copia.unlink(missing_ok=True)
             raise
 
+        # Recálculo. Si LibreOffice no está o falla, no se rompe nada: se
+        # entrega el archivo igual y el aviso explica que los totales se
+        # ven al abrirlo en Excel.
+        errores_previos = set()
+        if recalcular_totales:
+            errores_previos = set(celdas_con_error(self.ruta_original))
+            self.informe_recalculo = recalcular(self.ruta_copia)
+
+            if self.informe_recalculo["recalculado"]:
+                # El archivo lo reescribió LibreOffice entero, así que se
+                # vuelve a verificar. Si LibreOffice hubiera dañado alguna
+                # fórmula, aquí se ve.
+                try:
+                    self.informe_verificacion = verificar_contra_original(
+                        self.ruta_original, self.ruta_copia, tras_recalculo=True
+                    )
+                except VerificacionFallida:
+                    self.ruta_copia.unlink(missing_ok=True)
+                    raise
+
+                # Errores dentro de las celdas (#REF!, #VALUE!...). Solo
+                # cuentan los NUEVOS: si la plantilla ya traía uno, no es
+                # culpa nuestra y no tiene sentido descartar por eso.
+                nuevos = [
+                    c for c in celdas_con_error(self.ruta_copia)
+                    if c not in errores_previos
+                ]
+                if nuevos:
+                    self.ruta_copia.unlink(missing_ok=True)
+                    raise VerificacionFallida(
+                        "Después de calcular los totales aparecieron"
+                        f" {len(nuevos)} celdas con error. El archivo se"
+                        " descartó y no se entrega.\n  - "
+                        + "\n  - ".join(nuevos[:10])
+                    )
+                self.informe_verificacion["celdas_con_error"] = 0
+
         ruta_bitacora = self.ruta_copia.with_suffix(
             self.ruta_copia.suffix + SUFIJO_BITACORA
         )
@@ -325,6 +370,7 @@ class EscritorPlantilla:
             "hoja": HOJA_CAPTURA,
             "generado": datetime.now().isoformat(timespec="seconds"),
             "verificacion": self.informe_verificacion,
+            "recalculo": self.informe_recalculo,
             "cambios": self.bitacora,
         }
         # ensure_ascii=False para que las tildes se vean; encoding explícito
@@ -506,7 +552,8 @@ def leer_todas_las_formulas(ruta_xlsx):
     return todas
 
 
-def verificar_contra_original(ruta_original, ruta_generada):
+def verificar_contra_original(ruta_original, ruta_generada,
+                              tras_recalculo=False):
     """Compara el archivo generado con el original y devuelve un informe.
 
     Lanza VerificacionFallida si encuentra cualquier diferencia que no sea
@@ -519,6 +566,13 @@ def verificar_contra_original(ruta_original, ruta_generada):
          (imágenes, notas, estilos). Esto último no lo pide la regla, pero
          es lo que se prometió al escribir de forma quirúrgica, así que se
          comprueba igual.
+
+    tras_recalculo=True se usa cuando el archivo ya pasó por LibreOffice.
+    En ese caso se salta una sola comprobación: la de que las partes
+    internas estén byte por byte iguales. LibreOffice reescribe el archivo
+    entero, así que ninguna parte queda idéntica aunque el contenido sea el
+    mismo. Todo lo demás —las hojas, las 902 fórmulas y que no falte
+    ninguna parte— se sigue exigiendo igual.
     """
     ruta_original = Path(ruta_original)
     ruta_generada = Path(ruta_generada)
@@ -590,22 +644,27 @@ def verificar_contra_original(ruta_original, ruta_generada):
         n for n in partes_originales & partes_generadas
         if n not in permitidas and contenido_original[n] != contenido_generado[n]
     )
-    if intrusas:
+    if intrusas and not tras_recalculo:
         problemas.append(
             f"Cambiaron {len(intrusas)} partes que no se debían tocar: "
             + ", ".join(intrusas[:5])
         )
 
+    modificadas = sorted(
+        n for n in partes_generadas
+        if n not in contenido_original
+        or contenido_original[n] != contenido_generado[n]
+    )
     informe = {
         "formulas_comparadas": total,
         "formulas_distintas": len(diferencias),
         "hojas": len(hojas_originales),
         "partes_internas": len(partes_originales),
-        "partes_modificadas": sorted(
-            n for n in partes_generadas
-            if n not in contenido_original
-            or contenido_original[n] != contenido_generado[n]
-        ),
+        "partes_modificadas_total": len(modificadas),
+        # Solo las primeras: cuando el archivo pasa por LibreOffice quedan
+        # modificadas casi todas, y la lista completa llenaría la bitácora
+        # de ruido sin decir nada nuevo.
+        "partes_modificadas": modificadas[:20],
         "problemas": problemas,
     }
 

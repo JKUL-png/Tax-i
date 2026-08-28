@@ -19,6 +19,9 @@ Lo que comprueba, en dos partes:
   C. Que la verificación posterior (regla 6) se corra sola al guardar, que
      detecte un archivo dañado, y que cuando lo detecta borre el archivo en
      vez de entregarlo.
+  D. Que el recálculo con LibreOffice deje los totales listos para leer, y
+     que si LibreOffice no está o se demora, el archivo se entregue igual
+     con un aviso en vez de romperse.
 """
 
 import hashlib
@@ -31,9 +34,10 @@ from pathlib import Path
 RAIZ = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(RAIZ))
 
-from openpyxl import load_workbook  # noqa: E402
+from openpyxl import Workbook, load_workbook  # noqa: E402
 
 import app.escribir_210 as escribir_210  # noqa: E402
+import app.recalcular as recalcular_lo  # noqa: E402
 from app.escribir_210 import (  # noqa: E402
     EscrituraBloqueada,
     EscritorPlantilla,
@@ -155,7 +159,10 @@ def main():
     # debe registrar los dos movimientos.
     escritor.escribir("G32", 1750000, documento="factura_electronica.pdf (v2)")
 
-    ruta_salida, ruta_bitacora = escritor.guardar()
+    # Sin recálculo a propósito: así se comprueba que la escritura
+    # quirúrgica no tocó nada. El recálculo se prueba aparte, en la
+    # sección K, porque LibreOffice reescribe el archivo entero.
+    ruta_salida, ruta_bitacora = escritor.guardar(recalcular_totales=False)
     print(f"  archivo generado: {ruta_salida.relative_to(RAIZ)}")
 
     # ------------------------------------------------------------------
@@ -370,6 +377,149 @@ def main():
     for basura in carpeta_daños.glob("*.xlsx"):
         basura.unlink()
     carpeta_daños.rmdir()
+
+    # ------------------------------------------------------------------
+    print("\nK. El recálculo con LibreOffice")
+    # ------------------------------------------------------------------
+    hay_libreoffice = recalcular_lo.buscar_libreoffice()
+    print(f"  LibreOffice: {hay_libreoffice or 'no está instalado'}")
+
+    escritor_lo = EscritorPlantilla(plantilla, nombre_salida="prueba_paso4.xlsx")
+    escritor_lo.escribir("G32", 1000000, documento="factura_1.pdf")
+    escritor_lo.escribir("G34", 500000, documento="factura_2.pdf")
+    ruta_lo, bitacora_lo = escritor_lo.guardar()
+    informe_lo = escritor_lo.informe_recalculo
+
+    comprobar("guardar() dejó un informe del recálculo", informe_lo is not None)
+
+    if hay_libreoffice:
+        comprobar("LibreOffice recalculó el libro",
+                  informe_lo["recalculado"], informe_lo["motivo"][:55])
+        comprobar("tardó menos que el tiempo límite de 120 segundos",
+                  informe_lo["segundos"] < 120,
+                  f"{informe_lo['segundos']} segundos")
+
+        calculado = load_workbook(ruta_lo, data_only=True)["Detalle renglón 210"]
+        comprobar("H30 (=SUM(G32:G40)) ya trae el total: 1.500.000",
+                  calculado["H30"].value == 1500000,
+                  repr(calculado["H30"].value))
+        comprobar("I28 calculó solo el 1% de ese total: 15.000",
+                  calculado["I28"].value == 15000,
+                  repr(calculado["I28"].value))
+        comprobar("un total que no se tocó sigue igual (I42)",
+                  calculado["I42"].value == 102003000,
+                  repr(calculado["I42"].value))
+
+        comprobar("no quedó ninguna celda con #REF!, #VALUE! y parecidos",
+                  recalcular_lo.celdas_con_error(ruta_lo) == [],
+                  f"{len(recalcular_lo.celdas_con_error(ruta_lo))} errores")
+
+        formulas_lo = contar_formulas_del_libro(ruta_lo)
+        comprobar("después de pasar por LibreOffice siguen las 902 fórmulas",
+                  formulas_lo == formulas_antes,
+                  f"{sum(formulas_lo.values())} fórmulas")
+
+        partes_lo = set(zipfile.ZipFile(ruta_lo).namelist())
+        comprobar("LibreOffice no perdió ninguna parte interna",
+                  not (partes_antes - partes_lo),
+                  f"perdidas: {len(partes_antes - partes_lo)}")
+        comprobar("las 22 imágenes sobrevivieron al recálculo",
+                  len([p for p in partes_lo if p.startswith("xl/media/")]) == 22)
+        comprobar("la verificación se volvió a correr después de recalcular",
+                  escritor_lo.informe_verificacion["formulas_distintas"] == 0)
+        comprobar("el recálculo quedó anotado en la bitácora",
+                  json.loads(bitacora_lo.read_text(encoding="utf-8"))
+                  ["recalculo"]["recalculado"] is True)
+    else:
+        comprobar("sin LibreOffice, el archivo se entrega igual",
+                  ruta_lo.exists())
+        comprobar("y el aviso explica que los totales se ven en Excel",
+                  "Excel" in informe_lo["motivo"], informe_lo["motivo"][:55])
+
+    # ------------------------------------------------------------------
+    print("\nL. Cuando LibreOffice no está o falla")
+    # ------------------------------------------------------------------
+    # Se finge que LibreOffice no está instalado, que es como va a estar el
+    # computador del contador hasta que alguien se lo instale.
+    buscar_de_verdad = recalcular_lo.buscar_libreoffice
+    recalcular_lo.buscar_libreoffice = lambda: None
+    try:
+        escritor_sin_lo = EscritorPlantilla(
+            plantilla, nombre_salida="prueba_paso4_sin_libreoffice.xlsx"
+        )
+        escritor_sin_lo.escribir("G32", 777000, documento="prueba sin LibreOffice")
+        ruta_sin_lo, _ = escritor_sin_lo.guardar()
+        informe_sin = escritor_sin_lo.informe_recalculo
+        comprobar("sin LibreOffice el archivo se entrega igual, no se rompe",
+                  ruta_sin_lo.exists())
+        comprobar("el informe dice que no se recalculó",
+                  informe_sin["recalculado"] is False)
+        comprobar("el aviso le explica al contador qué hacer",
+                  "Excel" in informe_sin["motivo"], informe_sin["motivo"][:60])
+        comprobar("y el archivo entregado sigue teniendo sus 902 fórmulas",
+                  contar_formulas_del_libro(ruta_sin_lo) == formulas_antes)
+    finally:
+        recalcular_lo.buscar_libreoffice = buscar_de_verdad
+
+    # Tiempo límite: se le da un plazo imposible para ver qué hace.
+    if hay_libreoffice:
+        informe_corto = recalcular_lo.recalcular(ruta_lo, tiempo_limite=0.05)
+        comprobar("si se pasa del tiempo límite, avisa en vez de colgarse",
+                  informe_corto["recalculado"] is False
+                  and "demor" in informe_corto["motivo"],
+                  informe_corto["motivo"][:55])
+        comprobar("y el archivo queda intacto tras el intento fallido",
+                  contar_formulas_del_libro(ruta_lo) == formulas_antes)
+
+    # ------------------------------------------------------------------
+    print("\nM. Los errores dentro de las celdas (#REF!, #VALUE!...)")
+    # ------------------------------------------------------------------
+    if hay_libreoffice:
+        # Un libro chiquito con dos fórmulas que fallan de verdad. Lo
+        # calcula LibreOffice, no lo fingimos nosotros.
+        libro_malo = RAIZ / "datos" / "trabajo" / "con_errores.xlsx"
+        wb_malo = Workbook()
+        hoja_mala = wb_malo.active
+        hoja_mala["A1"] = 0
+        hoja_mala["A2"] = "=1/A1"                    # da #DIV/0!
+        hoja_mala["A3"] = "=FUNCION_QUE_NO_EXISTE(1)"  # da #NAME?
+        wb_malo.save(libro_malo)
+
+        comprobar("antes de calcular no se ve ningún error",
+                  recalcular_lo.celdas_con_error(libro_malo) == [])
+        recalcular_lo.recalcular(libro_malo)
+        errores = recalcular_lo.celdas_con_error(libro_malo)
+        comprobar("después de calcular, encuentra el #DIV/0! y el #NAME?",
+                  len(errores) == 2, ", ".join(errores))
+        libro_malo.unlink()
+
+    # Y que guardar() descarte el archivo si aparecen errores nuevos.
+    errores_de_verdad = escribir_210.celdas_con_error
+
+    def fingir_errores(ruta):
+        """Dice que la copia quedó con un #REF!, pero el original no."""
+        if "trabajo" in str(ruta):
+            return ["Detalle renglón 210!I42=#REF!"]
+        return []
+
+    escritor_con_error = EscritorPlantilla(
+        plantilla, nombre_salida="prueba_paso4_con_error.xlsx"
+    )
+    escritor_con_error.escribir("G32", 1, documento="prueba de error")
+    ruta_con_error = escritor_con_error.ruta_copia
+    escribir_210.celdas_con_error = fingir_errores
+    try:
+        escritor_con_error.guardar()
+        comprobar("si aparece un #REF! nuevo, no se entrega el archivo", False,
+                  "lo entregó")
+    except VerificacionFallida as error:
+        comprobar("si aparece un #REF! nuevo, no se entrega el archivo", True,
+                  str(error).splitlines()[0][:58])
+    finally:
+        escribir_210.celdas_con_error = errores_de_verdad
+
+    comprobar("el archivo con errores se borró",
+              not ruta_con_error.exists(), ruta_con_error.name)
 
     total = len(resultados)
     buenas = sum(resultados)
