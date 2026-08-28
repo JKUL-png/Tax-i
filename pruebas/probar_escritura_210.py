@@ -16,6 +16,9 @@ Lo que comprueba, en dos partes:
   B. Que cuando sí escribe, el archivo quede sano: el original intacto, las
      902 fórmulas iguales, las 22 imágenes en su lugar y los valores
      escritos donde se pidió.
+  C. Que la verificación posterior (regla 6) se corra sola al guardar, que
+     detecte un archivo dañado, y que cuando lo detecta borre el archivo en
+     vez de entregarlo.
 """
 
 import hashlib
@@ -30,9 +33,12 @@ sys.path.insert(0, str(RAIZ))
 
 from openpyxl import load_workbook  # noqa: E402
 
+import app.escribir_210 as escribir_210  # noqa: E402
 from app.escribir_210 import (  # noqa: E402
     EscrituraBloqueada,
     EscritorPlantilla,
+    VerificacionFallida,
+    verificar_contra_original,
 )
 from app.plantilla_210 import contar_formulas_del_libro, es_formula  # noqa: E402
 
@@ -272,6 +278,98 @@ def main():
         "escribir después de guardar",
         lambda: escritor.escribir("G44", 1, documento="prueba"),
     )
+
+    # ------------------------------------------------------------------
+    print("\nH. La verificación posterior (regla 6) se corrió sola al guardar")
+    # ------------------------------------------------------------------
+    informe = escritor.informe_verificacion
+    comprobar("guardar() dejó un informe de verificación", informe is not None)
+    comprobar(f"comparó las {sum(formulas_antes.values())} fórmulas",
+              informe["formulas_comparadas"] == sum(formulas_antes.values()),
+              f"{informe['formulas_comparadas']} comparadas")
+    comprobar("no encontró ninguna fórmula distinta",
+              informe["formulas_distintas"] == 0)
+    comprobar("solo cambiaron la hoja de captura y workbook.xml",
+              sorted(informe["partes_modificadas"]) ==
+              ["xl/workbook.xml", "xl/worksheets/sheet5.xml"],
+              ", ".join(informe["partes_modificadas"]))
+    comprobar("el informe quedó guardado dentro de la bitácora",
+              "verificacion" in json.loads(
+                  ruta_bitacora.read_text(encoding="utf-8")))
+
+    # ------------------------------------------------------------------
+    print("\nI. La verificación detecta un archivo dañado")
+    # ------------------------------------------------------------------
+    # Se fabrican a propósito los dos daños que más miedo dan, y se
+    # comprueba que la verificación los cache. Estos archivos se hacen en
+    # una carpeta aparte y no se entregan a nadie.
+    carpeta_daños = RAIZ / "datos" / "trabajo" / "dañados_de_prueba"
+    carpeta_daños.mkdir(parents=True, exist_ok=True)
+
+    # Daño 1: guardar con data_only=True. Es la catástrofe que la regla 2
+    # prohíbe: reemplaza todas las fórmulas por su último resultado.
+    sin_formulas = carpeta_daños / "sin_formulas.xlsx"
+    libro_roto = load_workbook(plantilla, data_only=True)
+    libro_roto.save(sin_formulas)
+    try:
+        verificar_contra_original(plantilla, sin_formulas)
+        comprobar("detecta un archivo con las fórmulas destruidas", False,
+                  "no la detectó")
+    except VerificacionFallida as error:
+        comprobar("detecta un archivo con las fórmulas destruidas", True,
+                  str(error).splitlines()[1].strip()[:60])
+
+    # Daño 2: abrir y guardar con openpyxl sin tocar nada. Las fórmulas
+    # sobreviven, pero se pierden las imágenes. Es el camino que se
+    # descartó, y la verificación tiene que verlo.
+    sin_imagenes = carpeta_daños / "sin_imagenes.xlsx"
+    load_workbook(plantilla).save(sin_imagenes)
+    try:
+        verificar_contra_original(plantilla, sin_imagenes)
+        comprobar("detecta un archivo que perdió las imágenes", False,
+                  "no la detectó")
+    except VerificacionFallida as error:
+        comprobar("detecta un archivo que perdió las imágenes", True,
+                  str(error).splitlines()[1].strip()[:60])
+
+    # ------------------------------------------------------------------
+    print("\nJ. Si la verificación falla, el archivo se descarta")
+    # ------------------------------------------------------------------
+    # Se reemplaza a propósito la parte que escribe por una que daña el
+    # archivo, para ver qué hace guardar() cuando la verificación falla.
+    escritor_saboteado = EscritorPlantilla(
+        plantilla, nombre_salida="prueba_paso3_saboteada.xlsx"
+    )
+    escritor_saboteado.escribir("G32", 999, documento="prueba de sabotaje")
+    ruta_saboteada = escritor_saboteado.ruta_copia
+
+    original_de_verdad = escribir_210._aplicar_cambios_al_zip
+
+    def sabotear(ruta_xlsx, cambios):
+        """Hace justo lo que nunca se debe hacer: destruir las fórmulas."""
+        load_workbook(ruta_xlsx, data_only=True).save(ruta_xlsx)
+
+    escribir_210._aplicar_cambios_al_zip = sabotear
+    try:
+        escritor_saboteado.guardar()
+        comprobar("guardar() se niega a entregar un archivo dañado", False,
+                  "lo entregó")
+    except VerificacionFallida as error:
+        comprobar("guardar() se niega a entregar un archivo dañado", True,
+                  str(error).splitlines()[1].strip()[:55])
+    finally:
+        escribir_210._aplicar_cambios_al_zip = original_de_verdad
+
+    comprobar("el archivo dañado se borró, no quedó dando vueltas",
+              not ruta_saboteada.exists(), str(ruta_saboteada.name))
+    comprobar("no se escribió bitácora para un archivo que no se entregó",
+              not Path(str(ruta_saboteada) + ".bitacora.json").exists())
+
+    # Los archivos dañados a propósito no se dejan por ahí: alguien los
+    # podría confundir con un resultado bueno.
+    for basura in carpeta_daños.glob("*.xlsx"):
+        basura.unlink()
+    carpeta_daños.rmdir()
 
     total = len(resultados)
     buenas = sum(resultados)

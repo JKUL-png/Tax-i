@@ -19,6 +19,9 @@ en el código, no en un comentario:
      escribir en otra hoja se rechaza.
   5. Cada escritura queda en una bitácora que se guarda junto al archivo de
      salida, para que el contador pueda revisar y revertir.
+  6. Después de guardar, el archivo se vuelve a abrir y se comparan TODAS
+     sus fórmulas contra las del original. Si cambió aunque sea una, el
+     resultado se borra y se avisa. No se entrega un archivo dudoso.
 
 Cómo escribe (y por qué así)
 ----------------------------
@@ -61,6 +64,15 @@ CARPETA_TRABAJO = RAIZ / "datos" / "trabajo"
 
 # Terminación del archivo de bitácora que acompaña a cada salida.
 SUFIJO_BITACORA = ".bitacora.json"
+
+
+class VerificacionFallida(Exception):
+    """El archivo generado no pasó la revisión posterior.
+
+    Es un error grave: quiere decir que al guardar se dañó algo del libro.
+    Cuando esto pasa, el archivo generado se borra. Es preferible quedarse
+    sin archivo que entregarle al contador uno con las fórmulas rotas.
+    """
 
 
 class EscrituraBloqueada(Exception):
@@ -156,6 +168,8 @@ class EscritorPlantilla:
         self.cambios = {}
         self.bitacora = []
         self.guardado = False
+        # Se llena al guardar, con el resultado de la verificación posterior.
+        self.informe_verificacion = None
 
     # -- validación ---------------------------------------------------
 
@@ -276,7 +290,12 @@ class EscritorPlantilla:
     # -- guardado -----------------------------------------------------
 
     def guardar(self):
-        """Aplica los cambios sobre la copia y escribe la bitácora.
+        """Aplica los cambios, verifica el resultado y escribe la bitácora.
+
+        El orden importa: primero se escribe, después se verifica, y solo
+        si la verificación pasa se deja el archivo y se escribe la bitácora.
+        Si la verificación falla, el archivo se borra: es preferible
+        quedarse sin archivo que entregar uno con las fórmulas rotas.
 
         Devuelve (ruta del archivo, ruta de la bitácora).
         """
@@ -284,6 +303,18 @@ class EscritorPlantilla:
             raise EscrituraBloqueada("Este archivo ya se guardó.")
 
         _aplicar_cambios_al_zip(self.ruta_copia, self.cambios)
+
+        # Regla 6. No hay forma de saltarse este paso ni de pedir que no se
+        # haga: es parte de guardar.
+        try:
+            self.informe_verificacion = verificar_contra_original(
+                self.ruta_original, self.ruta_copia
+            )
+        except VerificacionFallida:
+            # El archivo quedó dudoso: se descarta. missing_ok porque si ya
+            # no está, tampoco hay nada que borrar.
+            self.ruta_copia.unlink(missing_ok=True)
+            raise
 
         ruta_bitacora = self.ruta_copia.with_suffix(
             self.ruta_copia.suffix + SUFIJO_BITACORA
@@ -293,6 +324,7 @@ class EscritorPlantilla:
             "archivo_generado": str(self.ruta_copia),
             "hoja": HOJA_CAPTURA,
             "generado": datetime.now().isoformat(timespec="seconds"),
+            "verificacion": self.informe_verificacion,
             "cambios": self.bitacora,
         }
         # ensure_ascii=False para que las tildes se vean; encoding explícito
@@ -447,3 +479,140 @@ def _aplicar_cambios_al_zip(ruta_xlsx, cambios):
 
     ruta_temporal.replace(ruta_xlsx)
     return ruta_xlsx
+
+
+# ---------------------------------------------------------------------------
+# Regla 6: la verificación posterior. Se corre siempre, después de guardar.
+# ---------------------------------------------------------------------------
+
+
+def leer_todas_las_formulas(ruta_xlsx):
+    """Devuelve todas las fórmulas del libro: hoja -> {celda: fórmula}.
+
+    Se abre con data_only=False, que es como se leen las fórmulas tal como
+    están escritas. NUNCA con data_only=True: esa carga trae los resultados
+    en vez de las fórmulas, y si se guardara, las borraría del archivo.
+    """
+    libro = load_workbook(Path(ruta_xlsx), data_only=False)
+    todas = {}
+    for nombre in libro.sheetnames:
+        hoja = libro[nombre]
+        formulas = {}
+        for fila in hoja.iter_rows():
+            for celda in fila:
+                if es_formula(celda.value):
+                    formulas[celda.coordinate] = celda.value
+        todas[nombre] = formulas
+    return todas
+
+
+def verificar_contra_original(ruta_original, ruta_generada):
+    """Compara el archivo generado con el original y devuelve un informe.
+
+    Lanza VerificacionFallida si encuentra cualquier diferencia que no sea
+    un valor de las celdas que se escribieron. Revisa cuatro cosas:
+
+      1. Que estén las mismas hojas, con el mismo nombre y en el mismo orden.
+      2. Que cada fórmula siga existiendo y diga exactamente lo mismo.
+      3. Que no haya aparecido ninguna fórmula nueva.
+      4. Que no se haya perdido ninguna parte interna del archivo
+         (imágenes, notas, estilos). Esto último no lo pide la regla, pero
+         es lo que se prometió al escribir de forma quirúrgica, así que se
+         comprueba igual.
+    """
+    ruta_original = Path(ruta_original)
+    ruta_generada = Path(ruta_generada)
+
+    problemas = []
+
+    formulas_originales = leer_todas_las_formulas(ruta_original)
+    formulas_generadas = leer_todas_las_formulas(ruta_generada)
+
+    hojas_originales = list(formulas_originales)
+    hojas_generadas = list(formulas_generadas)
+    if hojas_originales != hojas_generadas:
+        problemas.append(
+            f"Las hojas cambiaron. Antes: {hojas_originales}."
+            f" Ahora: {hojas_generadas}."
+        )
+
+    total = 0
+    diferencias = []
+    for hoja in hojas_originales:
+        antes = formulas_originales.get(hoja, {})
+        ahora = formulas_generadas.get(hoja, {})
+        total += len(antes)
+        for celda, formula in antes.items():
+            if celda not in ahora:
+                diferencias.append(f"{hoja}!{celda}: desapareció la fórmula")
+            elif ahora[celda] != formula:
+                diferencias.append(
+                    f"{hoja}!{celda}: decía «{formula}» y ahora dice"
+                    f" «{ahora[celda]}»"
+                )
+        for celda in ahora:
+            if celda not in antes:
+                diferencias.append(
+                    f"{hoja}!{celda}: apareció una fórmula que no estaba"
+                )
+
+    if diferencias:
+        problemas.append(
+            f"{len(diferencias)} fórmulas cambiaron. "
+            + " | ".join(diferencias[:5])
+        )
+
+    # Partes internas del archivo.
+    with zipfile.ZipFile(ruta_original) as original:
+        partes_originales = set(original.namelist())
+        try:
+            parte_hoja = _parte_de_la_hoja(original, HOJA_CAPTURA)
+        except EscrituraBloqueada:
+            parte_hoja = ""
+        contenido_original = {n: original.read(n) for n in partes_originales}
+
+    with zipfile.ZipFile(ruta_generada) as generado:
+        partes_generadas = set(generado.namelist())
+        contenido_generado = {n: generado.read(n) for n in partes_generadas}
+
+    perdidas = sorted(partes_originales - partes_generadas)
+    if perdidas:
+        problemas.append(
+            f"Se perdieron {len(perdidas)} partes internas del archivo: "
+            + ", ".join(perdidas[:5])
+        )
+
+    # Solo dos partes tienen permiso de cambiar: la hoja donde se escribe y
+    # workbook.xml, por la marca de recalcular. Cualquier otra que cambie
+    # es señal de que algo se reescribió sin querer.
+    permitidas = {parte_hoja, "xl/workbook.xml"}
+    intrusas = sorted(
+        n for n in partes_originales & partes_generadas
+        if n not in permitidas and contenido_original[n] != contenido_generado[n]
+    )
+    if intrusas:
+        problemas.append(
+            f"Cambiaron {len(intrusas)} partes que no se debían tocar: "
+            + ", ".join(intrusas[:5])
+        )
+
+    informe = {
+        "formulas_comparadas": total,
+        "formulas_distintas": len(diferencias),
+        "hojas": len(hojas_originales),
+        "partes_internas": len(partes_originales),
+        "partes_modificadas": sorted(
+            n for n in partes_generadas
+            if n not in contenido_original
+            or contenido_original[n] != contenido_generado[n]
+        ),
+        "problemas": problemas,
+    }
+
+    if problemas:
+        raise VerificacionFallida(
+            "El archivo generado NO pasó la verificación:\n  - "
+            + "\n  - ".join(problemas)
+        )
+
+    return informe
