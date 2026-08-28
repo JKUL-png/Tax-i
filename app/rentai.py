@@ -41,16 +41,28 @@ from app.plantilla_210 import TIPO_CAPTURA
 # Cómo se llama. Está en una constante porque se ve en toda la pantalla.
 NOMBRE = "Rentai"
 
+# Cómo se presenta el programa ante el servicio.
+IDENTIFICACION = "asistente-renta/1.0"
+
 # Cuánto se espera a que conteste antes de darse por vencido.
 SEGUNDOS_DE_ESPERA = 60
 
 # Cuántos mensajes anteriores se le recuerdan. Más que esto no ayuda y
 # hace la conversación cara y lenta.
-MENSAJES_QUE_RECUERDA = 12
+MENSAJES_QUE_RECUERDA = 8
 
 # Cuántos documentos del cliente se le mandan, y cuánto texto de cada uno.
-DOCUMENTOS_QUE_SE_MANDAN = 10
-LETRAS_POR_DOCUMENTO = 2500
+#
+# Estos números no son al azar: la capa gratis de Groq deja pasar 8.000
+# tokens por minuto, que son unas 32.000 letras contando ida y vuelta. En
+# ese presupuesto tienen que caber las instrucciones, el catálogo de
+# casillas, los documentos y la conversación. Si se agranda esto, empieza
+# a rebotar con "servicio ocupado".
+DOCUMENTOS_QUE_SE_MANDAN = 6
+LETRAS_POR_DOCUMENTO = 1000
+
+# Lo mismo para el catálogo: cada casilla se manda en una línea corta.
+LARGO_DE_LINEA_DEL_CATALOGO = 38
 
 
 class RentaiApagada(Exception):
@@ -182,20 +194,40 @@ def catalogo_de_casillas():
     Solo van las que la plantilla trae con un 0 puesto: son las que el
     archivo espera que alguien diligencie. Mandarle las 1.317 escribibles
     sería más ruido que ayuda, y muchas son filas de rótulo.
+
+    Cada línea va apretada a propósito —"G32|Alimentación>Empresa xxx"—
+    porque el catálogo entero tiene que caber en el presupuesto de tokens
+    junto con los documentos. Escrito largo se come él solo la mitad.
     """
     lineas = []
     seccion_anterior = ""
+
     for celda in formulario.mapa()["celdas"]:
         if celda["tipo"] != TIPO_CAPTURA or not celda["cero_precargado"]:
             continue
+
         if celda["seccion"] != seccion_anterior:
             seccion_anterior = celda["seccion"]
-            lineas.append(f"\n[{seccion_anterior}]")
-        rastro = formulario._rastro(celda.get("contexto"))
-        renglon = f" (renglón {celda['renglon']})" if celda["renglon"] else ""
-        descripcion = f"{rastro} > {celda['descripcion']}" if rastro \
+            lineas.append(f"[{seccion_anterior[:28]}]")
+
+        # El concepto padre más cercano, cortito: es lo que distingue una
+        # casilla "Empresa xxx, NIT…" de las otras diecinueve iguales.
+        contexto = celda.get("contexto") or []
+        padre = contexto[-1] if contexto else ""
+        for signo in ("(", ";", ":", ","):
+            if signo in padre:
+                antes = padre.split(signo)[0].strip()
+                if len(antes) >= 8:
+                    padre = antes
+                    break
+
+        nombre = f"{padre[:18]}>{celda['descripcion']}" if padre \
             else celda["descripcion"]
-        lineas.append(f"{celda['celda']}: {descripcion[:110]}{renglon}")
+        nombre = nombre[:LARGO_DE_LINEA_DEL_CATALOGO]
+
+        renglon = f" r{celda['renglon']}" if celda["renglon"] else ""
+        lineas.append(f"{celda['celda']}|{nombre}{renglon}")
+
     return "\n".join(lineas)
 
 
@@ -268,6 +300,11 @@ def _llamar_al_servicio(mensajes, modelo, llave):
         headers={
             "Content-Type": "application/json",
             "Authorization": f"Bearer {llave}",
+            # Sin esto no funciona: Python se presenta como
+            # "Python-urllib/3.x" y el servicio lo rechaza con un 403 de
+            # Cloudflare (error 1010) creyendo que es un robot. Basta con
+            # que el programa diga cómo se llama.
+            "User-Agent": IDENTIFICACION,
         },
         method="POST",
     )

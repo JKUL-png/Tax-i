@@ -177,6 +177,10 @@ function dibujarPropuesta(propuesta) {
   const tarjeta = document.createElement("div");
   tarjeta.className = "propuesta";
 
+  /* Si esta misma cifra ya está anotada en esa casilla, la propuesta se
+     muestra como cumplida en vez de ofrecer anotarla otra vez. */
+  const cumplida = yaAnotado[propuesta.celda] === propuesta.valor;
+
   /* Obligación del proyecto: todo lo que salga de una IA se muestra
      marcado, y con de dónde salió. */
   const marca = document.createElement("span");
@@ -194,6 +198,10 @@ function dibujarPropuesta(propuesta) {
   const titulo = document.createElement("p");
   titulo.className = "propuesta-titulo";
   titulo.textContent = propuesta.descripcion || propuesta.celda;
+  /* Hay conceptos de la plantilla que son un párrafo entero con artículos
+     y decretos. En la tarjeta se muestran tres renglones y el resto sale
+     al pasar el mouse. */
+  titulo.title = propuesta.descripcion || propuesta.celda;
   tarjeta.appendChild(titulo);
 
   const cifra = document.createElement("p");
@@ -216,6 +224,15 @@ function dibujarPropuesta(propuesta) {
     tarjeta.appendChild(porque);
   }
 
+  if (cumplida) {
+    tarjeta.classList.add("propuesta-anotada");
+    const listo = document.createElement("p");
+    listo.className = "propuesta-lista";
+    listo.textContent = "Ya está anotado en " + propuesta.celda + ".";
+    tarjeta.appendChild(listo);
+    return tarjeta;
+  }
+
   const botones = document.createElement("div");
   botones.className = "propuesta-botones";
 
@@ -236,6 +253,7 @@ function dibujarPropuesta(propuesta) {
         })
       });
       tarjeta.classList.add("propuesta-anotada");
+      yaAnotado[propuesta.celda] = propuesta.valor;
       botones.textContent = "";
       const listo = document.createElement("p");
       listo.className = "propuesta-lista";
@@ -357,6 +375,18 @@ function ajustarAlto() {
 
 async function cargarConversacion() {
   mensajes.textContent = "";
+
+  /* Primero lo ya anotado, para saber qué propuestas están cumplidas. */
+  try {
+    const formulario = await pedir("/api/clientes/" + idCliente + "/formulario");
+    yaAnotado = {};
+    formulario.valores.forEach(function (valor) {
+      yaAnotado[valor.celda] = valor.valor;
+    });
+  } catch (error) {
+    yaAnotado = {};
+  }
+
   try {
     const anteriores = await pedir("/api/clientes/" + idCliente + "/chat");
     if (anteriores.length === 0) {

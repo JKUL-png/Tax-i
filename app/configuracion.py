@@ -38,7 +38,17 @@ VALORES_FALSOS = {"false", "0", "no", "n", "off"}
 SERVICIO = "https://api.groq.com/openai/v1/chat/completions"
 
 # El modelo por defecto. Se puede cambiar con IA_MODELO en el .env.
-MODELO_POR_DEFECTO = "llama-3.3-70b-versatile"
+#
+# Se probaron los cuatro modelos gratis que sirven para esto, con los
+# documentos de un cliente de prueba. Este fue el único que encontró las
+# tres cifras que se le pidieron de tres documentos distintos; los otros
+# encontraron una o dos y dijeron que no había casilla.
+#
+# Su cupo gratis son 200.000 tokens al día, y cada mensaje gasta unos
+# 5.000: alcanza para unas 40 preguntas diarias. Si se acaba, en el .env
+# se puede poner IA_MODELO=qwen/qwen3.8-27b, que tiene 2 millones al día
+# pero busca peor.
+MODELO_POR_DEFECTO = "openai/gpt-oss-120b"
 
 
 def leer_env(ruta=ARCHIVO_ENV):

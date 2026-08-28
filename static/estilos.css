@@ -2051,6 +2051,12 @@ input[type="text"].celda-campo:focus {
   margin: 6px 0 4px;
   font-size: 0.9rem;
   font-weight: 500;
+  /* Algunos conceptos de la plantilla son un párrafo entero. Se muestran
+     tres renglones; el texto completo aparece al pasar el mouse. */
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 
 .propuesta-cifra {
