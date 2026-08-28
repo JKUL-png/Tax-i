@@ -350,7 +350,55 @@
     </div>
   </div>
 
+
+  <!-- ---------- Rentai ----------
+       La asistente. Vive en una barra a un lado que se abre y se cierra,
+       para que no estorbe mientras el contador trabaja en la pantalla. -->
+  <div id="rentai" class="rentai rentai-cerrada">
+
+    <!-- Cerrada: una barrita con un texto que va cambiando -->
+    <button type="button" class="rentai-pastilla" id="rentai-abrir"
+            aria-expanded="false" aria-controls="rentai-panel">
+      <span class="rentai-punto" aria-hidden="true"></span>
+      <span class="rentai-nombre">Rentai</span>
+      <span class="rentai-frase" id="rentai-frase"></span>
+    </button>
+
+    <!-- Abierta: la conversación -->
+    <div class="rentai-panel" id="rentai-panel" role="dialog"
+         aria-label="Conversación con Rentai">
+      <div class="rentai-barra">
+        <div class="rentai-titulo">
+          <span class="rentai-punto" aria-hidden="true"></span>
+          <span>Rentai</span>
+          <span class="rentai-estado" id="rentai-estado"></span>
+        </div>
+        <div class="rentai-acciones">
+          <button type="button" class="boton-texto" id="rentai-limpiar">
+            Borrar charla
+          </button>
+          <button type="button" class="boton-texto" id="rentai-minimizar"
+                  aria-label="Minimizar">Minimizar</button>
+        </div>
+      </div>
+
+      <div class="rentai-mensajes" id="rentai-mensajes"></div>
+
+      <div class="rentai-escribir">
+        <textarea id="rentai-texto" rows="1"
+                  placeholder="Escríbale a Rentai…"
+                  aria-label="Mensaje para Rentai"></textarea>
+        <button type="button" class="boton" id="rentai-enviar">Enviar</button>
+      </div>
+
+      <p class="rentai-pie">
+        Rentai propone; usted decide. Nada se anota solo.
+      </p>
+    </div>
+  </div>
+
   <script src="/static/cliente.js"></script>
   <script src="/static/formulario.js"></script>
+  <script src="/static/rentai.js"></script>
 </body>
 </html>

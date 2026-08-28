@@ -23,7 +23,7 @@ from pydantic import BaseModel, field_validator
 
 from app import (
     checklist, configuracion, db, documentos, exportar, formulario, importar,
-    lectura,
+    lectura, rentai,
 )
 from app.escribir_210 import EscrituraBloqueada, VerificacionFallida
 
@@ -985,3 +985,77 @@ def api_descargar_formulario(id_cliente: int):
         ),
         filename=formulario.nombre_para_descargar(cliente),
     )
+
+
+# ----------------------------------------------------------
+# API de Rentai, la asistente
+#
+# Rentai propone; nunca escribe sola. Cada propuesta la confirma el
+# contador desde la pantalla. Ver app/rentai.py.
+# ----------------------------------------------------------
+
+
+class MensajeChat(BaseModel):
+    """Lo que el contador le escribe a Rentai."""
+
+    mensaje: str
+
+
+class PropuestaAceptada(BaseModel):
+    """Una propuesta de Rentai que el contador decidió anotar."""
+
+    celda: str
+    valor: float
+    documento: str = ""
+
+
+@app.get("/api/rentai")
+def api_rentai():
+    """Quién es Rentai y si está disponible ahora mismo."""
+    return {
+        "nombre": rentai.NOMBRE,
+        "disponible": configuracion.CONFIG.ia_disponible,
+        "motivo": configuracion.CONFIG.motivo,
+    }
+
+
+@app.get("/api/clientes/{id_cliente}/chat")
+def api_leer_chat(id_cliente: int):
+    """La conversación que va con este cliente."""
+    _cliente_o_404(id_cliente)
+    return db.listar_mensajes(id_cliente)
+
+
+@app.post("/api/clientes/{id_cliente}/chat")
+def api_hablar(id_cliente: int, datos: MensajeChat):
+    """Le manda un mensaje a Rentai sobre este cliente."""
+    cliente = _cliente_o_404(id_cliente)
+    try:
+        return rentai.hablar(cliente, datos.mensaje)
+    except rentai.RentaiApagada as error:
+        raise HTTPException(status_code=409, detail=str(error))
+    except rentai.RentaiFallo as error:
+        raise HTTPException(status_code=502, detail=str(error))
+    except formulario.SinPlantilla as error:
+        raise HTTPException(status_code=409, detail=str(error))
+
+
+@app.delete("/api/clientes/{id_cliente}/chat", status_code=204)
+def api_borrar_chat(id_cliente: int):
+    """Borra la conversación. Los valores ya anotados no se tocan."""
+    _cliente_o_404(id_cliente)
+    db.borrar_mensajes(id_cliente)
+
+
+@app.post("/api/clientes/{id_cliente}/chat/anotar")
+def api_anotar_propuesta(id_cliente: int, datos: PropuestaAceptada):
+    """Anota una propuesta que el contador aceptó."""
+    _cliente_o_404(id_cliente)
+    try:
+        return rentai.anotar_propuesta(
+            id_cliente, datos.celda, datos.valor, datos.documento
+        )
+    except EscrituraBloqueada as error:
+        raise HTTPException(status_code=400, detail=str(error))
+    except formulario.SinPlantilla as error:
+        raise HTTPException(status_code=409, detail=str(error))

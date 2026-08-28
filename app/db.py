@@ -175,6 +175,30 @@ def crear_tablas():
             " ON bitacora_210 (cliente_id)"
         )
 
+        # La conversación con Rentai, por cliente. Se guarda para que el
+        # contador pueda volver a leerla y para que la conversación siga
+        # donde quedó cuando cierre y abra el programa.
+        conexion.execute(
+            """
+            CREATE TABLE IF NOT EXISTS chat_mensajes (
+                id         INTEGER PRIMARY KEY AUTOINCREMENT,
+                cliente_id INTEGER NOT NULL,
+                -- Quién habló: 'contador' o 'rentai'.
+                papel      TEXT NOT NULL,
+                texto      TEXT NOT NULL,
+                -- Las propuestas de ese mensaje, en JSON. Vacío si no hubo.
+                propuestas TEXT NOT NULL DEFAULT '[]',
+                creado_en  TEXT NOT NULL,
+                FOREIGN KEY (cliente_id) REFERENCES clientes(id)
+                    ON DELETE CASCADE
+            )
+            """
+        )
+        conexion.execute(
+            "CREATE INDEX IF NOT EXISTS idx_chat_cliente"
+            " ON chat_mensajes (cliente_id)"
+        )
+
         # Ajustes del programa que el contador puede cambiar desde la
         # pantalla. Por ahora solo uno: cuál plantilla está en uso.
         conexion.execute(
@@ -733,3 +757,71 @@ def guardar_ajuste(clave, valor):
             (clave, str(valor)),
         )
     return valor
+
+
+# ----------------------------------------------------------
+# La conversación con Rentai
+# ----------------------------------------------------------
+
+
+def guardar_mensaje(cliente_id, papel, texto, propuestas=None):
+    """Guarda un mensaje de la conversación de un cliente."""
+    import json
+
+    ahora = datetime.now().isoformat(timespec="seconds")
+    with conectar() as conexion:
+        cursor = conexion.execute(
+            "INSERT INTO chat_mensajes"
+            " (cliente_id, papel, texto, propuestas, creado_en)"
+            " VALUES (?, ?, ?, ?, ?)",
+            (cliente_id, papel, texto,
+             json.dumps(propuestas or [], ensure_ascii=False), ahora),
+        )
+        id_mensaje = cursor.lastrowid
+
+    return {
+        "id": id_mensaje,
+        "papel": papel,
+        "texto": texto,
+        "propuestas": propuestas or [],
+        "creado_en": ahora,
+    }
+
+
+def listar_mensajes(cliente_id, limite=50):
+    """La conversación de un cliente, del más viejo al más nuevo.
+
+    Se piden los últimos y se voltean: así el límite recorta lo viejo y no
+    lo reciente, que es lo que hace falta para seguir hablando.
+    """
+    import json
+
+    with conectar() as conexion:
+        filas = conexion.execute(
+            "SELECT id, papel, texto, propuestas, creado_en FROM chat_mensajes"
+            " WHERE cliente_id = ? ORDER BY id DESC LIMIT ?",
+            (cliente_id, limite),
+        ).fetchall()
+
+    mensajes = []
+    for fila in reversed(filas):
+        try:
+            propuestas = json.loads(fila["propuestas"])
+        except (ValueError, TypeError):
+            propuestas = []
+        mensajes.append({
+            "id": fila["id"],
+            "papel": fila["papel"],
+            "texto": fila["texto"],
+            "propuestas": propuestas,
+            "creado_en": fila["creado_en"],
+        })
+    return mensajes
+
+
+def borrar_mensajes(cliente_id):
+    """Borra la conversación de un cliente. No toca sus valores anotados."""
+    with conectar() as conexion:
+        conexion.execute(
+            "DELETE FROM chat_mensajes WHERE cliente_id = ?", (cliente_id,)
+        )

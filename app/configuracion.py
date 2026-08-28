@@ -7,7 +7,11 @@ Solo hay dos cosas configurables, y las dos tienen que ver con la IA:
                        Nada sale del computador. El programa funciona
                        completo: organiza, arma el checklist y exporta.
 
-  ANTHROPIC_API_KEY=   La llave para usar la IA, cuando SIN_IA sea false.
+  GROQ_API_KEY=        La llave para usar la IA, cuando SIN_IA sea false.
+                       Se saca gratis en console.groq.com, sin tarjeta.
+
+  IA_MODELO=           Cuál modelo usar. Si no se pone, se usa uno bueno
+                       por defecto.
 
 **El valor por defecto es SIN_IA=true.** Si no hay archivo .env, o está
 mal escrito, o alguien lo borró, el programa se queda en el modo en que
@@ -26,6 +30,15 @@ ARCHIVO_ENV = RAIZ / ".env"
 # o por una mayúscula.
 VALORES_VERDADEROS = {"true", "1", "si", "sí", "yes", "y", "on"}
 VALORES_FALSOS = {"false", "0", "no", "n", "off"}
+
+# Con cuál servicio de IA se habla. Se eligió Groq porque su capa gratis
+# es gratis de verdad (sin tarjeta) y porque se compromete a no entrenar
+# modelos con lo que uno le manda ni a guardarlo. Eso importa: aquí se
+# manejan documentos tributarios de terceros.
+SERVICIO = "https://api.groq.com/openai/v1/chat/completions"
+
+# El modelo por defecto. Se puede cambiar con IA_MODELO en el .env.
+MODELO_POR_DEFECTO = "llama-3.3-70b-versatile"
 
 
 def leer_env(ruta=ARCHIVO_ENV):
@@ -81,7 +94,8 @@ class Configuracion:
 
         # Por defecto True: sin .env, no sale nada del computador.
         self.sin_ia = _es_verdadero(valores.get("SIN_IA"), True)
-        self.llave_anthropic = (valores.get("ANTHROPIC_API_KEY") or "").strip()
+        self.llave = (valores.get("GROQ_API_KEY") or "").strip()
+        self.modelo = (valores.get("IA_MODELO") or MODELO_POR_DEFECTO).strip()
 
     @property
     def ia_disponible(self):
@@ -91,7 +105,7 @@ class Configuracion:
         haya una llave. Tener una llave con SIN_IA=true NO alcanza:
         el modo sin IA manda.
         """
-        return (not self.sin_ia) and bool(self.llave_anthropic)
+        return (not self.sin_ia) and bool(self.llave)
 
     @property
     def motivo(self):
@@ -101,10 +115,11 @@ class Configuracion:
                 "Modo sin IA activo. Ningún dato de ningún cliente sale de"
                 " este computador."
             )
-        if not self.llave_anthropic:
+        if not self.llave:
             return (
-                "La IA está permitida pero falta la llave (ANTHROPIC_API_KEY"
-                " en el archivo .env). Por ahora funciona sin IA."
+                "La IA está permitida pero falta la llave (GROQ_API_KEY en el"
+                " archivo .env). La llave es gratis y se saca en"
+                " console.groq.com. Por ahora el programa funciona sin IA."
             )
         return "La IA está disponible."
 
@@ -114,6 +129,7 @@ class Configuracion:
             "sin_ia": self.sin_ia,
             "ia_disponible": self.ia_disponible,
             "motivo": self.motivo,
+            "modelo": self.modelo if self.ia_disponible else "",
         }
 
 

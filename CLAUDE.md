@@ -13,7 +13,9 @@ los identifica, dice cuáles faltan por cliente y genera un resumen. **No hace i
 - **Backend:** Python 3.11+ con FastAPI
 - **Base de datos:** SQLite (archivo local)
 - **Frontend:** HTML + CSS + JavaScript plano. **Sin framework, sin build, sin npm.**
-- **IA:** API de Anthropic, solo para documentos no estructurados
+- **IA:** API de Groq (capa gratis), solo para documentos no estructurados.
+  Se eligió sobre Gemini porque la capa gratis de Gemini usa lo que uno le manda
+  para entrenar y revisores humanos pueden verlo. Groq no entrena ni retiene.
 - **Corre en:** `http://localhost:8000`
 
 Antes de agregar una dependencia nueva, preguntar. Cada librería es una cosa más que puede
@@ -30,12 +32,20 @@ asistente-renta/
 │   ├── db.py             # SQLite
 │   ├── documentos.py     # clasificación y extracción
 │   ├── checklist.py      # qué falta por cliente
-│   └── exportar.py       # resumen
+│   ├── exportar.py       # resumen
+│   ├── plantilla_210.py  # mapa de la plantilla de Excel
+│   ├── escribir_210.py   # escritura quirúrgica sobre el .xlsx
+│   ├── recalcular.py     # totales con LibreOffice
+│   ├── formulario.py     # el Formulario 210 de cada cliente
+│   └── rentai.py         # la asistente que conversa y propone
 ├── static/               # HTML, CSS, JS
+├── plantillas/           # las plantillas de Excel del contador (NUNCA a git)
+├── pruebas/              # programas que comprueban que todo siga funcionando
 ├── datos/                # NUNCA se sube a git
 │   ├── archivos/         # documentos subidos, por cliente
+│   ├── formularios/      # el Excel generado de cada cliente
 │   └── base.db
-├── .env                  # ANTHROPIC_API_KEY — NUNCA se sube a git
+├── .env                  # GROQ_API_KEY — NUNCA se sube a git
 ├── requirements.txt
 ├── iniciar.sh            # Mac
 └── iniciar.bat           # Windows
@@ -121,6 +131,8 @@ consentimiento al desarrollador.
 - Los archivos **nunca salen del computador**, salvo la página específica que se manda a la
   API para lectura.
 - **Modo sin IA** (`SIN_IA=true` en `.env`): nada sale del equipo. Debe funcionar completo.
+- Con la IA encendida sale: nombre del cliente, TEXTO de sus documentos, checklist y
+  conversación. Los archivos nunca se mandan: de un PDF se manda el texto extraído aquí.
 - **No registrar contenido de documentos en logs.** Ni nombres de clientes, ni cifras, ni texto
   extraído. Solo eventos y errores técnicos.
 - `datos/` y `.env` nunca se suben a git.
@@ -135,7 +147,9 @@ consentimiento al desarrollador.
 - **Primero el flujo sin IA completo** (clientes → subir → checklist manual → exportar).
   Que eso funcione de punta a punta. Después la clasificación automática.
 - **No agregar funciones que no estén en la sección 8 del brief**, por buenas que parezcan.
-  Fuera de alcance en la versión 1: chat con IA, otros impuestos, múltiples usuarios,
+  Fuera de alcance en la versión 1: otros impuestos, múltiples usuarios,
   nube, login, pagos, recordatorios automáticos.
+  (El chat con IA —Rentai— entró al alcance por decisión del dueño del proyecto
+  en agosto de 2026. El brief original lo tenía afuera.)
 - Explicar cada paso en lenguaje claro, sin jerga.
 - Reportar los resultados como son: si algo no se probó, decirlo.

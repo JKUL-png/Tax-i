@@ -5,7 +5,7 @@ Regla del proyecto: el código maneja los datos, la IA maneja lo desordenado.
 Todo lo que está aquí es código: es exacto, es gratis, funciona sin
 internet y no manda nada a ninguna parte.
 
-Dos cosas hace:
+Tres cosas hace:
 
   1. **Leer el XML de una factura electrónica.** Ese formato (UBL 2.1)
      ya trae los campos separados y con nombre. Mandárselo a una IA
@@ -14,10 +14,16 @@ Dos cosas hace:
   2. **Sugerir a qué renglón del checklist se parece un archivo**, por
      las palabras de su nombre. Es una sugerencia, no una decisión: se
      muestra marcada como tal y el contador confirma.
+
+  3. **Sacar el texto de un PDF.** El PDF no sale del computador: el
+     texto se extrae aquí y solo ese texto es lo que después se le puede
+     mandar a la IA. Los PDF que son una foto escaneada no tienen texto
+     adentro y de esos no se saca nada; eso se dice, no se inventa.
 """
 
 import re
 import unicodedata
+from pathlib import Path
 from xml.etree import ElementTree
 
 # Palabras que no distinguen nada: aparecen en casi todos los renglones
@@ -207,3 +213,100 @@ def leer_xml(contenido):
                 datos["moneda"] = unidad
 
     return datos or None
+
+
+# ----------------------------------------------------------
+# Texto de un PDF
+# ----------------------------------------------------------
+
+# Hasta cuántas páginas se leen de un PDF. Un certificado tiene una o
+# dos; si llega uno de doscientas, no vale la pena leerlo entero para
+# después recortarlo.
+PAGINAS_QUE_SE_LEEN = 12
+
+# Cuántas letras se conservan por documento.
+LETRAS_POR_DOCUMENTO = 6000
+
+
+def leer_pdf(contenido):
+    """Saca el texto de un PDF. Devuelve (texto, motivo).
+
+    Si no se pudo sacar nada, el texto viene vacío y el motivo explica
+    por qué, en palabras que se le puedan mostrar al contador.
+
+    Todo pasa en este computador: pypdf no se conecta a ninguna parte.
+    """
+    try:
+        from pypdf import PdfReader
+    except ImportError:
+        return "", (
+            "Falta la librería pypdf para leer PDF. Se instala con:"
+            " pip install -r requirements.txt"
+        )
+
+    from io import BytesIO
+
+    try:
+        lector = PdfReader(BytesIO(contenido))
+    except Exception:
+        return "", "No se pudo abrir el PDF. Puede estar dañado o con clave."
+
+    if getattr(lector, "is_encrypted", False):
+        return "", "El PDF tiene contraseña, así que no se puede leer."
+
+    partes = []
+    for pagina in lector.pages[:PAGINAS_QUE_SE_LEEN]:
+        try:
+            partes.append(pagina.extract_text() or "")
+        except Exception:
+            # Una página ilegible no debe tumbar la lectura de las otras.
+            continue
+
+    texto = "\n".join(partes).strip()
+    # Los espacios de más y los saltos triples solo gastan espacio.
+    texto = re.sub(r"[ \t]+", " ", texto)
+    texto = re.sub(r"\n{3,}", "\n\n", texto)
+
+    if not texto:
+        return "", (
+            "Este PDF no tiene texto adentro: es una foto escaneada. Para"
+            " leerlo haría falta reconocimiento de imágenes, que todavía no"
+            " está."
+        )
+
+    if len(texto) > LETRAS_POR_DOCUMENTO:
+        texto = texto[:LETRAS_POR_DOCUMENTO] + "\n[…recortado]"
+
+    return texto, ""
+
+
+def texto_del_documento(nombre_guardado, contenido):
+    """El texto que se puede sacar de un documento, sea del tipo que sea.
+
+    Devuelve (texto, motivo). Es la puerta única: quien necesite el
+    contenido de un documento pregunta aquí y no le importa si por dentro
+    era un PDF, un XML o un texto plano.
+    """
+    extension = Path(nombre_guardado).suffix.lower()
+
+    if extension == ".pdf":
+        return leer_pdf(contenido)
+
+    if extension == ".xml":
+        datos = leer_xml(contenido)
+        if not datos:
+            return "", "El XML no parece una factura electrónica."
+        renglones = [f"{nombre}: {valor}" for nombre, valor in datos.items()]
+        return "\n".join(renglones), ""
+
+    if extension in (".txt", ".csv"):
+        try:
+            return contenido.decode("utf-8", errors="replace")[
+                :LETRAS_POR_DOCUMENTO], ""
+        except Exception:
+            return "", "No se pudo leer el archivo."
+
+    return "", (
+        f"De un archivo {extension or 'sin extensión'} todavía no se puede"
+        f" sacar texto."
+    )
