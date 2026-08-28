@@ -31,6 +31,9 @@ su archivo con su bitácora. El de un cliente nunca se mezcla con el de otro.
 
 import shutil
 import unicodedata
+import zipfile
+from datetime import datetime
+from io import BytesIO
 from pathlib import Path
 
 from openpyxl import load_workbook
@@ -38,7 +41,9 @@ from openpyxl import load_workbook
 from app import db
 from app.documentos import sanitizar_nombre
 from app.escribir_210 import EscritorPlantilla, EscrituraBloqueada
-from app.plantilla_210 import RAIZ, TIPO_CAPTURA, mapear_plantilla
+from app.plantilla_210 import (
+    HOJA_CAPTURA, RAIZ, TIPO_CAPTURA, mapear_plantilla,
+)
 from app.recalcular import buscar_libreoffice
 
 CARPETA_PLANTILLAS = RAIZ / "plantillas"
@@ -66,6 +71,14 @@ LARGO_DEL_PADRE = 38
 # contador, y ahí los ve él.
 SECCIONES_QUE_NO_SE_MUESTRAN = ("Liquidación Privada",)
 
+# En qué ajuste se guarda cuál plantilla está en uso.
+CLAVE_PLANTILLA = "plantilla_activa"
+
+# Tope de tamaño para una plantilla subida. Las de Excel con anexos pesan
+# uno o dos megas; veinte es de sobra y evita que alguien suba un archivo
+# gigante por error.
+MAXIMO_PLANTILLA = 20 * 1024 * 1024
+
 
 class SinPlantilla(Exception):
     """No hay ninguna plantilla en la carpeta plantillas/."""
@@ -76,19 +89,105 @@ class SinPlantilla(Exception):
 # ---------------------------------------------------------------------------
 
 
-def ruta_plantilla():
-    """La plantilla que se va a usar, o None si no hay ninguna.
+def listar_plantillas():
+    """Todas las plantillas que hay en la carpeta plantillas/.
 
-    Se toma el primer .xlsx de la carpeta plantillas/. Se ignoran los
-    archivos que empiezan por ~$ (los temporales que deja Excel abierto).
+    Se ignoran los archivos que empiezan por ~$: son los temporales que
+    Excel deja cuando alguien tiene el archivo abierto.
     """
     if not CARPETA_PLANTILLAS.exists():
-        return None
-    encontradas = sorted(
+        return []
+    return sorted(
         p for p in CARPETA_PLANTILLAS.glob("*.xlsx")
         if not p.name.startswith("~$")
     )
-    return encontradas[0] if encontradas else None
+
+
+def ruta_plantilla():
+    """La plantilla que está en uso, o None si no hay ninguna.
+
+    El contador puede tener varias y elegir cuál usa. Si la que eligió ya
+    no está (la borró, la renombró), se usa la primera que haya en vez de
+    quedarse sin funcionar.
+    """
+    encontradas = listar_plantillas()
+    if not encontradas:
+        return None
+
+    elegida = db.leer_ajuste(CLAVE_PLANTILLA)
+    for candidata in encontradas:
+        if candidata.name == elegida:
+            return candidata
+    return encontradas[0]
+
+
+def elegir_plantilla(nombre):
+    """Deja marcada cuál plantilla se usa de ahora en adelante."""
+    nombre = (nombre or "").strip()
+    for candidata in listar_plantillas():
+        if candidata.name == nombre:
+            db.guardar_ajuste(CLAVE_PLANTILLA, nombre)
+            return candidata
+    raise SinPlantilla(f"No hay ninguna plantilla que se llame «{nombre}».")
+
+
+def revisar_plantilla(contenido):
+    """Revisa que un archivo subido sirva como plantilla. Si no, explica por qué.
+
+    Se pide una sola cosa: que tenga la hoja de captura. Todo lo demás
+    (cuántas fórmulas, cuántos anexos) puede cambiar de una plantilla a
+    otra y no es asunto nuestro.
+    """
+    if len(contenido) > MAXIMO_PLANTILLA:
+        raise SinPlantilla(
+            "El archivo pesa más de 20 MB. ¿Seguro que es la plantilla?"
+        )
+    if not zipfile.is_zipfile(BytesIO(contenido)):
+        raise SinPlantilla(
+            "Ese archivo no es un Excel (.xlsx). Si es un .xls viejo,"
+            " ábralo en Excel y guárdelo como .xlsx."
+        )
+
+    try:
+        libro = load_workbook(BytesIO(contenido), data_only=False)
+    except Exception:
+        raise SinPlantilla(
+            "No se pudo abrir el archivo. Puede estar dañado o protegido"
+            " con contraseña."
+        )
+
+    if HOJA_CAPTURA not in libro.sheetnames:
+        raise SinPlantilla(
+            f"La plantilla no tiene la hoja «{HOJA_CAPTURA}», que es donde"
+            f" el programa escribe. Hojas que trae:"
+            f" {', '.join(libro.sheetnames[:8])}."
+        )
+    return libro.sheetnames
+
+
+def guardar_plantilla_subida(nombre_original, contenido):
+    """Guarda una plantilla que subió el contador y la deja en uso.
+
+    El archivo se guarda tal cual llegó: es de él, con su licencia. No se
+    abre para modificarlo ni se le quita nada.
+    """
+    revisar_plantilla(contenido)
+
+    nombre = sanitizar_nombre(nombre_original or "plantilla.xlsx")
+    if not nombre.lower().endswith(".xlsx"):
+        nombre += ".xlsx"
+
+    CARPETA_PLANTILLAS.mkdir(parents=True, exist_ok=True)
+    destino = CARPETA_PLANTILLAS / nombre
+
+    # Si ya hay una con ese nombre, se le agrega la fecha en vez de pisarla.
+    if destino.exists():
+        marca = datetime.now().strftime("%Y%m%d-%H%M")
+        destino = CARPETA_PLANTILLAS / f"{Path(nombre).stem} ({marca}).xlsx"
+
+    destino.write_bytes(contenido)
+    db.guardar_ajuste(CLAVE_PLANTILLA, destino.name)
+    return destino
 
 
 # Leer la plantilla y armar el mapa toma un segundo y medio. Se guarda en
@@ -133,8 +232,9 @@ def resumen_plantilla():
         return {
             "hay_plantilla": False,
             "motivo": (
-                "No hay ninguna plantilla en la carpeta plantillas/. Ponga"
-                " ahí el archivo de Excel del Formulario 210 y recargue."
+                "Todavía no hay ninguna plantilla. Suba su archivo de Excel"
+                " del Formulario 210 con el botón de abajo, o déjelo en la"
+                " carpeta plantillas/ del programa."
             ),
             "libreoffice": bool(buscar_libreoffice()),
         }
@@ -149,6 +249,7 @@ def resumen_plantilla():
         "hoja": armado["hoja"],
         "celdas_de_captura": de_captura,
         "libreoffice": bool(buscar_libreoffice()),
+        "disponibles": [p.name for p in listar_plantillas()],
     }
 
 
@@ -245,6 +346,137 @@ def _para_pantalla(celda):
 # ---------------------------------------------------------------------------
 
 
+# Leer los valores ya calculados de un libro toma más de un segundo. Se
+# recuerdan en memoria con la fecha del archivo como llave: si el archivo
+# cambia (se volvió a generar), la llave cambia y se vuelve a leer.
+_valores_recordados = {}
+
+
+def valores_calculados(ruta_xlsx):
+    """Todos los valores ya calculados de la hoja de captura: {celda: valor}.
+
+    Se abre con data_only=True, que trae los resultados en vez de las
+    fórmulas. Esta carga es de solo lectura y NUNCA se guarda: si se
+    guardara, borraría las 902 fórmulas del libro.
+    """
+    ruta = Path(ruta_xlsx)
+    datos = ruta.stat()
+    llave = (str(ruta.resolve()), datos.st_mtime, datos.st_size)
+
+    if llave not in _valores_recordados:
+        if len(_valores_recordados) >= 6:
+            _valores_recordados.clear()
+        libro = load_workbook(ruta, data_only=True)
+        hoja = libro[HOJA_CAPTURA]
+        leidos = {}
+        for fila in hoja.iter_rows():
+            for celda in fila:
+                if celda.value is not None:
+                    leidos[celda.coordinate] = celda.value
+        _valores_recordados[llave] = leidos
+
+    return _valores_recordados[llave]
+
+
+def _numero_o_nada(valor):
+    """Devuelve el número, o None si eso no es un número."""
+    if isinstance(valor, bool) or not isinstance(valor, (int, float)):
+        return None
+    return int(valor) if float(valor).is_integer() else float(valor)
+
+
+def hoja_del_cliente(cliente_id):
+    """La hoja de captura como se ve para este cliente, lista para mostrar.
+
+    Los valores salen del archivo del cliente si ya lo generó (ahí los
+    totales están calculados) y, si todavía no, de la plantilla. Encima de
+    eso se ponen los valores que el contador anotó y que aún no han pasado
+    por el recálculo: esos se marcan como pendientes, para que se vea que
+    los totales de al lado todavía no los incluyen.
+    """
+    armado = mapa()
+    anotados = db.listar_valores_210(cliente_id)
+
+    archivo = archivo_cliente(cliente_id)
+    plantilla = ruta_plantilla()
+    if plantilla is None:
+        raise SinPlantilla("No hay ninguna plantilla en plantillas/.")
+
+    desde_archivo = archivo.exists()
+    calculados = valores_calculados(archivo if desde_archivo else plantilla)
+
+    filas = {}
+    pendientes = 0
+
+    for celda in armado["celdas"]:
+        numero_fila = celda["fila"]
+        if numero_fila not in filas:
+            filas[numero_fila] = {
+                "fila": numero_fila,
+                "seccion": celda["seccion"],
+                "renglon": celda["renglon"],
+                "descripcion": celda["descripcion"],
+                "sangria": celda["sangria"],
+                "es_nota": celda["es_nota"],
+                "celdas": {},
+            }
+
+        anotado = anotados.get(celda["celda"])
+        calculado = _numero_o_nada(calculados.get(celda["celda"]))
+
+        # El valor que se muestra: el anotado manda sobre lo que haya en el
+        # archivo, porque es lo último que dijo el contador.
+        if anotado is not None:
+            mostrado = anotado["valor"]
+            pendiente = (calculado != anotado["valor"])
+        else:
+            mostrado = calculado
+            pendiente = False
+
+        # Las casillas donde no se puede escribir y que además están
+        # vacías no se mandan a la pantalla: son la mayoría y no se ven.
+        if celda["tipo"] != TIPO_CAPTURA and mostrado is None:
+            continue
+
+        if pendiente:
+            pendientes += 1
+
+        filas[numero_fila]["celdas"][celda["columna"]] = {
+            "celda": celda["celda"],
+            "tipo": celda["tipo"],
+            "editable": celda["tipo"] == TIPO_CAPTURA,
+            "esperado": celda["cero_precargado"],
+            "valor": mostrado,
+            "anotado": anotado is not None,
+            "pendiente": pendiente,
+            "documento": anotado["documento"] if anotado else "",
+        }
+
+    # Se dejan afuera las filas que no dicen nada: sin descripción y sin
+    # ningún valor. Son separadores en blanco de la plantilla y en pantalla
+    # solo alargan la lista.
+    utiles = []
+    for numero_fila in sorted(filas):
+        fila = filas[numero_fila]
+        tiene_valor = any(
+            c["valor"] is not None for c in fila["celdas"].values()
+        )
+        if fila["descripcion"] or tiene_valor:
+            utiles.append(fila)
+
+    return {
+        "hoja": armado["hoja"],
+        "plantilla": plantilla.name,
+        "origen": "archivo" if desde_archivo else "plantilla",
+        "generado": (
+            datetime.fromtimestamp(archivo.stat().st_mtime)
+            .isoformat(timespec="seconds") if desde_archivo else None
+        ),
+        "pendientes": pendientes,
+        "filas": utiles,
+    }
+
+
 def guardar_valor(cliente_id, celda, valor, documento=""):
     """Guarda un valor para un cliente, después de revisar que se pueda.
 
@@ -273,7 +505,11 @@ def guardar_valor(cliente_id, celda, valor, documento=""):
     if valor != valor or valor in (float("inf"), float("-inf")):
         raise EscrituraBloqueada("Ese número no se puede guardar.")
 
-    guardado = db.guardar_valor_210(cliente_id, celda, valor, documento)
+    plantilla = ruta_plantilla()
+    guardado = db.guardar_valor_210(
+        cliente_id, celda, valor, documento,
+        plantilla=plantilla.name if plantilla else "",
+    )
     guardado.update(_para_pantalla(informacion))
     guardado["valor"] = db._numero(valor)
     return guardado
@@ -288,6 +524,13 @@ def listar_valores(cliente_id):
     for celda, guardado in capturados.items():
         informacion = catalogo.get(celda)
         fila = dict(guardado)
+        # Si se anotó con otra plantilla, se avisa: la misma casilla no
+        # tiene por qué significar lo mismo en dos plantillas distintas.
+        actual = ruta_plantilla()
+        fila["otra_plantilla"] = bool(
+            guardado.get("plantilla") and actual
+            and guardado["plantilla"] != actual.name
+        )
         if informacion is not None:
             fila.update(_para_pantalla(informacion))
         else:

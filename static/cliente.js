@@ -1083,3 +1083,43 @@ async function cargarConfiguracion() {
 }
 
 cargarConfiguracion();
+
+
+/* ----------------------------------------------------------
+   Recordar qué secciones quedaron abiertas
+
+   La pantalla es larga, así que las secciones se pliegan. Si el contador
+   deja abierta la de documentos, la próxima vez que entre a un cliente
+   debería encontrarla abierta: no tiene por qué volver a abrirla cada vez.
+
+   Se guarda en el navegador (localStorage), que es de este computador y
+   no sale de aquí. Solo se guarda cuál sección está abierta: ningún dato
+   de ningún cliente.
+   ---------------------------------------------------------- */
+
+function recordarPlegables() {
+  const plegables = document.querySelectorAll(".plegable");
+
+  plegables.forEach(function (plegable) {
+    const llave = "abierto:" + plegable.id;
+
+    /* Lo guardado manda sobre lo que diga el HTML. */
+    let guardado = null;
+    try {
+      guardado = window.localStorage.getItem(llave);
+    } catch (error) {
+      /* Hay navegadores que no dejan guardar nada (modo privado). Se
+         sigue sin recordar, que no es grave. */
+    }
+    if (guardado === "si") plegable.open = true;
+    if (guardado === "no") plegable.open = false;
+
+    plegable.addEventListener("toggle", function () {
+      try {
+        window.localStorage.setItem(llave, plegable.open ? "si" : "no");
+      } catch (error) { /* igual que arriba */ }
+    });
+  });
+}
+
+recordarPlegables();

@@ -175,6 +175,17 @@ def crear_tablas():
             " ON bitacora_210 (cliente_id)"
         )
 
+        # Ajustes del programa que el contador puede cambiar desde la
+        # pantalla. Por ahora solo uno: cuál plantilla está en uso.
+        conexion.execute(
+            """
+            CREATE TABLE IF NOT EXISTS ajustes (
+                clave TEXT PRIMARY KEY,
+                valor TEXT NOT NULL
+            )
+            """
+        )
+
         # --- Cambios sobre bases que ya existían ---
         # Si la base se creó con una versión anterior del programa, le falta
         # la columna "notas". Se agrega aquí en vez de pedirle al contador
@@ -185,6 +196,18 @@ def crear_tablas():
         }
         if "notas" not in columnas:
             conexion.execute("ALTER TABLE clientes ADD COLUMN notas TEXT")
+
+        columnas_valores = {
+            fila["name"]
+            for fila in conexion.execute("PRAGMA table_info(valores_210)")
+        }
+        # Con qué plantilla se anotó cada valor. Sirve para avisar si el
+        # contador cambia de plantilla: las casillas de una no tienen por
+        # qué significar lo mismo en la otra.
+        if columnas_valores and "plantilla" not in columnas_valores:
+            conexion.execute(
+                "ALTER TABLE valores_210 ADD COLUMN plantilla TEXT"
+            )
 
         columnas_doc = {
             fila["name"]
@@ -578,7 +601,8 @@ def listar_valores_210(cliente_id):
     """Los valores capturados de un cliente: {celda: {valor, documento, ...}}."""
     with conectar() as conexion:
         filas = conexion.execute(
-            "SELECT celda, valor, documento, actualizado_en FROM valores_210"
+            "SELECT celda, valor, documento, actualizado_en, plantilla"
+            " FROM valores_210"
             " WHERE cliente_id = ? ORDER BY celda",
             (cliente_id,),
         ).fetchall()
@@ -588,6 +612,7 @@ def listar_valores_210(cliente_id):
             "valor": _numero(fila["valor"]),
             "documento": fila["documento"],
             "actualizado_en": fila["actualizado_en"],
+            "plantilla": fila["plantilla"] or "",
         }
         for fila in filas
     }
@@ -598,7 +623,7 @@ def obtener_valor_210(cliente_id, celda):
     return listar_valores_210(cliente_id).get(celda)
 
 
-def guardar_valor_210(cliente_id, celda, valor, documento=""):
+def guardar_valor_210(cliente_id, celda, valor, documento="", plantilla=""):
     """Guarda (o reemplaza) el valor de una celda y lo anota en el historial.
 
     Devuelve el registro guardado.
@@ -609,13 +634,15 @@ def guardar_valor_210(cliente_id, celda, valor, documento=""):
     with conectar() as conexion:
         conexion.execute(
             "INSERT INTO valores_210"
-            " (cliente_id, celda, valor, documento, actualizado_en)"
-            " VALUES (?, ?, ?, ?, ?)"
+            " (cliente_id, celda, valor, documento, actualizado_en, plantilla)"
+            " VALUES (?, ?, ?, ?, ?, ?)"
             " ON CONFLICT (cliente_id, celda) DO UPDATE SET"
             "   valor = excluded.valor,"
             "   documento = excluded.documento,"
-            "   actualizado_en = excluded.actualizado_en",
-            (cliente_id, celda, float(valor), documento or "", ahora),
+            "   actualizado_en = excluded.actualizado_en,"
+            "   plantilla = excluded.plantilla",
+            (cliente_id, celda, float(valor), documento or "", ahora,
+             plantilla or ""),
         )
         conexion.execute(
             "INSERT INTO bitacora_210"
@@ -633,6 +660,7 @@ def guardar_valor_210(cliente_id, celda, valor, documento=""):
         "valor": _numero(valor),
         "documento": documento or "",
         "actualizado_en": ahora,
+        "plantilla": plantilla or "",
     }
 
 
@@ -680,3 +708,28 @@ def listar_bitacora_210(cliente_id, limite=200):
         }
         for fila in filas
     ]
+
+
+# ----------------------------------------------------------
+# Ajustes del programa
+# ----------------------------------------------------------
+
+
+def leer_ajuste(clave, por_defecto=""):
+    """Un ajuste guardado, o el valor por defecto si nunca se guardó."""
+    with conectar() as conexion:
+        fila = conexion.execute(
+            "SELECT valor FROM ajustes WHERE clave = ?", (clave,)
+        ).fetchone()
+    return fila["valor"] if fila else por_defecto
+
+
+def guardar_ajuste(clave, valor):
+    """Guarda un ajuste. Si ya existía, lo reemplaza."""
+    with conectar() as conexion:
+        conexion.execute(
+            "INSERT INTO ajustes (clave, valor) VALUES (?, ?)"
+            " ON CONFLICT (clave) DO UPDATE SET valor = excluded.valor",
+            (clave, str(valor)),
+        )
+    return valor

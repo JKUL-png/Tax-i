@@ -1302,101 +1302,6 @@ a {
   cursor: pointer;
 }
 
-/* --- Resultados de la búsqueda --- */
-
-.lista-casillas {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  max-height: 460px;
-  overflow-y: auto;
-  /* El borde de arriba separa la lista del buscador sin meter otra caja. */
-  border-top: 1px solid var(--borde);
-  padding-top: 14px;
-}
-
-.casilla {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  flex-wrap: wrap;
-  padding: 12px 14px;
-  background: var(--fondo);
-  border: 1px solid var(--borde);
-  border-radius: var(--radio);
-}
-
-/* La que ya tiene un valor anotado se marca en verde, para no anotarla dos
-   veces sin darse cuenta. */
-.casilla-anotada {
-  background: var(--primary-tenue);
-  border-color: transparent;
-}
-
-.casilla-datos {
-  flex: 1 1 260px;
-  min-width: 0;
-}
-
-/* El rastro de conceptos padre: chiquito y en gris, para que el nombre de
-   la casilla siga siendo lo primero que se lee. */
-.casilla-rastro {
-  margin: 0 0 3px;
-  font-size: 0.78rem;
-  color: var(--texto-tenue);
-  line-height: 1.4;
-}
-
-.casilla-titulo {
-  margin: 0 0 6px;
-  font-size: 0.95rem;
-  color: var(--texto);
-}
-
-.casilla-marcas {
-  display: flex;
-  gap: 6px;
-  flex-wrap: wrap;
-}
-
-/* El código de celda va en monoespaciada: es un dato técnico, no una
-   palabra, y así no se confunde con la descripción. */
-.etiqueta-celda {
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  font-size: 0.78rem;
-}
-
-.casilla-accion {
-  display: flex;
-  gap: 8px;
-  align-items: center;
-  flex-wrap: wrap;
-}
-
-/* Se escribe con el selector de atributo incluido porque la regla base de
-   input[type="text"] pone width:100% y le ganaría en especificidad. */
-input[type="text"].campo-valor {
-  width: 150px;
-  text-align: right;
-  font-variant-numeric: tabular-nums;
-}
-
-.selector-origen {
-  height: var(--alto-control);
-  max-width: 190px;
-  padding: 0 10px;
-  font-family: inherit;
-  font-size: 0.9rem;
-  color: var(--texto-secundario);
-  background: var(--superficie);
-  border: 1px solid var(--borde-fuerte);
-  border-radius: var(--radio-chico);
-}
-
-.casilla-accion .boton {
-  padding: 0 18px;
-}
-
 /* --- Valores ya anotados --- */
 
 .lista-valores {
@@ -1572,5 +1477,356 @@ input[type="text"].campo-valor {
     flex: 1 1 auto;
     width: auto;
     max-width: none;
+  }
+}
+
+/* ==========================================================
+   Secciones plegables
+
+   La página del cliente tenía todo abierto y era un scroll interminable.
+   Ahora cada bloque se abre y se cierra. Se usa <details> de HTML puro:
+   funciona sin JavaScript y el teclado ya sabe manejarlo.
+   ========================================================== */
+
+.plegable {
+  border-bottom: 1px solid var(--borde);
+}
+
+.plegable-titulo {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 0;
+  cursor: pointer;
+  /* Se quita el triangulito del navegador: abajo se dibuja uno propio que
+     se ve igual en Mac y en Windows. */
+  list-style: none;
+}
+
+.plegable-titulo::-webkit-details-marker {
+  display: none;
+}
+
+/* La flecha, dibujada con dos bordes. Apunta a la derecha cuando está
+   cerrado y hacia abajo cuando está abierto. */
+.plegable-titulo::before {
+  content: "";
+  flex: 0 0 auto;
+  width: 8px;
+  height: 8px;
+  border-right: 2px solid var(--texto-tenue);
+  border-bottom: 2px solid var(--texto-tenue);
+  transform: rotate(-45deg);
+  transition: transform 0.15s ease;
+}
+
+.plegable[open] > .plegable-titulo::before {
+  transform: rotate(45deg);
+}
+
+.plegable-titulo:hover::before {
+  border-color: var(--primary);
+}
+
+.plegable-titulo h2 {
+  margin: 0;
+}
+
+.plegable-titulo:focus-visible {
+  outline: 3px solid var(--primary-acento);
+  outline-offset: 2px;
+  border-radius: var(--radio-chico);
+}
+
+.plegable-cuerpo {
+  padding: 6px 0 24px;
+}
+
+/* Dentro de un plegable la sección ya no necesita su propio margen. */
+.seccion > .plegable {
+  margin-bottom: 0;
+}
+
+/* ==========================================================
+   Pestañas
+   ========================================================== */
+
+.pestanas {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+  border-bottom: 1px solid var(--borde);
+  margin-bottom: 20px;
+}
+
+.pestana {
+  border: none;
+  background: none;
+  padding: 10px 16px;
+  font-family: inherit;
+  font-size: 0.95rem;
+  color: var(--texto-secundario);
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+}
+
+.pestana:hover {
+  color: var(--texto);
+}
+
+.pestana-activa {
+  color: var(--primary);
+  font-weight: 600;
+  border-bottom-color: var(--primary);
+}
+
+/* ==========================================================
+   La hoja de captura
+
+   Es la hoja de Excel abierta por dentro: mismas columnas, mismas
+   sangrías, mismos bloques. Lo gris tiene fórmula y no se toca.
+   ========================================================== */
+
+.barra-hoja {
+  display: flex;
+  gap: 20px;
+  align-items: center;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+
+.campo-filtro {
+  flex: 1 1 280px;
+}
+
+.barra-hoja .opcion-linea {
+  margin-bottom: 0;
+}
+
+/* Aviso de que hay casillas cambiadas y los totales están viejos. */
+.aviso-pendientes {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+  background: var(--alerta-fondo);
+  color: var(--alerta-texto);
+  border-radius: var(--radio);
+  padding: 12px 16px;
+  margin: 12px 0;
+  font-size: 0.9rem;
+}
+
+.aviso-pendientes .boton {
+  margin-left: auto;
+}
+
+/* OJO: la tabla se llama .tabla-captura y no .hoja porque ya existe una
+   clase .hoja para la página de imprimir, que le pone un ancho de papel
+   de 720 px. Dos clases con el mismo nombre y una le gana a la otra.
+
+/* La hoja se sale del ancho de la página a propósito: es una tabla de
+   cinco columnas y en 880 px los conceptos quedan en seis líneas. Se
+   ensancha hasta donde dé la pantalla y se vuelve a centrar sola. */
+.hoja-envoltura {
+  width: min(1360px, calc(100vw - 48px));
+  margin-left: calc((100% - min(1360px, 100vw - 48px)) / 2);
+  max-height: 620px;
+  overflow: auto;
+  border: 1px solid var(--borde);
+  border-radius: var(--radio);
+  background: var(--superficie);
+}
+
+.tabla-captura {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.88rem;
+}
+
+/* La fila de títulos se queda pegada arriba al bajar por la hoja. */
+.tabla-captura thead th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: var(--fondo);
+  border-bottom: 1px solid var(--borde-fuerte);
+  padding: 10px 12px;
+  text-align: left;
+  font-size: 0.78rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--texto-tenue);
+}
+
+.tabla-captura .columna-renglon {
+  width: 74px;
+  text-align: center;
+}
+
+.tabla-captura th.columna-valor,
+.tabla-captura td.celda-valor {
+  width: 132px;
+  text-align: right;
+}
+
+.fila-hoja td {
+  border-bottom: 1px solid var(--borde);
+  padding: 4px 12px;
+  vertical-align: middle;
+}
+
+.fila-hoja:hover td {
+  background: var(--fondo);
+}
+
+/* Los renglones oficiales del formulario pesan más que las filas de
+   detalle: se marcan con el texto más oscuro. */
+.fila-renglon .columna-concepto {
+  font-weight: 600;
+  color: var(--texto);
+}
+
+/* Los títulos de la plantilla son larguísimos. Se muestran en dos líneas
+   como mucho, y el texto completo aparece al pasar el mouse por encima.
+   Así todas las filas miden lo mismo y la hoja se lee de un vistazo. */
+.columna-concepto {
+  color: var(--texto-secundario);
+  line-height: 1.4;
+  padding-top: 8px;
+  padding-bottom: 8px;
+}
+
+/* El recorte a dos líneas va en el div de adentro, no en la celda: si se
+   le pone a la celda, la tabla deja de calcular los anchos. */
+.concepto-texto {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* Las notas al pie son párrafos de explicación, no conceptos. */
+.fila-nota .columna-concepto {
+  font-size: 0.8rem;
+  font-style: italic;
+  color: var(--texto-tenue);
+}
+
+/* Título de bloque, como los que trae la hoja de Excel. */
+.fila-seccion td {
+  position: sticky;
+  top: 38px;
+  z-index: 1;
+  background: var(--primary-tenue);
+  color: var(--primary-hover);
+  font-size: 0.78rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--borde);
+}
+
+/* --- Las casillas --- */
+
+.celda-valor {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Con fórmula: gris, sin campo. La calcula la plantilla. */
+.celda-formula {
+  background: var(--fondo);
+  color: var(--texto-secundario);
+  font-weight: 500;
+  padding-right: 14px;
+}
+
+.celda-cero {
+  color: var(--texto-tenue);
+  font-weight: 400;
+}
+
+/* Fuera de la tabla: en esa fila esa columna no existe. */
+.celda-fuera {
+  background: repeating-linear-gradient(
+    45deg, transparent, transparent 5px,
+    rgba(0, 0, 0, 0.02) 5px, rgba(0, 0, 0, 0.02) 10px
+  );
+}
+
+/* De captura: un campo que se ve como celda hasta que se hace clic. */
+input[type="text"].celda-campo {
+  width: 100%;
+  height: 32px;
+  padding: 0 8px;
+  text-align: right;
+  font-size: 0.88rem;
+  font-variant-numeric: tabular-nums;
+  border: 1px solid transparent;
+  border-radius: var(--radio-chico);
+  background: none;
+}
+
+input[type="text"].celda-campo:hover {
+  border-color: var(--borde-fuerte);
+  background: var(--superficie);
+}
+
+input[type="text"].celda-campo:focus {
+  border-color: var(--primary);
+  background: var(--superficie);
+  outline: 3px solid var(--primary-tenue);
+  outline-offset: 0;
+}
+
+/* Lo que anotó el contador se ve en verde: se distingue de lo que ya
+   traía la plantilla. */
+.celda-anotada {
+  background: var(--primary-tenue);
+}
+
+.celda-anotada input[type="text"].celda-campo {
+  color: var(--primary-hover);
+  font-weight: 600;
+}
+
+/* Cambiada pero todavía no recalculada: los totales de al lado no la
+   incluyen, y hay que verlo. */
+.celda-pendiente {
+  box-shadow: inset 3px 0 0 var(--alerta-texto);
+}
+
+.pie-hoja {
+  margin-top: 12px;
+}
+
+/* --- La plantilla --- */
+
+.selector-plantilla {
+  height: var(--alto-control);
+  width: 100%;
+  padding: 0 10px;
+  font-family: inherit;
+  font-size: 0.95rem;
+  color: var(--texto);
+  background: var(--superficie);
+  border: 1px solid var(--borde-fuerte);
+  border-radius: var(--radio-chico);
+}
+
+.valor-alerta {
+  margin: 4px 0 0;
+  font-size: 0.8rem;
+  color: var(--alerta-texto);
+}
+
+/* En pantallas angostas la hoja se desplaza a lo ancho dentro de su caja,
+   en vez de apretar las columnas hasta que no se lean. */
+@media (max-width: 720px) {
+  .tabla-captura {
+    min-width: 620px;
   }
 }

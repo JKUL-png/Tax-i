@@ -857,6 +857,49 @@ def api_plantilla():
     return formulario.resumen_plantilla()
 
 
+class PlantillaElegida(BaseModel):
+    """Cuál de las plantillas de la carpeta se va a usar."""
+
+    nombre: str
+
+
+@app.put("/api/plantilla/activa")
+def api_elegir_plantilla(datos: PlantillaElegida):
+    """Cambia la plantilla en uso a otra de las que ya están guardadas."""
+    try:
+        elegida = formulario.elegir_plantilla(datos.nombre)
+    except formulario.SinPlantilla as error:
+        raise HTTPException(status_code=400, detail=str(error))
+    return {"archivo": elegida.name}
+
+
+@app.post("/api/plantilla", status_code=201)
+async def api_subir_plantilla(archivo: UploadFile = File(...)):
+    """Guarda la plantilla que subió el contador y la deja en uso.
+
+    El archivo se guarda tal como llegó. Es de él, con su licencia: el
+    programa no le quita ni le cambia nada.
+    """
+    contenido = await archivo.read()
+    try:
+        guardada = formulario.guardar_plantilla_subida(
+            archivo.filename, contenido
+        )
+    except formulario.SinPlantilla as error:
+        raise HTTPException(status_code=400, detail=str(error))
+    return formulario.resumen_plantilla() | {"guardada": guardada.name}
+
+
+@app.get("/api/clientes/{id_cliente}/formulario/hoja")
+def api_hoja_formulario(id_cliente: int):
+    """La hoja de captura como se ve para este cliente, para el editor."""
+    _cliente_o_404(id_cliente)
+    try:
+        return formulario.hoja_del_cliente(id_cliente)
+    except formulario.SinPlantilla as error:
+        raise HTTPException(status_code=409, detail=str(error))
+
+
 @app.get("/api/plantilla/celdas")
 def api_buscar_celdas(buscar: str = "", todas: bool = False):
     """Busca casillas de la plantilla por palabra, renglón o celda."""

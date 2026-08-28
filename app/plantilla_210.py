@@ -313,6 +313,11 @@ def mapear_plantilla(ruta_plantilla):
                     "formula": formula,
                     "descripcion": descripcion,
                     "contexto": contexto,
+                    # Cuántos espacios tenía la descripción al principio.
+                    # Es la jerarquía de la plantilla; la pantalla la usa
+                    # para sangrar los conceptos como se ven en Excel.
+                    "sangria": sangria,
+                    "es_nota": es_nota,
                     "columna_descripcion": columna_descripcion,
                     "renglon": renglon,
                     "seccion": seccion_actual,

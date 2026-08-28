@@ -13,6 +13,10 @@ Lo que comprueba:
   D. Que los renglones de la liquidación (impuesto y saldos) no salgan en
      pantalla, que es una regla del proyecto.
   E. Que al eliminar un cliente no quede nada suyo en el disco.
+  F. Que la hoja que se muestra en pantalla traiga lo que debe: las
+     fórmulas marcadas como tales y los valores del cliente encima.
+  G. Que se pueda subir otra plantilla, y que se rechace un archivo que
+     no sirva.
 
 Crea dos clientes de prueba y los borra al terminar, pase lo que pase.
 """
@@ -22,6 +26,10 @@ from pathlib import Path
 
 RAIZ = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(RAIZ))
+
+from io import BytesIO  # noqa: E402
+
+from openpyxl import Workbook  # noqa: E402
 
 from app import db, formulario  # noqa: E402
 from app.escribir_210 import EscrituraBloqueada  # noqa: E402
@@ -173,6 +181,91 @@ def main():
                   db.listar_bitacora_210(uno["id"]) == [])
         comprobar("y el otro cliente sigue con lo suyo",
                   len(db.listar_valores_210(dos["id"])) == 1)
+
+        # --------------------------------------------------------------
+        print("\nG. La hoja que se ve en pantalla")
+        # --------------------------------------------------------------
+        hoja = formulario.hoja_del_cliente(dos["id"])
+        comprobar("la hoja trae sus filas", len(hoja["filas"]) > 400,
+                  f"{len(hoja['filas'])} filas")
+        comprobar("dice de dónde salieron los valores que muestra",
+                  hoja["origen"] in ("plantilla", "archivo"), hoja["origen"])
+
+        por_celda = {}
+        for fila in hoja["filas"]:
+            for datos in fila["celdas"].values():
+                por_celda[datos["celda"]] = (fila, datos)
+
+        comprobar("las casillas con fórmula vienen marcadas y no editables",
+                  por_celda["I42"][1]["tipo"] == "formula"
+                  and not por_celda["I42"][1]["editable"])
+        comprobar("las casillas de captura sí son editables",
+                  por_celda["G115"][1]["editable"])
+        comprobar("el valor anotado del cliente aparece en su casilla",
+                  por_celda["G115"][1]["valor"] == 12000000
+                  and por_celda["G115"][1]["anotado"],
+                  str(por_celda["G115"][1]["valor"]))
+        comprobar("y queda marcado como pendiente de recalcular",
+                  por_celda["G115"][1]["pendiente"])
+        comprobar("las filas traen la sangría de la plantilla",
+                  any(f["sangria"] > 0 for f in hoja["filas"]))
+        comprobar("las notas al pie vienen marcadas como notas",
+                  any(f["es_nota"] for f in hoja["filas"]))
+
+        # --------------------------------------------------------------
+        print("\nH. Subir otra plantilla")
+        # --------------------------------------------------------------
+        antes = formulario.ruta_plantilla()
+        subidas = []
+        try:
+            # Un archivo que no es Excel
+            try:
+                formulario.guardar_plantilla_subida(
+                    "cuentas.txt", b"esto no es un excel"
+                )
+                comprobar("rechaza un archivo que no es Excel", False, "lo aceptó")
+            except formulario.SinPlantilla as error:
+                comprobar("rechaza un archivo que no es Excel", True,
+                          str(error)[:50])
+
+            # Un Excel de verdad, pero sin la hoja de captura
+            otro = Workbook()
+            otro.active.title = "Mis cuentas"
+            memoria = BytesIO()
+            otro.save(memoria)
+            try:
+                formulario.guardar_plantilla_subida(
+                    "otro.xlsx", memoria.getvalue()
+                )
+                comprobar("rechaza un Excel sin la hoja de captura", False,
+                          "lo aceptó")
+            except formulario.SinPlantilla as error:
+                comprobar("rechaza un Excel sin la hoja de captura", True,
+                          str(error)[:50])
+
+            # La plantilla de verdad, subida con otro nombre
+            copia = formulario.guardar_plantilla_subida(
+                "Mi plantilla del contador.xlsx", antes.read_bytes()
+            )
+            subidas.append(copia)
+            comprobar("acepta una plantilla que sí tiene la hoja de captura",
+                      copia.exists(), copia.name)
+            comprobar("y queda en uso de una vez",
+                      formulario.ruta_plantilla().name == copia.name,
+                      formulario.ruta_plantilla().name)
+            comprobar("la plantilla original sigue donde estaba",
+                      antes.exists())
+            comprobar("las dos aparecen para elegir",
+                      len(formulario.listar_plantillas()) >= 2,
+                      str([p.name for p in formulario.listar_plantillas()]))
+
+            formulario.elegir_plantilla(antes.name)
+            comprobar("se puede volver a la anterior",
+                      formulario.ruta_plantilla().name == antes.name)
+        finally:
+            for sobrante in subidas:
+                sobrante.unlink(missing_ok=True)
+            db.guardar_ajuste(formulario.CLAVE_PLANTILLA, antes.name)
 
     finally:
         for cliente in (uno, dos):

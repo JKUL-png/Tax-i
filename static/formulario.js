@@ -1,10 +1,17 @@
 /* ==========================================================
    Formulario 210 de un cliente.
 
-   La plantilla de Excel es la misma para todos los clientes. Lo que se
-   anota aquí es de este cliente: se guarda en la base de datos, y el
-   archivo se arma aparte cada vez que se pide, partiendo siempre de la
+   Esta pantalla es la plantilla de Excel abierta por dentro: se ve la
+   hoja de captura tal como está en el archivo —con sus secciones, sus
+   sangrías y sus fórmulas— y se escribe directamente en las casillas.
+
+   Lo que se escribe se guarda para ESTE cliente. La plantilla no se toca
+   nunca: el archivo de Excel se arma aparte, partiendo siempre de la
    plantilla limpia.
+
+   Las fórmulas no se recalculan solas al escribir, porque eso se hace con
+   LibreOffice y tarda unos segundos. Por eso las casillas cambiadas quedan
+   marcadas como pendientes hasta que se aprieta "Actualizar totales".
 
    JavaScript plano, sin librerías, igual que el resto del programa.
    ========================================================== */
@@ -14,30 +21,44 @@
 const idCliente = new URLSearchParams(window.location.search).get("id");
 if (!idCliente) return;
 
-const seccion = document.getElementById("seccion-formulario");
 const avisoFormulario = document.getElementById("aviso-formulario");
 const sinPlantilla = document.getElementById("sin-plantilla");
 const motivoSinPlantilla = document.getElementById("motivo-sin-plantilla");
 const bloque = document.getElementById("bloque-formulario");
 const conteoFormulario = document.getElementById("conteo-formulario");
-const campoBuscar = document.getElementById("buscar-casilla");
-const casillaTodas = document.getElementById("todas-casillas");
-const resultados = document.getElementById("resultados-casillas");
+
+const filtroHoja = document.getElementById("filtro-hoja");
+const soloConValor = document.getElementById("solo-con-valor");
+const origenHoja = document.getElementById("origen-hoja");
+const cuerpoHoja = document.getElementById("cuerpo-hoja");
+const avisoPendientes = document.getElementById("aviso-pendientes");
+const textoPendientes = document.getElementById("texto-pendientes");
+const botonRecalcular = document.getElementById("boton-recalcular");
+
 const listaValores = document.getElementById("lista-valores");
 const conteoValores = document.getElementById("conteo-valores");
+const cajaTotales = document.getElementById("caja-totales");
+
 const botonGenerar = document.getElementById("boton-generar");
 const enlaceArchivo = document.getElementById("enlace-formulario");
 const progreso = document.getElementById("progreso-formulario");
 const progresoTexto = document.getElementById("progreso-formulario-texto");
 const resultado = document.getElementById("resultado-formulario");
-const historial = document.getElementById("historial");
 const listaHistorial = document.getElementById("lista-historial");
 
-/* Los documentos de este cliente, para poder decir de cuál salió cada dato. */
-let documentosDelCliente = [];
+const selectorPlantilla = document.getElementById("selector-plantilla");
+const botonSubirPlantilla = document.getElementById("boton-subir-plantilla");
+const botonSubirPlantilla1 = document.getElementById("boton-subir-plantilla-1");
+const campoPlantilla = document.getElementById("campo-plantilla");
+const avisoPlantilla = document.getElementById("aviso-plantilla");
 
-/* Los valores ya anotados: {celda: {valor, documento, ...}} */
-let valoresAnotados = {};
+/* Las columnas de valores de la hoja, en el orden en que se muestran. */
+const COLUMNAS = ["G", "H", "I"];
+
+/* Lo último que devolvió el servidor sobre la hoja. */
+let hoja = null;
+/* Los documentos del cliente, para decir de dónde salió cada dato. */
+let documentosDelCliente = [];
 
 
 /* ----------------------------------------------------------
@@ -69,15 +90,25 @@ function enPesos(numero) {
   return "$ " + numero.toLocaleString("es-CO", { maximumFractionDigits: 2 });
 }
 
+function conSeparadores(numero) {
+  if (numero === null || numero === undefined) return "";
+  return numero.toLocaleString("es-CO", { maximumFractionDigits: 2 });
+}
+
 function comoNumero(texto) {
   if (texto === null || texto === undefined) return null;
   let limpio = String(texto).trim().replace(/[$\s]/g, "");
   if (limpio === "") return null;
-  /* Puntos de miles fuera; la coma es el separador decimal. */
   limpio = limpio.replace(/\./g, "").replace(",", ".");
   const numero = Number(limpio);
   if (!isFinite(numero)) return null;
   return numero;
+}
+
+/* "Alimentación" -> "alimentacion", para poder filtrar sin tildes. */
+function sinTildes(texto) {
+  return (texto || "").toLowerCase()
+    .normalize("NFD").replace(/[\u0300-\u036f]/g, "");
 }
 
 
@@ -102,170 +133,284 @@ async function pedir(direccion, opciones) {
 
 
 /* ----------------------------------------------------------
-   Buscar casillas
+   Pestañas
    ---------------------------------------------------------- */
 
-function chip(texto, clase) {
-  const etiqueta = document.createElement("span");
-  etiqueta.className = "etiqueta " + (clase || "etiqueta-neutra");
-  etiqueta.textContent = texto;
-  return etiqueta;
+function prepararPestanas() {
+  const pestanas = document.querySelectorAll(".pestana");
+  pestanas.forEach(function (pestana) {
+    pestana.addEventListener("click", function () {
+      pestanas.forEach(function (otra) {
+        otra.classList.toggle("pestana-activa", otra === pestana);
+        document.getElementById(otra.dataset.panel)
+          .classList.toggle("oculto", otra !== pestana);
+      });
+    });
+  });
 }
 
-function dibujarCasilla(casilla) {
-  const anotado = valoresAnotados[casilla.celda];
 
-  const fila = document.createElement("div");
-  fila.className = "casilla" + (anotado ? " casilla-anotada" : "");
+/* ----------------------------------------------------------
+   La hoja
 
-  /* --- Lo que dice la plantilla --- */
-  const datos = document.createElement("div");
-  datos.className = "casilla-datos";
+   Se dibuja una fila por cada renglón de la plantilla, con su sangría y
+   sus tres columnas de valores. Las casillas de fórmula se ven grises y
+   no se pueden escribir; las de captura son campos de verdad.
+   ---------------------------------------------------------- */
 
-  /* El rastro de conceptos de arriba. Sin esto, veinte casillas dicen
-     "Empresa xxx, NIT…" y no hay forma de saber cuál es cuál. */
-  if (casilla.contexto) {
-    const rastro = document.createElement("p");
-    rastro.className = "casilla-rastro";
-    rastro.textContent = casilla.contexto;
-    datos.appendChild(rastro);
+function celdaDeValor(fila, columna) {
+  const casilla = document.createElement("td");
+  casilla.className = "celda-valor";
+
+  const datos = (fila.celdas || {})[columna];
+  if (!datos) {
+    casilla.classList.add("celda-fuera");
+    return casilla;
   }
 
-  const titulo = document.createElement("p");
-  titulo.className = "casilla-titulo";
-  titulo.textContent = casilla.descripcion || "(sin descripción)";
-  datos.appendChild(titulo);
+  /* --- Con fórmula: se muestra el resultado y no se deja escribir --- */
+  if (datos.tipo === "formula") {
+    casilla.classList.add("celda-formula");
+    casilla.textContent = datos.valor === null ? "—" : conSeparadores(datos.valor);
+    casilla.title = "La calcula la plantilla (" + datos.celda + ")";
+    if (datos.valor === 0) casilla.classList.add("celda-cero");
+    return casilla;
+  }
 
-  const marcas = document.createElement("div");
-  marcas.className = "casilla-marcas";
-  if (casilla.renglon) marcas.appendChild(chip("Renglón " + casilla.renglon));
-  if (casilla.seccion) marcas.appendChild(chip(casilla.seccion));
-  marcas.appendChild(chip(casilla.celda, "etiqueta-celda"));
-  datos.appendChild(marcas);
-
-  fila.appendChild(datos);
-
-  /* --- Dónde se escribe el valor --- */
-  const accion = document.createElement("div");
-  accion.className = "casilla-accion";
+  /* --- De captura: se puede escribir --- */
+  if (!datos.editable) {
+    casilla.classList.add("celda-fuera");
+    return casilla;
+  }
 
   const entrada = document.createElement("input");
   entrada.type = "text";
-  entrada.className = "campo-valor";
+  entrada.className = "celda-campo";
   entrada.inputMode = "decimal";
-  entrada.placeholder = "0";
-  entrada.setAttribute("aria-label", "Valor para " + casilla.celda);
-  if (anotado) entrada.value = anotado.valor.toLocaleString("es-CO");
+  entrada.value = datos.valor === null ? "" : conSeparadores(datos.valor);
+  entrada.title = datos.celda + (datos.documento ? " · " + datos.documento : "");
+  entrada.setAttribute("aria-label", (fila.descripcion || datos.celda)
+    + ", casilla " + datos.celda);
+  if (datos.anotado) casilla.classList.add("celda-anotada");
+  if (datos.pendiente) casilla.classList.add("celda-pendiente");
+  if (!datos.anotado && datos.valor === 0) entrada.classList.add("celda-cero");
 
-  const origen = document.createElement("select");
-  origen.className = "selector-origen";
-  origen.setAttribute("aria-label", "De dónde salió el dato");
-  agregarOpciones(origen, anotado ? anotado.documento : "");
+  let valorAlEntrar = entrada.value;
 
-  const boton = document.createElement("button");
-  boton.type = "button";
-  boton.className = "boton";
-  boton.textContent = anotado ? "Actualizar" : "Guardar";
+  entrada.addEventListener("focus", function () {
+    valorAlEntrar = entrada.value;
+    entrada.select();
+  });
 
-  async function guardar() {
+  entrada.addEventListener("keydown", function (evento) {
+    if (evento.key === "Enter") entrada.blur();
+    if (evento.key === "Escape") {
+      entrada.value = valorAlEntrar;
+      entrada.blur();
+    }
+  });
+
+  entrada.addEventListener("blur", async function () {
+    if (entrada.value.trim() === valorAlEntrar.trim()) return;
+
+    /* Dejar la casilla vacía es quitar el valor: vuelve a lo que trae la
+       plantilla. Para poner un cero hay que escribir 0. */
+    if (entrada.value.trim() === "") {
+      await quitarValor(datos.celda, entrada, valorAlEntrar);
+      return;
+    }
+
     const numero = comoNumero(entrada.value);
     if (numero === null) {
-      avisar("Escriba un número. Para dejar la casilla en cero, escriba 0.",
-             "error");
-      entrada.focus();
+      avisar("«" + entrada.value + "» no es un número. La casilla se dejó"
+             + " como estaba.", "error");
+      entrada.value = valorAlEntrar;
       return;
     }
-    boton.disabled = true;
-    try {
-      await pedir("/api/clientes/" + idCliente + "/formulario/valores", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          celda: casilla.celda,
-          valor: numero,
-          documento: origen.value
-        })
-      });
-      avisar("Guardado en " + casilla.celda + ".", "exito");
-      await cargarValores();
-      buscar();
-    } catch (error) {
-      avisar(error.message, "error");
-    } finally {
-      boton.disabled = false;
-    }
-  }
-
-  boton.addEventListener("click", guardar);
-  entrada.addEventListener("keydown", function (evento) {
-    if (evento.key === "Enter") guardar();
+    await guardarValor(datos.celda, numero, entrada, casilla);
   });
 
-  accion.appendChild(entrada);
-  accion.appendChild(origen);
-  accion.appendChild(boton);
-  fila.appendChild(accion);
-
-  return fila;
+  casilla.appendChild(entrada);
+  return casilla;
 }
 
-function agregarOpciones(selector, seleccionado) {
-  const manual = document.createElement("option");
-  manual.value = "digitado por el contador";
-  manual.textContent = "Digitado por usted";
-  selector.appendChild(manual);
-
-  documentosDelCliente.forEach(function (documento) {
-    const opcion = document.createElement("option");
-    opcion.value = documento.nombre_original;
-    opcion.textContent = documento.nombre_original;
-    selector.appendChild(opcion);
-  });
-
-  if (seleccionado) {
-    const existe = Array.prototype.some.call(selector.options, function (o) {
-      return o.value === seleccionado;
-    });
-    if (!existe) {
-      const opcion = document.createElement("option");
-      opcion.value = seleccionado;
-      opcion.textContent = seleccionado;
-      selector.appendChild(opcion);
-    }
-    selector.value = seleccionado;
-  }
-}
-
-let temporizadorBusqueda = null;
-
-function buscarConCalma() {
-  clearTimeout(temporizadorBusqueda);
-  temporizadorBusqueda = setTimeout(buscar, 250);
-}
-
-async function buscar() {
-  const texto = campoBuscar.value.trim();
-  const direccion = "/api/plantilla/celdas?buscar="
-    + encodeURIComponent(texto)
-    + (casillaTodas.checked ? "&todas=true" : "");
-
+async function guardarValor(celda, numero, entrada, casilla) {
+  entrada.disabled = true;
   try {
-    const casillas = await pedir(direccion);
-    resultados.textContent = "";
+    await pedir("/api/clientes/" + idCliente + "/formulario/valores", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        celda: celda,
+        valor: numero,
+        documento: "digitado por el contador"
+      })
+    });
+    entrada.value = conSeparadores(numero);
+    casilla.classList.add("celda-anotada", "celda-pendiente");
+    marcarPendiente(celda, numero);
+    cargarValores();
+  } catch (error) {
+    avisar(error.message, "error");
+  } finally {
+    entrada.disabled = false;
+  }
+}
 
-    if (casillas.length === 0) {
-      const vacio = document.createElement("div");
-      vacio.className = "vacio";
-      vacio.textContent = texto
-        ? "Ninguna casilla coincide con «" + texto + "»."
-        : "No hay casillas para mostrar.";
-      resultados.appendChild(vacio);
-      return;
+async function quitarValor(celda, entrada, valorAlEntrar) {
+  entrada.disabled = true;
+  try {
+    await pedir("/api/clientes/" + idCliente + "/formulario/valores/" + celda,
+                { method: "DELETE" });
+    marcarPendiente(celda, null);
+    cargarValores();
+  } catch (error) {
+    /* Si no había nada guardado, no es un error que valga la pena mostrar. */
+    entrada.value = valorAlEntrar;
+  } finally {
+    entrada.disabled = false;
+  }
+}
+
+/* Anota en memoria que una casilla cambió y que los totales de al lado
+   todavía no lo saben. */
+function marcarPendiente(celda, valor) {
+  if (!hoja) return;
+  hoja.filas.forEach(function (fila) {
+    const datos = (fila.celdas || {})[celda.charAt(0)];
+    if (datos && datos.celda === celda) {
+      datos.valor = valor;
+      datos.anotado = valor !== null;
+      datos.pendiente = true;
+    }
+  });
+  hoja.pendientes = contarPendientes();
+  mostrarPendientes();
+}
+
+function contarPendientes() {
+  let cuantos = 0;
+  (hoja ? hoja.filas : []).forEach(function (fila) {
+    COLUMNAS.forEach(function (columna) {
+      const datos = (fila.celdas || {})[columna];
+      if (datos && datos.pendiente) cuantos += 1;
+    });
+  });
+  return cuantos;
+}
+
+function mostrarPendientes() {
+  const cuantos = hoja ? hoja.pendientes : 0;
+  avisoPendientes.classList.toggle("oculto", cuantos === 0);
+  textoPendientes.textContent = cuantos === 1
+    ? "Hay 1 casilla cambiada. Los totales todavía no la incluyen."
+    : "Hay " + cuantos + " casillas cambiadas. Los totales todavía no las"
+      + " incluyen.";
+}
+
+function filaVisible(fila, texto, soloValor) {
+  if (soloValor) {
+    const tieneValor = COLUMNAS.some(function (columna) {
+      const datos = (fila.celdas || {})[columna];
+      return datos && datos.valor !== null && datos.valor !== 0;
+    });
+    if (!tieneValor) return false;
+  }
+  if (!texto) return true;
+  return sinTildes(fila.descripcion).indexOf(texto) !== -1
+    || fila.renglon === texto
+    || sinTildes(fila.seccion).indexOf(texto) !== -1
+    || COLUMNAS.some(function (columna) {
+      const datos = (fila.celdas || {})[columna];
+      return datos && datos.celda.toLowerCase() === texto;
+    });
+}
+
+function dibujarHoja() {
+  if (!hoja) return;
+
+  const texto = sinTildes(filtroHoja.value.trim());
+  const soloValor = soloConValor.checked;
+
+  cuerpoHoja.textContent = "";
+  let seccionAnterior = "";
+  let mostradas = 0;
+
+  hoja.filas.forEach(function (fila) {
+    if (!filaVisible(fila, texto, soloValor)) return;
+
+    /* Título de sección, como los bloques de la hoja de Excel. */
+    if (fila.seccion && fila.seccion !== seccionAnterior) {
+      seccionAnterior = fila.seccion;
+      const cabecera = document.createElement("tr");
+      cabecera.className = "fila-seccion";
+      const celda = document.createElement("td");
+      celda.colSpan = 5;
+      celda.textContent = fila.seccion;
+      cabecera.appendChild(celda);
+      cuerpoHoja.appendChild(cabecera);
     }
 
-    casillas.forEach(function (casilla) {
-      resultados.appendChild(dibujarCasilla(casilla));
+    const linea = document.createElement("tr");
+    linea.className = "fila-hoja";
+    if (fila.es_nota) linea.classList.add("fila-nota");
+    if (fila.renglon) linea.classList.add("fila-renglon");
+
+    const numero = document.createElement("td");
+    numero.className = "columna-renglon";
+    if (fila.renglon) {
+      const marca = document.createElement("span");
+      marca.className = "etiqueta etiqueta-neutra";
+      marca.textContent = fila.renglon;
+      numero.appendChild(marca);
+    }
+    linea.appendChild(numero);
+
+    const concepto = document.createElement("td");
+    concepto.className = "columna-concepto";
+    /* La sangría de la plantilla se respeta: es la que dice qué cuelga de
+       qué. Se divide para que no se salga de la pantalla. */
+    concepto.style.paddingLeft = (10 + Math.min(fila.sangria, 20) * 5) + "px";
+    /* El texto va dentro de un div y no suelto en la celda: el recorte a
+       dos líneas necesita un bloque propio, y aplicárselo a la celda de la
+       tabla le rompe el ancho a toda la columna. */
+    const textoConcepto = document.createElement("div");
+    textoConcepto.className = "concepto-texto";
+    textoConcepto.textContent = fila.descripcion;
+    textoConcepto.title = fila.descripcion;
+    concepto.appendChild(textoConcepto);
+    linea.appendChild(concepto);
+
+    COLUMNAS.forEach(function (columna) {
+      linea.appendChild(celdaDeValor(fila, columna));
     });
+
+    cuerpoHoja.appendChild(linea);
+    mostradas += 1;
+  });
+
+  if (mostradas === 0) {
+    const linea = document.createElement("tr");
+    const celda = document.createElement("td");
+    celda.colSpan = 5;
+    celda.className = "vacio";
+    celda.textContent = "Ninguna fila coincide con lo que buscó.";
+    linea.appendChild(celda);
+    cuerpoHoja.appendChild(linea);
+  }
+
+  origenHoja.textContent = hoja.origen === "archivo"
+    ? "Los totales que se ven son los del último archivo generado."
+    : "Todavía no se ha generado el archivo de este cliente: los totales que"
+      + " se ven son los que trae la plantilla.";
+
+  mostrarPendientes();
+}
+
+async function cargarHoja() {
+  try {
+    hoja = await pedir("/api/clientes/" + idCliente + "/formulario/hoja");
+    dibujarHoja();
   } catch (error) {
     avisar(error.message, "error");
   }
@@ -273,7 +418,7 @@ async function buscar() {
 
 
 /* ----------------------------------------------------------
-   Los valores ya anotados de este cliente
+   Los valores anotados (pestaña "Resultado")
    ---------------------------------------------------------- */
 
 function dibujarValor(valor) {
@@ -303,6 +448,14 @@ function dibujarValor(valor) {
   detalle.textContent = partes.join(" · ");
   datos.appendChild(detalle);
 
+  if (valor.otra_plantilla) {
+    const alerta = document.createElement("p");
+    alerta.className = "valor-alerta";
+    alerta.textContent = "Se anotó con otra plantilla. Revise que la casilla"
+      + " signifique lo mismo en la de ahora.";
+    datos.appendChild(alerta);
+  }
+
   fila.appendChild(datos);
 
   const monto = document.createElement("p");
@@ -314,48 +467,38 @@ function dibujarValor(valor) {
   quitar.type = "button";
   quitar.className = "boton-texto boton-texto-peligro";
   quitar.textContent = "Quitar";
-  quitar.addEventListener("click", function () {
-    quitarValor(valor);
+  quitar.addEventListener("click", async function () {
+    const seguro = window.confirm(
+      "¿Quitar el valor de «" + (valor.descripcion || valor.celda) + "»?\n\n"
+      + "La casilla vuelve a como viene en la plantilla. El movimiento queda"
+      + " en el historial."
+    );
+    if (!seguro) return;
+    try {
+      await pedir("/api/clientes/" + idCliente + "/formulario/valores/"
+                  + valor.celda, { method: "DELETE" });
+      avisar("Valor quitado.", "exito");
+      await cargarValores();
+      await cargarHoja();
+    } catch (error) {
+      avisar(error.message, "error");
+    }
   });
   fila.appendChild(quitar);
 
   return fila;
 }
 
-async function quitarValor(valor) {
-  const seguro = window.confirm(
-    "¿Quitar el valor de «" + (valor.descripcion || valor.celda) + "»?\n\n"
-    + "La casilla vuelve a como viene en la plantilla. El movimiento queda"
-    + " en el historial."
-  );
-  if (!seguro) return;
-
-  try {
-    await pedir("/api/clientes/" + idCliente + "/formulario/valores/"
-                + encodeURIComponent(valor.celda), { method: "DELETE" });
-    avisar("Valor quitado.", "exito");
-    await cargarValores();
-    buscar();
-  } catch (error) {
-    avisar(error.message, "error");
-  }
-}
-
 async function cargarValores() {
   try {
     const datos = await pedir("/api/clientes/" + idCliente + "/formulario");
-
-    valoresAnotados = {};
-    datos.valores.forEach(function (valor) {
-      valoresAnotados[valor.celda] = valor;
-    });
 
     listaValores.textContent = "";
     if (datos.valores.length === 0) {
       const vacio = document.createElement("div");
       vacio.className = "vacio";
       vacio.textContent = "Todavía no hay ningún valor anotado para este"
-        + " cliente. Búsquelo arriba y anótelo.";
+        + " cliente. Escríbalos en la hoja de captura.";
       listaValores.appendChild(vacio);
     } else {
       datos.valores.forEach(function (valor) {
@@ -371,8 +514,7 @@ async function cargarValores() {
 
     if (datos.estado.hay_archivo) {
       enlaceArchivo.classList.remove("oculto");
-      enlaceArchivo.href = "/api/clientes/" + idCliente
-        + "/formulario/archivo";
+      enlaceArchivo.href = "/api/clientes/" + idCliente + "/formulario/archivo";
     }
   } catch (error) {
     avisar(error.message, "error");
@@ -392,13 +534,7 @@ function lineaResultado(texto, clase) {
 }
 
 function dibujarTotales(totales) {
-  const caja = document.createElement("details");
-  caja.className = "totales";
-  caja.open = true;
-
-  const titulo = document.createElement("summary");
-  titulo.textContent = "Totales que calculó la plantilla (" + totales.length + ")";
-  caja.appendChild(titulo);
+  cajaTotales.textContent = "";
 
   const nota = document.createElement("p");
   nota.className = "ayuda";
@@ -406,10 +542,8 @@ function dibujarTotales(totales) {
     + " este programa. Están aquí para que los revise; los definitivos son"
     + " los del archivo. Los renglones de la liquidación (impuesto y saldos)"
     + " no se muestran aquí: ábralos en Excel.";
-  caja.appendChild(nota);
+  cajaTotales.appendChild(nota);
 
-  /* Casi todos los renglones están en cero. Se pueden esconder para dejar
-     a la vista solo lo que este cliente sí tiene. */
   const conCeros = totales.filter(function (t) { return t.valor === 0; }).length;
   const opcion = document.createElement("label");
   opcion.className = "opcion-linea";
@@ -420,20 +554,19 @@ function dibujarTotales(totales) {
   opcion.appendChild(document.createTextNode(
     "Esconder los " + conCeros + " renglones que están en cero"
   ));
-  caja.appendChild(opcion);
+  cajaTotales.appendChild(opcion);
 
-  let seccionAnterior = "";
   const lista = document.createElement("div");
   lista.className = "lista-totales sin-ceros";
   marca.addEventListener("change", function () {
     lista.classList.toggle("sin-ceros", marca.checked);
   });
 
+  let seccionAnterior = "";
   totales.forEach(function (total) {
     if (total.seccion && total.seccion !== seccionAnterior) {
       seccionAnterior = total.seccion;
       const cabecera = document.createElement("p");
-      /* Si toda la sección está en cero, su título se esconde con ella. */
       const todaEnCero = totales.every(function (otro) {
         return otro.seccion !== total.seccion || otro.valor === 0;
       });
@@ -463,15 +596,18 @@ function dibujarTotales(totales) {
     lista.appendChild(fila);
   });
 
-  caja.appendChild(lista);
-  return caja;
+  cajaTotales.appendChild(lista);
 }
 
-async function generar() {
+async function generar(desdeLaHoja) {
   botonGenerar.disabled = true;
+  botonRecalcular.disabled = true;
   progreso.classList.remove("oculto");
   progresoTexto.textContent = "Armando el archivo y revisando las fórmulas…"
     + " Puede tardar unos segundos.";
+  if (desdeLaHoja) {
+    textoPendientes.textContent = "Calculando los totales…";
+  }
   resultado.classList.add("oculto");
   resultado.textContent = "";
 
@@ -482,7 +618,6 @@ async function generar() {
     );
 
     resultado.textContent = "";
-
     const verificacion = informe.verificacion;
     resultado.appendChild(lineaResultado(
       "Listo. Se escribieron " + informe.valores_escritos
@@ -492,24 +627,24 @@ async function generar() {
       "resultado-bien"
     ));
 
-    if (informe.recalculo && informe.recalculo.recalculado) {
+    if (informe.recalculo) {
       resultado.appendChild(lineaResultado(
-        informe.recalculo.motivo, "ayuda"
-      ));
-    } else if (informe.recalculo) {
-      resultado.appendChild(lineaResultado(
-        informe.recalculo.motivo, "resultado-aviso"
+        informe.recalculo.motivo,
+        informe.recalculo.recalculado ? "ayuda" : "resultado-aviso"
       ));
     }
 
     if (informe.totales && informe.totales.length > 0) {
-      resultado.appendChild(dibujarTotales(informe.totales));
+      dibujarTotales(informe.totales);
     }
 
     resultado.classList.remove("oculto");
     enlaceArchivo.classList.remove("oculto");
     enlaceArchivo.href = "/api/clientes/" + idCliente + "/formulario/archivo";
-    avisar("El archivo quedó listo para descargar.", "exito");
+    avisar("Totales actualizados. El archivo quedó listo para descargar.",
+           "exito");
+
+    await cargarHoja();
     cargarHistorial();
   } catch (error) {
     avisar(error.message, "error");
@@ -519,6 +654,7 @@ async function generar() {
     enlaceArchivo.classList.add("oculto");
   } finally {
     botonGenerar.disabled = false;
+    botonRecalcular.disabled = false;
     progreso.classList.add("oculto");
   }
 }
@@ -527,6 +663,14 @@ async function generar() {
 /* ----------------------------------------------------------
    Historial
    ---------------------------------------------------------- */
+
+function fechaCorta(texto) {
+  const fecha = new Date(texto);
+  if (isNaN(fecha)) return texto;
+  return fecha.toLocaleString("es-CO", {
+    day: "2-digit", month: "2-digit", hour: "numeric", minute: "2-digit"
+  });
+}
 
 async function cargarHistorial() {
   try {
@@ -560,21 +704,80 @@ async function cargarHistorial() {
   }
 }
 
-function fechaCorta(texto) {
-  const fecha = new Date(texto);
-  if (isNaN(fecha)) return texto;
-  return fecha.toLocaleString("es-CO", {
-    day: "2-digit", month: "2-digit",
-    hour: "numeric", minute: "2-digit"
+
+/* ----------------------------------------------------------
+   La plantilla: cuál se usa y cómo subir otra
+   ---------------------------------------------------------- */
+
+function avisarPlantilla(texto, tipo) {
+  avisoPlantilla.textContent = texto;
+  avisoPlantilla.className = "aviso aviso-" + tipo;
+}
+
+function dibujarSelectorPlantillas(plantilla) {
+  selectorPlantilla.textContent = "";
+  (plantilla.disponibles || []).forEach(function (nombre) {
+    const opcion = document.createElement("option");
+    opcion.value = nombre;
+    opcion.textContent = nombre;
+    selectorPlantilla.appendChild(opcion);
   });
+  selectorPlantilla.value = plantilla.archivo;
+}
+
+async function cambiarPlantilla() {
+  try {
+    await pedir("/api/plantilla/activa", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ nombre: selectorPlantilla.value })
+    });
+    avisarPlantilla("Ahora se usa «" + selectorPlantilla.value + "». Revise"
+      + " los valores ya anotados: las casillas de una plantilla no tienen"
+      + " por qué significar lo mismo en otra.", "fechas");
+    await cargarValores();
+    await cargarHoja();
+  } catch (error) {
+    avisarPlantilla(error.message, "error");
+  }
+}
+
+async function subirPlantilla(archivo) {
+  if (!archivo) return;
+  avisarPlantilla("Revisando «" + archivo.name + "»…", "fechas");
+
+  const paquete = new FormData();
+  paquete.append("archivo", archivo);
+
+  try {
+    const plantilla = await pedir("/api/plantilla", {
+      method: "POST", body: paquete
+    });
+    dibujarSelectorPlantillas(plantilla);
+    avisarPlantilla("Listo: ahora se usa «" + plantilla.guardada + "». Tiene "
+      + plantilla.celdas_de_captura + " casillas para capturar.", "exito");
+    sinPlantilla.classList.add("oculto");
+    bloque.classList.remove("oculto");
+    await cargarValores();
+    await cargarHoja();
+  } catch (error) {
+    avisarPlantilla(error.message, "error");
+  }
 }
 
 
 /* ----------------------------------------------------------
    Arranque
+
+   La hoja no se carga hasta que el contador abre la sección: son 562
+   filas y no vale la pena traerlas si no las va a mirar.
    ---------------------------------------------------------- */
 
+let hojaPedida = false;
+
 async function arrancar() {
+  prepararPestanas();
+
   let plantilla;
   try {
     plantilla = await pedir("/api/plantilla");
@@ -590,6 +793,7 @@ async function arrancar() {
   }
 
   bloque.classList.remove("oculto");
+  dibujarSelectorPlantillas(plantilla);
 
   if (!plantilla.libreoffice) {
     avisar("LibreOffice no está instalado en este computador, así que los"
@@ -606,13 +810,34 @@ async function arrancar() {
   }
 
   await cargarValores();
-  await buscar();
   cargarHistorial();
 }
 
-campoBuscar.addEventListener("input", buscarConCalma);
-casillaTodas.addEventListener("change", buscar);
-botonGenerar.addEventListener("click", generar);
+const plegable = document.getElementById("plegable-formulario");
+plegable.addEventListener("toggle", function () {
+  if (plegable.open && !hojaPedida) {
+    hojaPedida = true;
+    cargarHoja();
+  }
+});
+
+filtroHoja.addEventListener("input", dibujarHoja);
+soloConValor.addEventListener("change", dibujarHoja);
+botonRecalcular.addEventListener("click", function () { generar(true); });
+botonGenerar.addEventListener("click", function () { generar(false); });
+selectorPlantilla.addEventListener("change", cambiarPlantilla);
+botonSubirPlantilla.addEventListener("click", function () {
+  campoPlantilla.click();
+});
+if (botonSubirPlantilla1) {
+  botonSubirPlantilla1.addEventListener("click", function () {
+    campoPlantilla.click();
+  });
+}
+campoPlantilla.addEventListener("change", function () {
+  subirPlantilla(campoPlantilla.files[0]);
+  campoPlantilla.value = "";
+});
 
 arrancar();
 
