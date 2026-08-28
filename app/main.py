@@ -21,7 +21,11 @@ from fastapi.responses import FileResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, field_validator
 
-from app import checklist, configuracion, db, documentos, exportar, importar, lectura
+from app import (
+    checklist, configuracion, db, documentos, exportar, formulario, importar,
+    lectura,
+)
+from app.escribir_210 import EscrituraBloqueada, VerificacionFallida
 
 # Raíz del proyecto. Este archivo vive en app/, así que subimos un nivel.
 # Se usa pathlib (y no texto pegado con / o \) para que las rutas funcionen
@@ -235,6 +239,8 @@ def api_eliminar_cliente(id_cliente: int):
     # archivos del disco hay que borrarlos a mano. Son datos confidenciales:
     # no se pueden quedar ahí después de eliminar al cliente.
     documentos.eliminar_carpeta_cliente(id_cliente)
+    # Y el archivo de Excel de ese cliente, que también es confidencial.
+    formulario.eliminar_carpeta_cliente(id_cliente)
 
 
 # ----------------------------------------------------------
@@ -805,3 +811,134 @@ def api_vista_documento(id_documento: int):
         "total_filas": len(filas),
         "recortado": recortado,
     }
+
+
+# ----------------------------------------------------------
+# API del Formulario 210
+#
+# La plantilla es una sola para todos los clientes. Lo que se guarda por
+# cliente son los valores; el archivo de Excel se arma cuando se pide,
+# siempre partiendo de la plantilla limpia. Ver app/formulario.py.
+# ----------------------------------------------------------
+
+
+class ValorFormulario(BaseModel):
+    """Un valor que se captura en una casilla de la plantilla."""
+
+    celda: str
+    valor: float
+    # De dónde salió el dato. Queda en la bitácora.
+    documento: str = ""
+
+    @field_validator("celda")
+    @classmethod
+    def _revisar_celda(cls, valor):
+        limpia = (valor or "").strip().upper()
+        if not limpia:
+            raise ValueError("Falta decir en qué casilla va el valor.")
+        return limpia
+
+    @field_validator("documento")
+    @classmethod
+    def _revisar_documento(cls, valor):
+        return (valor or "").strip()[:200]
+
+
+def _cliente_o_404(id_cliente):
+    cliente = db.obtener_cliente(id_cliente)
+    if cliente is None:
+        raise HTTPException(status_code=404, detail="Ese cliente no existe.")
+    return cliente
+
+
+@app.get("/api/plantilla")
+def api_plantilla():
+    """Qué plantilla hay puesta y si LibreOffice está disponible."""
+    return formulario.resumen_plantilla()
+
+
+@app.get("/api/plantilla/celdas")
+def api_buscar_celdas(buscar: str = "", todas: bool = False):
+    """Busca casillas de la plantilla por palabra, renglón o celda."""
+    try:
+        return formulario.buscar_celdas(buscar, solo_esperadas=not todas)
+    except formulario.SinPlantilla as error:
+        raise HTTPException(status_code=409, detail=str(error))
+
+
+@app.get("/api/clientes/{id_cliente}/formulario")
+def api_formulario(id_cliente: int):
+    """Los valores capturados de un cliente y el estado de su archivo."""
+    _cliente_o_404(id_cliente)
+    try:
+        valores = formulario.listar_valores(id_cliente)
+    except formulario.SinPlantilla as error:
+        raise HTTPException(status_code=409, detail=str(error))
+    return {"estado": formulario.estado(id_cliente), "valores": valores}
+
+
+@app.put("/api/clientes/{id_cliente}/formulario/valores")
+def api_guardar_valor(id_cliente: int, datos: ValorFormulario):
+    """Guarda el valor de una casilla para este cliente."""
+    _cliente_o_404(id_cliente)
+    try:
+        return formulario.guardar_valor(
+            id_cliente, datos.celda, datos.valor, datos.documento
+        )
+    except formulario.SinPlantilla as error:
+        raise HTTPException(status_code=409, detail=str(error))
+    except EscrituraBloqueada as error:
+        raise HTTPException(status_code=400, detail=str(error))
+
+
+@app.delete("/api/clientes/{id_cliente}/formulario/valores/{celda}",
+            status_code=204)
+def api_borrar_valor(id_cliente: int, celda: str):
+    """Quita un valor capturado. La casilla vuelve a lo que trae la plantilla."""
+    _cliente_o_404(id_cliente)
+    if not db.borrar_valor_210(id_cliente, celda.upper().strip()):
+        raise HTTPException(
+            status_code=404, detail="Esa casilla no tenía ningún valor."
+        )
+
+
+@app.get("/api/clientes/{id_cliente}/formulario/bitacora")
+def api_bitacora_formulario(id_cliente: int):
+    """El historial de cambios del formulario de este cliente."""
+    _cliente_o_404(id_cliente)
+    return db.listar_bitacora_210(id_cliente)
+
+
+@app.post("/api/clientes/{id_cliente}/formulario/generar")
+def api_generar_formulario(id_cliente: int):
+    """Arma el archivo de Excel de este cliente y devuelve cómo salió."""
+    cliente = _cliente_o_404(id_cliente)
+    try:
+        return formulario.generar(cliente)
+    except formulario.SinPlantilla as error:
+        raise HTTPException(status_code=409, detail=str(error))
+    except EscrituraBloqueada as error:
+        raise HTTPException(status_code=400, detail=str(error))
+    except VerificacionFallida as error:
+        # El archivo se descartó. Es un error grave y hay que decirlo tal
+        # cual, sin suavizarlo: el contador no debe usar ese archivo.
+        raise HTTPException(status_code=500, detail=str(error))
+
+
+@app.get("/api/clientes/{id_cliente}/formulario/archivo")
+def api_descargar_formulario(id_cliente: int):
+    """Descarga el archivo de Excel ya generado de este cliente."""
+    cliente = _cliente_o_404(id_cliente)
+    archivo = formulario.archivo_cliente(id_cliente)
+    if not archivo.exists():
+        raise HTTPException(
+            status_code=404,
+            detail="Todavía no se ha generado el archivo de este cliente.",
+        )
+    return FileResponse(
+        archivo,
+        media_type=(
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        ),
+        filename=formulario.nombre_para_descargar(cliente),
+    )

@@ -96,6 +96,26 @@ def _texto(valor):
     return " ".join(str(valor).split())
 
 
+def _sangria(valor):
+    """Cuántos espacios tiene el texto al principio.
+
+    La plantilla arma la jerarquía de conceptos con sangrías:
+
+        "   Gastos personales"
+        "     Alimentación"
+        "          Empresa xxx, NIT…"
+
+    Contar esos espacios es lo que permite saber que "Empresa xxx" cuelga
+    de "Alimentación", que a su vez cuelga de "Gastos personales". Sin eso,
+    en pantalla se ven veinte filas que dicen "Empresa xxx, NIT…" y no hay
+    forma de saber cuál es cuál.
+    """
+    if valor is None:
+        return 0
+    texto = str(valor).replace("\t", "    ")
+    return len(texto) - len(texto.lstrip(" "))
+
+
 def _mapa_de_combinadas(hoja):
     """Devuelve dos cosas sobre las celdas combinadas de la hoja.
 
@@ -192,6 +212,9 @@ def mapear_plantilla(ruta_plantilla):
 
     celdas = []
     seccion_actual = ""
+    # Pila de conceptos que están "por encima" de la fila actual, según la
+    # sangría. Se usa para armar el contexto: "Gastos personales › Ropa".
+    ancestros = []
 
     for fila in range(FILA_INICIAL, fila_final + 1):
         # Sección: se arrastra hacia abajo. La plantilla la escribe una sola
@@ -203,16 +226,32 @@ def mapear_plantilla(ruta_plantilla):
         # Descripción: primero F, y si está vacía, E.
         descripcion = ""
         columna_descripcion = ""
+        sangria = 0
         for col in COLUMNAS_DESCRIPCION:
             coord = f"{col}{fila}"
-            texto = _texto(_valor_efectivo(hoja, coord, anclas))
+            crudo = _valor_efectivo(hoja, coord, anclas)
+            texto = _texto(crudo)
             # Un número suelto en E es el renglón, no una descripción.
             if texto and not _numero_de_renglon(texto):
                 descripcion = texto
+                sangria = _sangria(crudo)
                 # Si F está combinada con E, el texto vive en E: se anota la
                 # columna donde de verdad está, no donde se encontró.
                 columna_descripcion = anclas.get(coord, coord)[0]
                 break
+
+        es_nota = descripcion.lower().startswith(INICIOS_DE_NOTA)
+
+        # Contexto: los conceptos de arriba de los que cuelga esta fila.
+        # Las notas al pie no cuentan como concepto padre: son párrafos de
+        # explicación y llenarían el contexto de texto que no ayuda.
+        if descripcion and not es_nota:
+            while ancestros and ancestros[-1][0] >= sangria:
+                ancestros.pop()
+            contexto = [texto_ancestro for _, texto_ancestro in ancestros]
+            ancestros.append((sangria, descripcion))
+        else:
+            contexto = []
 
         # Número de renglón: puede estar en D o en E, y a veces es una
         # fórmula (por ejemplo "=+E103+1"), así que se usa el valor
@@ -227,8 +266,6 @@ def mapear_plantilla(ruta_plantilla):
             renglon = _numero_de_renglon(crudo)
             if renglon:
                 break
-
-        es_nota = descripcion.lower().startswith(INICIOS_DE_NOTA)
 
         for col in COLUMNAS_VALOR:
             coordenada = f"{col}{fila}"
@@ -275,6 +312,7 @@ def mapear_plantilla(ruta_plantilla):
                     "valor_calculado": hoja_calculada[coordenada].value,
                     "formula": formula,
                     "descripcion": descripcion,
+                    "contexto": contexto,
                     "columna_descripcion": columna_descripcion,
                     "renglon": renglon,
                     "seccion": seccion_actual,

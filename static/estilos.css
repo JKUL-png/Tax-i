@@ -1271,3 +1271,306 @@ a {
 @media (prefers-reduced-motion: reduce) {
   * { transition: none !important; animation: none !important; }
 }
+
+/* ==========================================================
+   Formulario 210
+
+   Mismo lenguaje que el resto: tarjetas blancas sobre fondo cálido,
+   etiquetas redondas para los datos cortos y el dinero alineado a la
+   derecha para poder compararlo de un vistazo.
+   ========================================================== */
+
+.campo-buscador {
+  margin: 14px 0 10px;
+}
+
+/* Una opción con su casilla al lado, en una sola línea legible. */
+.opcion-linea {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.85rem;
+  color: var(--texto-secundario);
+  font-weight: 400;
+  margin-bottom: 16px;
+  cursor: pointer;
+}
+
+.opcion-linea input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  cursor: pointer;
+}
+
+/* --- Resultados de la búsqueda --- */
+
+.lista-casillas {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-height: 460px;
+  overflow-y: auto;
+  /* El borde de arriba separa la lista del buscador sin meter otra caja. */
+  border-top: 1px solid var(--borde);
+  padding-top: 14px;
+}
+
+.casilla {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+  padding: 12px 14px;
+  background: var(--fondo);
+  border: 1px solid var(--borde);
+  border-radius: var(--radio);
+}
+
+/* La que ya tiene un valor anotado se marca en verde, para no anotarla dos
+   veces sin darse cuenta. */
+.casilla-anotada {
+  background: var(--primary-tenue);
+  border-color: transparent;
+}
+
+.casilla-datos {
+  flex: 1 1 260px;
+  min-width: 0;
+}
+
+/* El rastro de conceptos padre: chiquito y en gris, para que el nombre de
+   la casilla siga siendo lo primero que se lee. */
+.casilla-rastro {
+  margin: 0 0 3px;
+  font-size: 0.78rem;
+  color: var(--texto-tenue);
+  line-height: 1.4;
+}
+
+.casilla-titulo {
+  margin: 0 0 6px;
+  font-size: 0.95rem;
+  color: var(--texto);
+}
+
+.casilla-marcas {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+/* El código de celda va en monoespaciada: es un dato técnico, no una
+   palabra, y así no se confunde con la descripción. */
+.etiqueta-celda {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.78rem;
+}
+
+.casilla-accion {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+/* Se escribe con el selector de atributo incluido porque la regla base de
+   input[type="text"] pone width:100% y le ganaría en especificidad. */
+input[type="text"].campo-valor {
+  width: 150px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.selector-origen {
+  height: var(--alto-control);
+  max-width: 190px;
+  padding: 0 10px;
+  font-family: inherit;
+  font-size: 0.9rem;
+  color: var(--texto-secundario);
+  background: var(--superficie);
+  border: 1px solid var(--borde-fuerte);
+  border-radius: var(--radio-chico);
+}
+
+.casilla-accion .boton {
+  padding: 0 18px;
+}
+
+/* --- Valores ya anotados --- */
+
+.lista-valores {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.valor-anotado {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 10px 14px;
+  background: var(--fondo);
+  border: 1px solid var(--borde);
+  border-radius: var(--radio);
+}
+
+.valor-datos {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.valor-titulo {
+  margin: 0;
+  font-size: 0.95rem;
+}
+
+.valor-detalle {
+  margin: 2px 0 0;
+  font-size: 0.8rem;
+  color: var(--texto-tenue);
+}
+
+.valor-monto {
+  margin: 0;
+  flex: 0 0 auto;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+/* --- Resultado de generar el archivo --- */
+
+.resultado-formulario {
+  margin-top: 18px;
+  padding-top: 18px;
+  border-top: 1px solid var(--borde);
+}
+
+.resultado-formulario p {
+  margin: 0 0 8px;
+}
+
+.resultado-bien {
+  color: var(--exito-texto);
+  font-weight: 500;
+}
+
+.resultado-aviso {
+  color: var(--alerta-texto);
+}
+
+.resultado-mal {
+  color: var(--error-texto);
+  font-weight: 500;
+}
+
+/* --- Totales --- */
+
+.totales {
+  margin-top: 14px;
+}
+
+.totales > summary {
+  cursor: pointer;
+  font-weight: 500;
+  padding: 6px 0;
+}
+
+.lista-totales {
+  margin-top: 10px;
+  max-height: 380px;
+  overflow-y: auto;
+}
+
+.total-seccion {
+  margin: 16px 0 6px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--texto-tenue);
+}
+
+.total {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 7px 0;
+  border-bottom: 1px solid var(--borde);
+}
+
+.total-renglon {
+  flex: 0 0 auto;
+  min-width: 38px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.total-descripcion {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 0.9rem;
+  color: var(--texto-secundario);
+}
+
+.total-monto {
+  flex: 0 0 auto;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Con la lista en modo "sin ceros", los renglones vacíos desaparecen. */
+.lista-totales.sin-ceros .total-en-cero {
+  display: none;
+}
+
+.totales .opcion-linea {
+  margin: 10px 0 0;
+}
+
+/* Los ceros se atenúan: son la mayoría y no aportan nada a la lectura. */
+.total-cero {
+  color: var(--texto-tenue);
+  font-weight: 400;
+}
+
+/* --- Historial --- */
+
+.historial {
+  margin-top: 18px;
+  padding-top: 14px;
+  border-top: 1px solid var(--borde);
+}
+
+.historial > summary {
+  cursor: pointer;
+  font-size: 0.9rem;
+  color: var(--texto-secundario);
+}
+
+.lista-historial {
+  margin-top: 10px;
+  max-height: 240px;
+  overflow-y: auto;
+}
+
+.movimiento {
+  margin: 0 0 6px;
+  font-size: 0.82rem;
+  color: var(--texto-tenue);
+  font-variant-numeric: tabular-nums;
+}
+
+/* En pantallas angostas la casilla se apila en vez de apretarse. */
+@media (max-width: 620px) {
+  .casilla-accion {
+    flex: 1 1 100%;
+  }
+  input[type="text"].campo-valor,
+  .selector-origen {
+    flex: 1 1 auto;
+    width: auto;
+    max-width: none;
+  }
+}

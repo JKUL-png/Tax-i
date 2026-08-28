@@ -126,6 +126,55 @@ def crear_tablas():
             " ON checklist (cliente_id)"
         )
 
+        # Los valores que el contador captura para el Formulario 210 de
+        # cada cliente. Cada cliente tiene los suyos: la plantilla es la
+        # misma para todos, pero lo que se escribe en ella es de cada uno.
+        conexion.execute(
+            """
+            CREATE TABLE IF NOT EXISTS valores_210 (
+                id             INTEGER PRIMARY KEY AUTOINCREMENT,
+                cliente_id     INTEGER NOT NULL,
+                -- La celda de la hoja de captura: 'G32', 'H104'...
+                celda          TEXT NOT NULL,
+                valor          REAL NOT NULL,
+                -- De dónde salió el dato: el nombre del documento que lo
+                -- respalda, o una nota como 'digitado por el contador'.
+                documento      TEXT NOT NULL DEFAULT '',
+                actualizado_en TEXT NOT NULL,
+                FOREIGN KEY (cliente_id) REFERENCES clientes(id)
+                    ON DELETE CASCADE
+            )
+            """
+        )
+        # Una sola fila por celda y por cliente: si se vuelve a capturar la
+        # misma celda, se reemplaza el valor y no se acumulan duplicados.
+        conexion.execute(
+            "CREATE UNIQUE INDEX IF NOT EXISTS idx_valores_210_celda"
+            " ON valores_210 (cliente_id, celda)"
+        )
+
+        # El historial de esos valores. No se borra nunca: es lo que le
+        # permite al contador ver qué se cambió, cuándo y de dónde salió.
+        conexion.execute(
+            """
+            CREATE TABLE IF NOT EXISTS bitacora_210 (
+                id             INTEGER PRIMARY KEY AUTOINCREMENT,
+                cliente_id     INTEGER NOT NULL,
+                celda          TEXT NOT NULL,
+                valor_anterior REAL,
+                valor_nuevo    REAL,
+                documento      TEXT NOT NULL DEFAULT '',
+                fecha_hora     TEXT NOT NULL,
+                FOREIGN KEY (cliente_id) REFERENCES clientes(id)
+                    ON DELETE CASCADE
+            )
+            """
+        )
+        conexion.execute(
+            "CREATE INDEX IF NOT EXISTS idx_bitacora_210_cliente"
+            " ON bitacora_210 (cliente_id)"
+        )
+
         # --- Cambios sobre bases que ya existían ---
         # Si la base se creó con una versión anterior del programa, le falta
         # la columna "notas". Se agrega aquí en vez de pedirle al contador
@@ -509,3 +558,125 @@ def contar_documentos_por_renglon(cliente_id):
             (cliente_id,),
         ).fetchall()
     return {fila["renglon_id"]: fila["cantidad"] for fila in filas}
+
+
+# ----------------------------------------------------------
+# Valores del Formulario 210, por cliente
+# ----------------------------------------------------------
+
+
+def _numero(valor):
+    """SQLite devuelve los REAL como 1500000.0. Si es entero, se ve mejor así."""
+    if valor is None:
+        return None
+    if float(valor).is_integer():
+        return int(valor)
+    return float(valor)
+
+
+def listar_valores_210(cliente_id):
+    """Los valores capturados de un cliente: {celda: {valor, documento, ...}}."""
+    with conectar() as conexion:
+        filas = conexion.execute(
+            "SELECT celda, valor, documento, actualizado_en FROM valores_210"
+            " WHERE cliente_id = ? ORDER BY celda",
+            (cliente_id,),
+        ).fetchall()
+    return {
+        fila["celda"]: {
+            "celda": fila["celda"],
+            "valor": _numero(fila["valor"]),
+            "documento": fila["documento"],
+            "actualizado_en": fila["actualizado_en"],
+        }
+        for fila in filas
+    }
+
+
+def obtener_valor_210(cliente_id, celda):
+    """El valor de una celda de un cliente, o None si no se ha capturado."""
+    return listar_valores_210(cliente_id).get(celda)
+
+
+def guardar_valor_210(cliente_id, celda, valor, documento=""):
+    """Guarda (o reemplaza) el valor de una celda y lo anota en el historial.
+
+    Devuelve el registro guardado.
+    """
+    anterior = obtener_valor_210(cliente_id, celda)
+    ahora = datetime.now().isoformat(timespec="seconds")
+
+    with conectar() as conexion:
+        conexion.execute(
+            "INSERT INTO valores_210"
+            " (cliente_id, celda, valor, documento, actualizado_en)"
+            " VALUES (?, ?, ?, ?, ?)"
+            " ON CONFLICT (cliente_id, celda) DO UPDATE SET"
+            "   valor = excluded.valor,"
+            "   documento = excluded.documento,"
+            "   actualizado_en = excluded.actualizado_en",
+            (cliente_id, celda, float(valor), documento or "", ahora),
+        )
+        conexion.execute(
+            "INSERT INTO bitacora_210"
+            " (cliente_id, celda, valor_anterior, valor_nuevo, documento,"
+            "  fecha_hora) VALUES (?, ?, ?, ?, ?, ?)",
+            (
+                cliente_id, celda,
+                None if anterior is None else float(anterior["valor"]),
+                float(valor), documento or "", ahora,
+            ),
+        )
+
+    return {
+        "celda": celda,
+        "valor": _numero(valor),
+        "documento": documento or "",
+        "actualizado_en": ahora,
+    }
+
+
+def borrar_valor_210(cliente_id, celda):
+    """Quita un valor capturado. La celda vuelve a lo que trae la plantilla.
+
+    El movimiento queda en el historial con valor_nuevo en blanco.
+    """
+    anterior = obtener_valor_210(cliente_id, celda)
+    if anterior is None:
+        return False
+
+    ahora = datetime.now().isoformat(timespec="seconds")
+    with conectar() as conexion:
+        conexion.execute(
+            "DELETE FROM valores_210 WHERE cliente_id = ? AND celda = ?",
+            (cliente_id, celda),
+        )
+        conexion.execute(
+            "INSERT INTO bitacora_210"
+            " (cliente_id, celda, valor_anterior, valor_nuevo, documento,"
+            "  fecha_hora) VALUES (?, ?, ?, NULL, ?, ?)",
+            (cliente_id, celda, float(anterior["valor"]),
+             "se quitó el valor", ahora),
+        )
+    return True
+
+
+def listar_bitacora_210(cliente_id, limite=200):
+    """El historial de cambios de un cliente, del más reciente al más viejo."""
+    with conectar() as conexion:
+        filas = conexion.execute(
+            "SELECT celda, valor_anterior, valor_nuevo, documento, fecha_hora"
+            " FROM bitacora_210 WHERE cliente_id = ?"
+            " ORDER BY id DESC LIMIT ?",
+            (cliente_id, limite),
+        ).fetchall()
+    return [
+        {
+            "celda": fila["celda"],
+            "valor_anterior": _numero(fila["valor_anterior"]),
+            "valor_nuevo": _numero(fila["valor_nuevo"]),
+            "documento": fila["documento"],
+            "fecha_hora": fila["fecha_hora"],
+        }
+        for fila in filas
+    ]

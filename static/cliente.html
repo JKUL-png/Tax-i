@@ -105,6 +105,94 @@
       </div>
     </section>
 
+    <!-- ---------- Formulario 210 ----------
+         La plantilla es la misma para todos los clientes; lo que se anota
+         aquí es de este cliente y no se mezcla con el de nadie más. -->
+    <section class="seccion" id="seccion-formulario">
+      <h2>Formulario 210 <span id="conteo-formulario" class="conteo"></span></h2>
+
+      <div id="aviso-formulario" class="aviso oculto" role="alert"></div>
+
+      <!-- Cuando no hay ninguna plantilla puesta -->
+      <div id="sin-plantilla" class="tarjeta oculto">
+        <h3>Falta la plantilla</h3>
+        <p class="ayuda" id="motivo-sin-plantilla"></p>
+      </div>
+
+      <div id="bloque-formulario" class="oculto">
+
+        <!-- Buscar una casilla y anotarle un valor -->
+        <div class="tarjeta">
+          <h3>Anotar un valor</h3>
+          <p class="ayuda">
+            Busque el concepto por su nombre, por el número de renglón o por
+            la casilla. Las casillas con fórmula no aparecen: esas las
+            calcula la plantilla sola.
+          </p>
+
+          <div class="campo campo-buscador">
+            <input type="text" id="buscar-casilla" autocomplete="off"
+                   placeholder="Ej: salarios, arriendos, 32, G115"
+                   aria-label="Buscar una casilla de la plantilla">
+          </div>
+
+          <label class="opcion-linea">
+            <input type="checkbox" id="todas-casillas">
+            Ver también las casillas que la plantilla no espera que se llenen
+          </label>
+
+          <div id="resultados-casillas" class="lista-casillas">
+            <div class="vacio">Cargando…</div>
+          </div>
+        </div>
+
+        <!-- Lo que ya se anotó para este cliente -->
+        <div class="tarjeta">
+          <h3>Valores de este cliente
+            <span id="conteo-valores" class="conteo"></span></h3>
+          <p class="ayuda">
+            Estos valores son solo de este cliente. La plantilla no se toca:
+            el archivo de Excel se arma aparte cada vez que usted lo pide.
+          </p>
+
+          <div id="lista-valores" class="lista-valores">
+            <div class="vacio">Cargando…</div>
+          </div>
+        </div>
+
+        <!-- Generar el archivo -->
+        <div class="tarjeta">
+          <h3>Archivo de Excel de este cliente</h3>
+          <p class="ayuda">
+            Se arma una copia nueva de la plantilla, se le escriben estos
+            valores y se revisa que ninguna fórmula haya cambiado. Su
+            plantilla original nunca se modifica.
+          </p>
+
+          <div class="fila-botones">
+            <button type="button" class="boton" id="boton-generar">
+              Generar el archivo
+            </button>
+            <a class="boton-secundario oculto" id="enlace-formulario"
+               download>Descargar el archivo</a>
+          </div>
+
+          <div id="progreso-formulario" class="progreso oculto">
+            <p id="progreso-formulario-texto">Armando el archivo…</p>
+          </div>
+
+          <div id="resultado-formulario" class="resultado-formulario oculto">
+          </div>
+
+          <details class="historial" id="historial">
+            <summary>Ver el historial de cambios</summary>
+            <div id="lista-historial" class="lista-historial"></div>
+          </details>
+        </div>
+
+      </div>
+    </section>
+
     <!-- ---------- Exportar ---------- -->
     <section class="seccion">
       <h2>Exportar</h2>
@@ -176,5 +264,6 @@
   </div>
 
   <script src="/static/cliente.js"></script>
+  <script src="/static/formulario.js"></script>
 </body>
 </html>

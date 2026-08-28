@@ -329,7 +329,7 @@ class EscritorPlantilla:
         # ven al abrirlo en Excel.
         errores_previos = set()
         if recalcular_totales:
-            errores_previos = set(celdas_con_error(self.ruta_original))
+            errores_previos = set(_errores_recordados(self.ruta_original))
             self.informe_recalculo = recalcular(self.ruta_copia)
 
             if self.informe_recalculo["recalculado"]:
@@ -552,6 +552,38 @@ def leer_todas_las_formulas(ruta_xlsx):
     return todas
 
 
+# Leer las 902 fórmulas de un libro toma más de un segundo, y la plantilla
+# original se lee en cada archivo que se genera. Se guarda lo leído en
+# memoria, con la fecha y el tamaño del archivo como llave: si alguien
+# cambia la plantilla, la llave cambia y se vuelve a leer.
+_recordado = {}
+_CUANTOS_SE_RECUERDAN = 4
+
+
+def _formulas_recordadas(ruta):
+    """Como leer_todas_las_formulas, pero sin releer el mismo archivo dos veces."""
+    ruta = Path(ruta)
+    datos = ruta.stat()
+    llave = (str(ruta.resolve()), datos.st_mtime, datos.st_size)
+    if llave not in _recordado:
+        if len(_recordado) >= _CUANTOS_SE_RECUERDAN:
+            _recordado.clear()
+        _recordado[llave] = leer_todas_las_formulas(ruta)
+    return _recordado[llave]
+
+
+def _errores_recordados(ruta):
+    """Lo mismo, para las celdas con error de la plantilla original."""
+    ruta = Path(ruta)
+    datos = ruta.stat()
+    llave = ("errores", str(ruta.resolve()), datos.st_mtime, datos.st_size)
+    if llave not in _recordado:
+        if len(_recordado) >= _CUANTOS_SE_RECUERDAN:
+            _recordado.clear()
+        _recordado[llave] = celdas_con_error(ruta)
+    return _recordado[llave]
+
+
 def verificar_contra_original(ruta_original, ruta_generada,
                               tras_recalculo=False):
     """Compara el archivo generado con el original y devuelve un informe.
@@ -579,7 +611,7 @@ def verificar_contra_original(ruta_original, ruta_generada,
 
     problemas = []
 
-    formulas_originales = leer_todas_las_formulas(ruta_original)
+    formulas_originales = _formulas_recordadas(ruta_original)
     formulas_generadas = leer_todas_las_formulas(ruta_generada)
 
     hojas_originales = list(formulas_originales)
