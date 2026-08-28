@@ -1,0 +1,449 @@
+"""
+Escritura de valores en la copia de la plantilla del Formulario 210.
+
+Este módulo es el único del programa que escribe dentro de un archivo de
+Excel, y está construido para que sea difícil hacer daño. Las reglas están
+en el código, no en un comentario:
+
+  1. Antes de escribir en una celda se verifica que no tenga fórmula. Si la
+     tiene, se lanza una excepción y no se escribe nada. No hay bandera ni
+     parámetro para saltarse esta verificación.
+  2. Nunca se abre el libro con data_only=True para guardarlo. La única
+     carga que existe aquí es de solo lectura y jamás se guarda: si se
+     guardara, reemplazaría las 902 fórmulas del libro por números y las
+     destruiría para siempre.
+  3. Nunca se escribe sobre el archivo original. Lo primero que se hace es
+     copiarlo a la carpeta de trabajo. El archivo del contador queda igual
+     pase lo que pase.
+  4. Solo se escribe en la hoja «Detalle renglón 210». Cualquier intento de
+     escribir en otra hoja se rechaza.
+  5. Cada escritura queda en una bitácora que se guarda junto al archivo de
+     salida, para que el contador pueda revisar y revertir.
+
+Cómo escribe (y por qué así)
+----------------------------
+Un .xlsx es un ZIP con archivos XML adentro. La forma fácil de escribir
+sería abrir con openpyxl y guardar, pero openpyxl reescribe el archivo
+completo y bota lo que no entiende: en esta plantilla se pierden 22
+imágenes, entre ellas las tres de la hoja Copyright. Es una plantilla
+comercial con licencia de un tercero, así que eso no es aceptable.
+
+Entonces se hace la escritura "quirúrgica": se abre el ZIP, se copian TODAS
+las partes tal cual, byte por byte, y solo se toca el XML de la hoja de
+captura, cambiando únicamente el valor de las celdas pedidas. No se pierde
+nada: ni imágenes, ni notas, ni formatos, ni anchos de columna.
+"""
+
+import json
+import re
+import shutil
+import zipfile
+from datetime import datetime
+from pathlib import Path
+
+from openpyxl import load_workbook
+from openpyxl.utils import coordinate_to_tuple, get_column_letter
+
+from app.documentos import sanitizar_nombre
+from app.plantilla_210 import (
+    COLUMNAS_VALOR,
+    FILA_INICIAL,
+    HOJA_CAPTURA,
+    RAIZ,
+    _mapa_de_combinadas,
+    _ultima_fila_con_contenido,
+    es_formula,
+)
+
+# Carpeta donde viven las copias de trabajo. Está dentro de datos/, que no
+# se sube a git.
+CARPETA_TRABAJO = RAIZ / "datos" / "trabajo"
+
+# Terminación del archivo de bitácora que acompaña a cada salida.
+SUFIJO_BITACORA = ".bitacora.json"
+
+
+class EscrituraBloqueada(Exception):
+    """Se pidió una escritura que las reglas no permiten.
+
+    Es a propósito una excepción propia: el resto del programa la puede
+    atrapar y mostrarle al contador qué se rechazó y por qué, sin
+    confundirla con un error cualquiera de Python.
+    """
+
+
+def _formatear_numero(valor):
+    """Convierte el número a texto tal como Excel lo guarda en el XML.
+
+    Sin separadores de miles, sin símbolo de peso y con punto decimal. El
+    formato con el que se ve en pantalla lo pone el estilo de la celda, que
+    no se toca.
+    """
+    if isinstance(valor, int):
+        return str(valor)
+    if float(valor).is_integer():
+        return str(int(valor))
+    return repr(float(valor))
+
+
+def preparar_copia(ruta_plantilla, nombre_salida=None, carpeta=CARPETA_TRABAJO):
+    """Copia la plantilla a la carpeta de trabajo y devuelve la ruta de la copia.
+
+    Regla 3: el original nunca se toca. Todo lo que sigue pasa sobre esta
+    copia. shutil.copy2 conserva la fecha del archivo.
+    """
+    origen = Path(ruta_plantilla)
+    if not origen.exists():
+        raise FileNotFoundError(f"No se encontró la plantilla: {origen}")
+
+    if nombre_salida is None:
+        nombre_salida = f"{origen.stem}_diligenciado.xlsx"
+    # Sanitizado porque el nombre puede venir del nombre de un cliente, y
+    # en Windows un ':' o un '?' rompen el guardado.
+    nombre_salida = sanitizar_nombre(nombre_salida)
+    if not nombre_salida.lower().endswith(".xlsx"):
+        nombre_salida += ".xlsx"
+
+    carpeta = Path(carpeta)
+    carpeta.mkdir(parents=True, exist_ok=True)
+    destino = carpeta / nombre_salida
+
+    if destino.resolve() == origen.resolve():
+        raise EscrituraBloqueada(
+            "La copia de trabajo apunta al mismo archivo que la plantilla"
+            " original. Se cancela para no escribir sobre el original."
+        )
+
+    shutil.copy2(origen, destino)
+    return destino
+
+
+class EscritorPlantilla:
+    """Escribe valores en la copia de trabajo de una plantilla.
+
+    Se usa así:
+
+        escritor = EscritorPlantilla("plantillas/mi_plantilla.xlsx")
+        escritor.escribir("G32", 1500000, documento="certificado_banco.pdf")
+        escritor.escribir("H104", 0, documento="revisión manual")
+        ruta, bitacora = escritor.guardar()
+
+    Las escrituras se validan en el momento en que se piden, pero el
+    archivo solo se modifica al llamar guardar(). Así, si una sola de ellas
+    está mal, no queda un archivo a medio llenar.
+    """
+
+    def __init__(self, ruta_plantilla, nombre_salida=None,
+                 carpeta_trabajo=CARPETA_TRABAJO):
+        self.ruta_original = Path(ruta_plantilla)
+        self.ruta_copia = preparar_copia(
+            self.ruta_original, nombre_salida, carpeta_trabajo
+        )
+
+        # Esta carga es SOLO para consultar: qué hay en cada celda, cuáles
+        # tienen fórmula, cuáles están combinadas. Nunca se guarda.
+        # Se hace sobre la copia, no sobre el original.
+        self._libro = load_workbook(self.ruta_copia, data_only=False)
+        if HOJA_CAPTURA not in self._libro.sheetnames:
+            raise EscrituraBloqueada(
+                f"La plantilla no tiene la hoja «{HOJA_CAPTURA}»."
+            )
+        self._hoja = self._libro[HOJA_CAPTURA]
+        self._anclas = _mapa_de_combinadas(self._hoja)
+        self._fila_final = _ultima_fila_con_contenido(self._hoja)
+
+        # Cambios pendientes: coordenada -> valor nuevo.
+        self.cambios = {}
+        self.bitacora = []
+        self.guardado = False
+
+    # -- validación ---------------------------------------------------
+
+    def _revisar_hoja(self, hoja):
+        """Regla 4: solo se escribe en la hoja de captura."""
+        if hoja != HOJA_CAPTURA:
+            raise EscrituraBloqueada(
+                f"Escritura rechazada: solo se puede escribir en la hoja"
+                f" «{HOJA_CAPTURA}», y se pidió «{hoja}»."
+            )
+
+    def _revisar_celda(self, celda):
+        """Que la coordenada exista, esté en el rango y en una columna de valores."""
+        try:
+            fila, columna = coordinate_to_tuple(celda)
+        except Exception:
+            raise EscrituraBloqueada(
+                f"Escritura rechazada: «{celda}» no es una celda válida."
+            )
+
+        # get_column_letter y no hoja.cell(...).column_letter: si la celda
+        # es parte de un grupo combinado, openpyxl devuelve un objeto
+        # distinto que no tiene ese atributo y revienta.
+        letra = get_column_letter(columna)
+        if letra not in COLUMNAS_VALOR:
+            raise EscrituraBloqueada(
+                f"Escritura rechazada: {celda} está en la columna {letra}, y"
+                f" solo se escribe en las columnas de valores"
+                f" ({', '.join(COLUMNAS_VALOR)})."
+            )
+        if not (FILA_INICIAL <= fila <= self._fila_final):
+            raise EscrituraBloqueada(
+                f"Escritura rechazada: la fila {fila} está fuera de la tabla"
+                f" (va de la {FILA_INICIAL} a la {self._fila_final})."
+            )
+        return fila, letra
+
+    def _revisar_valor(self, valor):
+        """Solo números.
+
+        En estas columnas van cifras de dinero. Un texto obligaría a tocar
+        la tabla de textos compartidos del archivo, que es justo lo que no
+        se quiere. Y para limpiar una casilla se escribe 0, no vacío: es la
+        convención del propio archivo.
+        """
+        if isinstance(valor, bool) or not isinstance(valor, (int, float)):
+            raise EscrituraBloqueada(
+                f"Escritura rechazada: solo se escriben números, y llegó"
+                f" {type(valor).__name__} ({valor!r})."
+                f" Para limpiar una casilla se escribe 0, no vacío."
+            )
+
+    def _revisar_formula(self, celda):
+        """Regla 1: la verificación que protege el archivo.
+
+        Si la celda tiene una fórmula, se aborta. Sin excepciones y sin
+        forma de saltárselo.
+        """
+        valor = self._hoja[celda].value
+        if es_formula(valor):
+            raise EscrituraBloqueada(
+                f"{HOJA_CAPTURA}!{celda} contiene una fórmula — escritura"
+                f" bloqueada: {valor}"
+            )
+
+    def _revisar_combinada(self, celda):
+        """Una celda combinada solo guarda el valor en su esquina superior izquierda."""
+        ancla = self._anclas.get(celda)
+        if ancla is not None and ancla != celda:
+            raise EscrituraBloqueada(
+                f"Escritura rechazada: {celda} es parte de un grupo de celdas"
+                f" combinadas. El valor iría en {ancla}."
+            )
+
+    # -- escritura ----------------------------------------------------
+
+    def escribir(self, celda, valor, documento, hoja=HOJA_CAPTURA):
+        """Anota una escritura, después de pasar todas las verificaciones.
+
+        'documento' es de dónde salió el dato: el nombre del archivo que lo
+        respalda, o una nota como 'digitado por el contador'. Queda en la
+        bitácora para que después se pueda rastrear.
+        """
+        if self.guardado:
+            raise EscrituraBloqueada(
+                "Este archivo ya se guardó. Para más cambios hay que empezar"
+                " otra escritura."
+            )
+
+        celda = str(celda).upper().strip()
+        self._revisar_hoja(hoja)
+        self._revisar_celda(celda)
+        self._revisar_valor(valor)
+        self._revisar_combinada(celda)
+        self._revisar_formula(celda)
+
+        # El valor anterior es el que hay ahora: el del archivo, o el de una
+        # escritura anterior a la misma celda dentro de esta misma sesión.
+        if celda in self.cambios:
+            anterior = self.cambios[celda]
+        else:
+            anterior = self._hoja[celda].value
+        anterior = "" if anterior is None else anterior
+
+        self.cambios[celda] = valor
+        self.bitacora.append(
+            {
+                "hoja": HOJA_CAPTURA,
+                "celda": celda,
+                "valor_anterior": anterior,
+                "valor_nuevo": valor,
+                "documento": str(documento),
+                "fecha_hora": datetime.now().isoformat(timespec="seconds"),
+            }
+        )
+        return self.bitacora[-1]
+
+    # -- guardado -----------------------------------------------------
+
+    def guardar(self):
+        """Aplica los cambios sobre la copia y escribe la bitácora.
+
+        Devuelve (ruta del archivo, ruta de la bitácora).
+        """
+        if self.guardado:
+            raise EscrituraBloqueada("Este archivo ya se guardó.")
+
+        _aplicar_cambios_al_zip(self.ruta_copia, self.cambios)
+
+        ruta_bitacora = self.ruta_copia.with_suffix(
+            self.ruta_copia.suffix + SUFIJO_BITACORA
+        )
+        contenido = {
+            "plantilla_original": str(self.ruta_original),
+            "archivo_generado": str(self.ruta_copia),
+            "hoja": HOJA_CAPTURA,
+            "generado": datetime.now().isoformat(timespec="seconds"),
+            "cambios": self.bitacora,
+        }
+        # ensure_ascii=False para que las tildes se vean; encoding explícito
+        # para que Windows no lo lea en cp1252.
+        ruta_bitacora.write_text(
+            json.dumps(contenido, indent=2, ensure_ascii=False),
+            encoding="utf-8",
+        )
+
+        self.guardado = True
+        return self.ruta_copia, ruta_bitacora
+
+
+# ---------------------------------------------------------------------------
+# La parte quirúrgica: tocar el XML de una sola hoja dentro del ZIP.
+# ---------------------------------------------------------------------------
+
+
+def _parte_de_la_hoja(zip_entrada, nombre_hoja):
+    """Encuentra cuál archivo XML de adentro del ZIP es la hoja que se busca.
+
+    El nombre de la hoja está en xl/workbook.xml, pero el archivo real
+    (xl/worksheets/sheetN.xml) se averigua siguiendo la relación r:id. No se
+    puede adivinar por el número: la quinta hoja no siempre es sheet5.xml.
+    """
+    workbook = zip_entrada.read("xl/workbook.xml").decode("utf-8")
+    relaciones = zip_entrada.read("xl/_rels/workbook.xml.rels").decode("utf-8")
+
+    destinos = dict(
+        re.findall(r'Id="(rId\d+)"[^>]*?Target="([^"]+)"', relaciones)
+    )
+    for nombre, rid in re.findall(
+        r'<sheet[^>]*name="([^"]+)"[^>]*r:id="(rId\d+)"', workbook
+    ):
+        if nombre == nombre_hoja:
+            destino = destinos.get(rid, "")
+            if not destino:
+                break
+            destino = destino.lstrip("/")
+            if not destino.startswith("xl/"):
+                destino = "xl/" + destino
+            return destino
+
+    raise EscrituraBloqueada(
+        f"No se encontró la hoja «{nombre_hoja}» dentro del archivo de Excel."
+    )
+
+
+def _reemplazar_valor(xml, celda, valor):
+    """Cambia el valor de UNA celda dentro del XML de la hoja.
+
+    Las celdas vienen en tres formas y hay que manejar las tres:
+
+        <c r="G32" s="499" t="n"><v>0</v></c>   celda con número
+        <c r="G31" s="497"/>                     celda vacía
+        <c r="G30" s="497" t="s"><v>12</v></c>   celda con texto
+
+    De la celda se conserva el estilo (s="...") tal cual, que es el formato
+    de número, los bordes y el color. Solo cambia el contenido.
+    """
+    patron = re.compile(
+        r'<c r="%s"(?P<atributos>[^>]*?)(?:/>|>(?P<cuerpo>.*?)</c>)' % re.escape(celda),
+        re.DOTALL,
+    )
+    encontrada = patron.search(xml)
+    if encontrada is None:
+        raise EscrituraBloqueada(
+            f"La celda {celda} no existe en la hoja. No se inventa: se aborta."
+        )
+
+    cuerpo = encontrada.group("cuerpo") or ""
+    # Segundo cerrojo de la regla 1, ahora sobre el XML crudo. El primero
+    # fue con openpyxl. Si por lo que sea se cuela una fórmula hasta aquí,
+    # se detiene igual.
+    if "<f" in cuerpo:
+        raise EscrituraBloqueada(
+            f"{celda} contiene una fórmula en el archivo — escritura bloqueada."
+        )
+
+    # Conservar el estilo; quitar el tipo viejo y poner t="n" (número).
+    atributos = encontrada.group("atributos")
+    estilo = re.search(r'\ss="\d+"', atributos)
+    nuevos_atributos = estilo.group(0) if estilo else ""
+
+    reemplazo = '<c r="%s"%s t="n"><v>%s</v></c>' % (
+        celda, nuevos_atributos, _formatear_numero(valor),
+    )
+    return xml[: encontrada.start()] + reemplazo + xml[encontrada.end():]
+
+
+def _marcar_para_recalcular(workbook_xml):
+    """Le pide a Excel que recalcule todo al abrir el archivo.
+
+    Hace falta porque al cambiar una celda de captura, los resultados que
+    quedaron guardados en las celdas de fórmula son de antes del cambio.
+    Sin esta marca, el contador podría abrir el archivo y ver totales
+    viejos. Es un ajuste de cálculo, no un cambio de contenido: no toca
+    ninguna fórmula ni ningún dato.
+    """
+    if "fullCalcOnLoad" in workbook_xml:
+        return workbook_xml
+    if "<calcPr" in workbook_xml:
+        return re.sub(
+            r"<calcPr\b", '<calcPr fullCalcOnLoad="true"', workbook_xml, count=1
+        )
+    return workbook_xml.replace(
+        "</workbook>", '<calcPr fullCalcOnLoad="true"/></workbook>'
+    )
+
+
+def _aplicar_cambios_al_zip(ruta_xlsx, cambios):
+    """Reescribe el .xlsx copiando todo igual, menos las celdas pedidas.
+
+    Se arma un archivo nuevo al lado y solo al final se reemplaza el
+    anterior. Si algo falla a mitad de camino, el archivo de trabajo queda
+    como estaba y no queda un .xlsx corrupto.
+    """
+    ruta_xlsx = Path(ruta_xlsx)
+    ruta_temporal = ruta_xlsx.with_suffix(ruta_xlsx.suffix + ".enproceso")
+
+    with zipfile.ZipFile(ruta_xlsx, "r") as entrada:
+        parte_hoja = _parte_de_la_hoja(entrada, HOJA_CAPTURA)
+
+        xml_hoja = entrada.read(parte_hoja).decode("utf-8")
+        for celda, valor in cambios.items():
+            xml_hoja = _reemplazar_valor(xml_hoja, celda, valor)
+
+        xml_workbook = entrada.read("xl/workbook.xml").decode("utf-8")
+        if cambios:
+            xml_workbook = _marcar_para_recalcular(xml_workbook)
+
+        nuevos = {
+            parte_hoja: xml_hoja.encode("utf-8"),
+            "xl/workbook.xml": xml_workbook.encode("utf-8"),
+        }
+
+        with zipfile.ZipFile(ruta_temporal, "w", zipfile.ZIP_DEFLATED) as salida:
+            for info in entrada.infolist():
+                if info.filename in nuevos:
+                    # Se conserva la fecha original de la parte; lo único
+                    # que cambia es el contenido.
+                    nueva_info = zipfile.ZipInfo(
+                        info.filename, date_time=info.date_time
+                    )
+                    nueva_info.compress_type = info.compress_type
+                    nueva_info.external_attr = info.external_attr
+                    salida.writestr(nueva_info, nuevos[info.filename])
+                else:
+                    # Todo lo demás pasa tal cual: imágenes, notas, estilos,
+                    # las otras 14 hojas. No se abren ni se interpretan.
+                    salida.writestr(info, entrada.read(info.filename))
+
+    ruta_temporal.replace(ruta_xlsx)
+    return ruta_xlsx
