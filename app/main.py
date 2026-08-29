@@ -5,27 +5,28 @@ Corre en http://localhost:8000 y sirve dos cosas:
   - las páginas de la interfaz (carpeta static/)
   - una pequeña API para leer y guardar clientes y sus documentos
 
+El servidor por dentro está en app/servidor.py, hecho solo con lo que
+Python ya trae. Antes esto lo hacía FastAPI; se sacó porque arrastraba un
+archivo compilado sin firmar (pydantic_core) que el Control inteligente de
+aplicaciones de Windows 11 BLOQUEA, y el programa no arrancaba en el
+computador de destino. Las direcciones, los códigos y el JSON quedaron
+exactamente iguales: la pantalla no se enteró del cambio.
+
 Nota: no se registra en los logs ningún nombre de cliente ni contenido de
 documentos. Solo errores técnicos.
 """
 
 import mimetypes
-from contextlib import asynccontextmanager
 from datetime import date
 from pathlib import Path
-from typing import List, Optional
 from urllib.parse import quote
-
-from fastapi import FastAPI, File, HTTPException, UploadFile
-from fastapi.responses import FileResponse, PlainTextResponse
-from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel, field_validator
 
 from app import (
     checklist, configuracion, db, documentos, exportar, formulario, importar,
     lectura, rentai,
 )
 from app.escribir_210 import EscrituraBloqueada, VerificacionFallida
+from app.servidor import Aplicacion, ErrorHttp, Respuesta
 
 # Raíz del proyecto. Este archivo vive en app/, así que subimos un nivel.
 # Se usa pathlib (y no texto pegado con / o \) para que las rutas funcionen
@@ -33,18 +34,10 @@ from app.escribir_210 import EscrituraBloqueada, VerificacionFallida
 RAIZ = Path(__file__).resolve().parent.parent
 CARPETA_STATIC = RAIZ / "static"
 
-
-@asynccontextmanager
-async def ciclo_de_vida(app: FastAPI):
-    """Lo que pasa al prender y al apagar el servidor."""
-    db.crear_tablas()   # prepara la base de datos si es la primera vez
-    yield
-
-
-app = FastAPI(title="Tax-i", lifespan=ciclo_de_vida)
+app = Aplicacion()
 
 # Deja disponibles el CSS y el JavaScript en /static/...
-app.mount("/static", StaticFiles(directory=CARPETA_STATIC), name="static")
+app.carpeta_estatica("/static/", CARPETA_STATIC)
 
 
 # ----------------------------------------------------------
@@ -52,32 +45,37 @@ app.mount("/static", StaticFiles(directory=CARPETA_STATIC), name="static")
 # ----------------------------------------------------------
 
 
+def _pagina(nombre):
+    """Entrega uno de los archivos HTML de la carpeta static."""
+    return Respuesta.archivo(CARPETA_STATIC / nombre, tipo="text/html; charset=utf-8")
+
+
 @app.get("/")
-def inicio():
+def inicio(peticion):
     """Entrega la página principal: la lista de clientes."""
-    return FileResponse(CARPETA_STATIC / "index.html")
+    return _pagina("index.html")
 
 
 @app.get("/cliente")
-def pagina_cliente():
+def pagina_cliente(peticion):
     """Entrega la página de un cliente. El id va en la dirección: /cliente?id=3"""
-    return FileResponse(CARPETA_STATIC / "cliente.html")
+    return _pagina("cliente.html")
 
 
 @app.get("/resumen")
-def pagina_resumen():
+def pagina_resumen(peticion):
     """Entrega el resumen para imprimir. El id va en la dirección: /resumen?id=3"""
-    return FileResponse(CARPETA_STATIC / "resumen.html")
+    return _pagina("resumen.html")
 
 
 @app.get("/cuenta")
-def pagina_cuenta():
+def pagina_cuenta(peticion):
     """Entrega la pantalla de la cuenta y los ajustes."""
-    return FileResponse(CARPETA_STATIC / "cuenta.html")
+    return _pagina("cuenta.html")
 
 
 @app.get("/api/configuracion")
-def api_configuracion():
+def api_configuracion(peticion):
     """Cómo está configurado el programa ahora mismo.
 
     La pantalla lo usa para mostrarle al contador si la IA está apagada.
@@ -90,14 +88,22 @@ def api_configuracion():
 # Validación de los datos que llegan del navegador
 #
 # Todo lo que manda el navegador se revisa aquí antes de tocar la base.
+#
+# Antes esto lo hacían unas clases de pydantic. Ahora son funciones
+# sueltas, que hacen lo mismo y se leen igual de fácil: mirar el valor,
+# y si está mal, levantar un error con el texto que va a ver el contador.
 # ----------------------------------------------------------
+
+# Marca de "este campo no lo mandaron", distinta de "lo mandaron vacío".
+# Sirve para saber si hay que borrar un dato o dejarlo como estaba.
+NO_MANDADO = ...
 
 
 def limpiar_nombre(valor):
     """Quita espacios sobrantes y verifica que quede algo."""
     if valor is None:
         return None
-    limpio = " ".join(valor.split())
+    limpio = " ".join(str(valor).split())
     if not limpio:
         raise ValueError("El nombre no puede estar vacío.")
     if len(limpio) > 120:
@@ -109,7 +115,7 @@ def limpiar_digitos(valor):
     """Verifica que sean dos dígitos. Acepta '5' y lo convierte en '05'."""
     if valor is None:
         return None
-    limpio = valor.strip()
+    limpio = str(valor).strip()
     if not limpio.isdigit() or len(limpio) > 2:
         raise ValueError(
             "Deben ser los dos últimos dígitos de la cédula, por ejemplo 07."
@@ -121,7 +127,7 @@ def limpiar_fecha(valor):
     """Acepta una fecha AAAA-MM-DD, o vacío si todavía no se sabe."""
     if valor is None:
         return None
-    limpio = valor.strip()
+    limpio = str(valor).strip()
     if not limpio:
         return None
     try:
@@ -131,50 +137,47 @@ def limpiar_fecha(valor):
     return limpio
 
 
-class ClienteNuevo(BaseModel):
-    nombre: str
-    dos_digitos: str
-    fecha_vencimiento: Optional[str] = None
-    notas: Optional[str] = None
+def revisado(funcion, valor):
+    """Aplica una de las funciones de arriba y convierte su queja en un 400.
 
-    @field_validator("nombre")
-    @classmethod
-    def _revisar_nombre(cls, valor):
-        return limpiar_nombre(valor)
-
-    @field_validator("dos_digitos")
-    @classmethod
-    def _revisar_digitos(cls, valor):
-        return limpiar_digitos(valor)
-
-    @field_validator("fecha_vencimiento")
-    @classmethod
-    def _revisar_fecha(cls, valor):
-        return limpiar_fecha(valor)
+    Los textos de ValueError están escritos para que los lea el contador,
+    así que se le pasan tal cual a la pantalla.
+    """
+    try:
+        return funcion(valor)
+    except ValueError as error:
+        raise ErrorHttp(400, str(error))
 
 
-class ClienteCambios(BaseModel):
-    """Todos los campos son opcionales: se cambia solo lo que se manda."""
+def campo(datos, nombre, por_defecto=None):
+    """Saca un campo del JSON que mandó el navegador."""
+    return datos.get(nombre, por_defecto)
 
-    nombre: Optional[str] = None
-    dos_digitos: Optional[str] = None
-    fecha_vencimiento: Optional[str] = None
-    notas: Optional[str] = None
 
-    @field_validator("nombre")
-    @classmethod
-    def _revisar_nombre(cls, valor):
-        return limpiar_nombre(valor)
+def campo_texto(datos, nombre, por_defecto=""):
+    """Saca un campo y comprueba que sea texto."""
+    valor = datos.get(nombre, por_defecto)
+    if valor is None:
+        return por_defecto
+    if not isinstance(valor, str):
+        raise ErrorHttp(400, "El campo '%s' tiene que ser texto." % nombre)
+    return valor
 
-    @field_validator("dos_digitos")
-    @classmethod
-    def _revisar_digitos(cls, valor):
-        return limpiar_digitos(valor)
 
-    @field_validator("fecha_vencimiento")
-    @classmethod
-    def _revisar_fecha(cls, valor):
-        return limpiar_fecha(valor)
+def campo_numero(datos, nombre):
+    """Saca un campo y comprueba que sea un número."""
+    valor = datos.get(nombre)
+    if isinstance(valor, bool) or not isinstance(valor, (int, float)):
+        raise ErrorHttp(400, "El campo '%s' tiene que ser un número." % nombre)
+    return float(valor)
+
+
+def campo_si_o_no(datos, nombre):
+    """Saca un campo y comprueba que sea sí o no."""
+    valor = datos.get(nombre)
+    if not isinstance(valor, bool):
+        raise ErrorHttp(400, "El campo '%s' tiene que ser sí o no." % nombre)
+    return valor
 
 
 # ----------------------------------------------------------
@@ -183,7 +186,7 @@ class ClienteCambios(BaseModel):
 
 
 @app.get("/api/clientes")
-def api_listar_clientes():
+def api_listar_clientes(peticion):
     """Lista los clientes, agregándole a cada uno cuántos documentos tiene."""
     clientes = db.listar_clientes()
     conteos = db.contar_documentos()
@@ -197,20 +200,26 @@ def api_listar_clientes():
 
 
 @app.get("/api/clientes/{id_cliente}")
-def api_obtener_cliente(id_cliente: int):
+def api_obtener_cliente(peticion, id_cliente):
     cliente = db.obtener_cliente(id_cliente)
     if cliente is None:
-        raise HTTPException(status_code=404, detail="Ese cliente no existe.")
+        raise ErrorHttp(404, "Ese cliente no existe.")
     return cliente
 
 
-@app.post("/api/clientes", status_code=201)
-def api_crear_cliente(datos: ClienteNuevo):
+@app.post("/api/clientes", codigo=201)
+def api_crear_cliente(peticion, **partes):
+    datos = peticion.diccionario()
+
+    nombre = revisado(limpiar_nombre, campo_texto(datos, "nombre"))
+    dos_digitos = revisado(limpiar_digitos, campo_texto(datos, "dos_digitos"))
+    fecha = revisado(limpiar_fecha, campo(datos, "fecha_vencimiento"))
+
     cliente = db.crear_cliente(
-        nombre=datos.nombre,
-        dos_digitos=datos.dos_digitos,
-        fecha_vencimiento=datos.fecha_vencimiento,
-        notas=datos.notas,
+        nombre=nombre,
+        dos_digitos=dos_digitos,
+        fecha_vencimiento=fecha,
+        notas=campo(datos, "notas"),
     )
     # Se le arma el checklist sugerido para que no arranque en blanco.
     # Es un punto de partida: el contador lo ajusta como necesite.
@@ -219,28 +228,36 @@ def api_crear_cliente(datos: ClienteNuevo):
 
 
 @app.patch("/api/clientes/{id_cliente}")
-def api_actualizar_cliente(id_cliente: int, cambios: ClienteCambios):
+def api_actualizar_cliente(peticion, id_cliente):
     if db.obtener_cliente(id_cliente) is None:
-        raise HTTPException(status_code=404, detail="Ese cliente no existe.")
+        raise ErrorHttp(404, "Ese cliente no existe.")
 
-    # Se distingue "no mandaron el campo" de "lo mandaron vacío para borrarlo".
-    enviados = cambios.model_dump(exclude_unset=True)
-    fecha = enviados["fecha_vencimiento"] if "fecha_vencimiento" in enviados else ...
-    notas = enviados["notas"] if "notas" in enviados else ...
+    datos = peticion.diccionario()
+
+    # Se distingue "no mandaron el campo" de "lo mandaron vacío para
+    # borrarlo". Por eso se mira si la llave está en el JSON, no si su
+    # valor es nulo.
+    nombre = (revisado(limpiar_nombre, datos["nombre"])
+              if "nombre" in datos else None)
+    dos_digitos = (revisado(limpiar_digitos, datos["dos_digitos"])
+                   if "dos_digitos" in datos else None)
+    fecha = (revisado(limpiar_fecha, datos["fecha_vencimiento"])
+             if "fecha_vencimiento" in datos else NO_MANDADO)
+    notas = datos["notas"] if "notas" in datos else NO_MANDADO
 
     return db.actualizar_cliente(
         id_cliente,
-        nombre=cambios.nombre,
-        dos_digitos=cambios.dos_digitos,
+        nombre=nombre,
+        dos_digitos=dos_digitos,
         fecha_vencimiento=fecha,
         notas=notas,
     )
 
 
-@app.delete("/api/clientes/{id_cliente}", status_code=204)
-def api_eliminar_cliente(id_cliente: int):
+@app.delete("/api/clientes/{id_cliente}")
+def api_eliminar_cliente(peticion, id_cliente):
     if not db.eliminar_cliente(id_cliente):
-        raise HTTPException(status_code=404, detail="Ese cliente no existe.")
+        raise ErrorHttp(404, "Ese cliente no existe.")
     # Los documentos de la base se van solos (ON DELETE CASCADE), pero los
     # archivos del disco hay que borrarlos a mano. Son datos confidenciales:
     # no se pueden quedar ahí después de eliminar al cliente.
@@ -281,9 +298,9 @@ def guardar_y_registrar(id_cliente, nombre_original, contenido,
 
 
 @app.get("/api/clientes/{id_cliente}/documentos")
-def api_listar_documentos(id_cliente: int):
+def api_listar_documentos(peticion, id_cliente):
     if db.obtener_cliente(id_cliente) is None:
-        raise HTTPException(status_code=404, detail="Ese cliente no existe.")
+        raise ErrorHttp(404, "Ese cliente no existe.")
 
     renglones = db.listar_checklist(id_cliente)
     salida = []
@@ -307,10 +324,7 @@ def api_listar_documentos(id_cliente: int):
 
 
 @app.post("/api/clientes/{id_cliente}/documentos")
-async def api_subir_documentos(
-    id_cliente: int,
-    archivos: List[UploadFile] = File(...),
-):
+def api_subir_documentos(peticion, id_cliente):
     """Recibe uno o varios archivos y los guarda en la carpeta del cliente.
 
     Los ZIP se abren y se guarda lo que traen adentro, no el ZIP.
@@ -318,13 +332,13 @@ async def api_subir_documentos(
     motivo, para poder mostrárselo al contador en vez de fallar en silencio.
     """
     if db.obtener_cliente(id_cliente) is None:
-        raise HTTPException(status_code=404, detail="Ese cliente no existe.")
+        raise ErrorHttp(404, "Ese cliente no existe.")
 
     guardados = []
     ignorados = []
 
-    for archivo in archivos:
-        nombre_completo = archivo.filename or "documento"
+    for nombre_completo, contenido in peticion.archivos("archivos"):
+        nombre_completo = nombre_completo or "documento"
 
         # Basura del sistema: se salta sin avisar, no es un documento.
         if documentos.es_basura(nombre_completo):
@@ -337,10 +351,8 @@ async def api_subir_documentos(
 
         # --- Caso ZIP: se abre y se guarda lo de adentro ---
         if extension == ".zip":
-            contenido = await documentos.leer_con_limite(
-                archivo, documentos.LIMITE_ZIP
-            )
-            if contenido is None:
+            if documentos.dentro_del_limite(contenido,
+                                            documentos.LIMITE_ZIP) is None:
                 ignorados.append(nombre + " — el ZIP pesa más de 100 MB.")
                 continue
 
@@ -371,10 +383,8 @@ async def api_subir_documentos(
             ignorados.append(nombre + " — tipo de archivo no admitido.")
             continue
 
-        contenido = await documentos.leer_con_limite(
-            archivo, documentos.LIMITE_ARCHIVO
-        )
-        if contenido is None:
+        if documentos.dentro_del_limite(contenido,
+                                        documentos.LIMITE_ARCHIVO) is None:
             ignorados.append(nombre + " — pesa más de 25 MB.")
             continue
         if not contenido:
@@ -400,40 +410,36 @@ async def api_subir_documentos(
 
 
 @app.get("/api/documentos/{id_documento}/archivo")
-def api_abrir_documento(id_documento: int):
+def api_abrir_documento(peticion, id_documento):
     """Entrega el archivo original para verlo en el navegador."""
     documento = db.obtener_documento(id_documento)
     if documento is None:
-        raise HTTPException(status_code=404, detail="Ese documento no existe.")
+        raise ErrorHttp(404, "Ese documento no existe.")
 
     ruta = documentos.ruta_del_documento(
         documento["cliente_id"], documento["nombre_guardado"]
     )
     if ruta is None or not ruta.is_file():
-        raise HTTPException(
-            status_code=404,
-            detail="El archivo ya no está en el disco.",
-        )
+        raise ErrorHttp(404, "El archivo ya no está en el disco.")
 
     tipo, _ = mimetypes.guess_type(documento["nombre_guardado"])
 
-    # "inline" pide que el navegador lo muestre en vez de descargarlo.
-    # El nombre va codificado (filename*=UTF-8) para que las tildes y las
-    # eñes no se dañen.
-    disposicion = "inline; filename*=UTF-8''" + quote(documento["nombre_original"])
-
-    return FileResponse(
+    # Se manda "inline" para que el navegador lo muestre en vez de
+    # descargarlo, y el nombre codificado para que las tildes y las eñes
+    # no se dañen. De eso se encarga Respuesta.archivo.
+    return Respuesta.archivo(
         ruta,
-        media_type=tipo or "application/octet-stream",
-        headers={"Content-Disposition": disposicion},
+        tipo=tipo or "application/octet-stream",
+        nombre_visible=documento["nombre_original"],
+        descargar=False,
     )
 
 
-@app.delete("/api/documentos/{id_documento}", status_code=204)
-def api_eliminar_documento(id_documento: int):
+@app.delete("/api/documentos/{id_documento}")
+def api_eliminar_documento(peticion, id_documento):
     documento = db.obtener_documento(id_documento)
     if documento is None:
-        raise HTTPException(status_code=404, detail="Ese documento no existe.")
+        raise ErrorHttp(404, "Ese documento no existe.")
 
     # Primero el archivo del disco, después el registro de la base.
     ruta = documentos.ruta_del_documento(
@@ -456,33 +462,17 @@ def api_eliminar_documento(id_documento: int):
 # ----------------------------------------------------------
 
 
-class ClienteImportado(BaseModel):
-    """Una fila ya revisada por el contador, lista para crearse.
-
-    Aquí no se ponen validadores de pydantic a propósito: si una fila
-    viene mal, se quiere avisar cuál fila fue y seguir con las demás,
-    no rechazar el archivo entero.
-    """
-
-    nombre: str = ""
-    dos_digitos: str = ""
-    fecha_vencimiento: Optional[str] = None
-    notas: Optional[str] = None
-
-
 @app.post("/api/importar/analizar")
-async def api_analizar_importacion(archivo: UploadFile = File(...)):
+def api_analizar_importacion(peticion, **partes):
     """Lee el archivo y devuelve los clientes propuestos, sin guardar nada."""
-    nombre = archivo.filename or "archivo"
+    nombre, contenido = peticion.archivos("archivo")[0]
+    nombre = nombre or "archivo"
 
-    contenido = await documentos.leer_con_limite(archivo, importar.LIMITE_ARCHIVO)
-    if contenido is None:
-        raise HTTPException(
-            status_code=400,
-            detail="El archivo pesa más de 10 MB.",
-        )
+    if documentos.dentro_del_limite(contenido,
+                                    importar.LIMITE_ARCHIVO) is None:
+        raise ErrorHttp(400, "El archivo pesa más de 10 MB.")
     if not contenido:
-        raise HTTPException(status_code=400, detail="El archivo está vacío.")
+        raise ErrorHttp(400, "El archivo está vacío.")
 
     # Los nombres que ya existen, para poder avisar de los repetidos.
     existentes = {
@@ -495,40 +485,39 @@ async def api_analizar_importacion(archivo: UploadFile = File(...)):
     except ValueError as error:
         # Los mensajes de ValueError están escritos para que los lea el
         # contador, así que se le pasan tal cual.
-        raise HTTPException(status_code=400, detail=str(error))
+        raise ErrorHttp(400, str(error))
 
 
 @app.post("/api/importar/confirmar")
-def api_confirmar_importacion(clientes: List[ClienteImportado]):
+def api_confirmar_importacion(peticion, **partes):
     """Crea los clientes que el contador ya revisó.
 
     Cada fila se valida por separado: si una tiene un problema, se anota
     y se sigue con las demás en vez de perder todo el trabajo.
     """
+    clientes = peticion.lista()
+
     if not clientes:
-        raise HTTPException(
-            status_code=400,
-            detail="No se seleccionó ningún cliente para crear.",
-        )
+        raise ErrorHttp(400, "No se seleccionó ningún cliente para crear.")
     if len(clientes) > importar.LIMITE_FILAS:
-        raise HTTPException(
-            status_code=400,
-            detail="Son demasiados clientes de una sola vez.",
-        )
+        raise ErrorHttp(400, "Son demasiados clientes de una sola vez.")
 
     creados = []
     errores = []
 
     for numero, fila in enumerate(clientes, start=1):
+        if not isinstance(fila, dict):
+            errores.append("Fila " + str(numero) + ": llegó mal armada.")
+            continue
         try:
-            nombre = limpiar_nombre(fila.nombre)
-            dos_digitos = limpiar_digitos(fila.dos_digitos)
-            fecha = limpiar_fecha(fila.fecha_vencimiento)
+            nombre = limpiar_nombre(fila.get("nombre", ""))
+            dos_digitos = limpiar_digitos(fila.get("dos_digitos", ""))
+            fecha = limpiar_fecha(fila.get("fecha_vencimiento"))
         except ValueError as error:
             errores.append("Fila " + str(numero) + ": " + str(error))
             continue
 
-        notas = (fila.notas or "").strip() or None
+        notas = (fila.get("notas") or "").strip() or None
         cliente = db.crear_cliente(
             nombre=nombre,
             dos_digitos=dos_digitos,
@@ -549,21 +538,10 @@ def api_confirmar_importacion(clientes: List[ClienteImportado]):
 # ----------------------------------------------------------
 
 
-class RenglonNuevo(BaseModel):
-    titulo: str
-
-
-class RenglonCambios(BaseModel):
-    """Todos los campos son opcionales: se cambia solo lo que se manda."""
-
-    titulo: Optional[str] = None
-    estado: Optional[str] = None
-
-
 @app.get("/api/clientes/{id_cliente}/checklist")
-def api_listar_checklist(id_cliente: int):
+def api_listar_checklist(peticion, id_cliente):
     if db.obtener_cliente(id_cliente) is None:
-        raise HTTPException(status_code=404, detail="Ese cliente no existe.")
+        raise ErrorHttp(404, "Ese cliente no existe.")
     renglones = db.listar_checklist(id_cliente)
     conteos = db.contar_documentos_por_renglon(id_cliente)
     for renglon in renglones:
@@ -571,19 +549,17 @@ def api_listar_checklist(id_cliente: int):
     return renglones
 
 
-@app.post("/api/clientes/{id_cliente}/checklist", status_code=201)
-def api_agregar_renglon(id_cliente: int, datos: RenglonNuevo):
+@app.post("/api/clientes/{id_cliente}/checklist", codigo=201)
+def api_agregar_renglon(peticion, id_cliente):
     if db.obtener_cliente(id_cliente) is None:
-        raise HTTPException(status_code=404, detail="Ese cliente no existe.")
-    try:
-        titulo = checklist.limpiar_titulo(datos.titulo)
-    except ValueError as error:
-        raise HTTPException(status_code=400, detail=str(error))
+        raise ErrorHttp(404, "Ese cliente no existe.")
+    datos = peticion.diccionario()
+    titulo = revisado(checklist.limpiar_titulo, campo_texto(datos, "titulo"))
     return db.crear_renglon(id_cliente, titulo)
 
 
-@app.post("/api/clientes/{id_cliente}/checklist/base", status_code=201)
-def api_agregar_lista_base(id_cliente: int):
+@app.post("/api/clientes/{id_cliente}/checklist/base", codigo=201)
+def api_agregar_lista_base(peticion, id_cliente):
     """Agrega la lista sugerida al checklist del cliente.
 
     Sirve para los clientes que quedaron sin checklist (los creados con
@@ -591,32 +567,30 @@ def api_agregar_lista_base(id_cliente: int):
     y quiere volver a empezar.
     """
     if db.obtener_cliente(id_cliente) is None:
-        raise HTTPException(status_code=404, detail="Ese cliente no existe.")
+        raise ErrorHttp(404, "Ese cliente no existe.")
     return db.crear_renglones(id_cliente, checklist.LISTA_BASE)
 
 
 @app.patch("/api/checklist/{id_renglon}")
-def api_actualizar_renglon(id_renglon: int, cambios: RenglonCambios):
+def api_actualizar_renglon(peticion, id_renglon):
     if db.obtener_renglon(id_renglon) is None:
-        raise HTTPException(status_code=404, detail="Ese renglón no existe.")
+        raise ErrorHttp(404, "Ese renglón no existe.")
 
+    datos = peticion.diccionario()
     titulo = None
     estado = None
-    try:
-        if cambios.titulo is not None:
-            titulo = checklist.limpiar_titulo(cambios.titulo)
-        if cambios.estado is not None:
-            estado = checklist.limpiar_estado(cambios.estado)
-    except ValueError as error:
-        raise HTTPException(status_code=400, detail=str(error))
+    if datos.get("titulo") is not None:
+        titulo = revisado(checklist.limpiar_titulo, datos["titulo"])
+    if datos.get("estado") is not None:
+        estado = revisado(checklist.limpiar_estado, datos["estado"])
 
     return db.actualizar_renglon(id_renglon, titulo=titulo, estado=estado)
 
 
-@app.delete("/api/checklist/{id_renglon}", status_code=204)
-def api_eliminar_renglon(id_renglon: int):
+@app.delete("/api/checklist/{id_renglon}")
+def api_eliminar_renglon(peticion, id_renglon):
     if db.obtener_renglon(id_renglon) is None:
-        raise HTTPException(status_code=404, detail="Ese renglón no existe.")
+        raise ErrorHttp(404, "Ese renglón no existe.")
     # Los documentos que estaban asignados a este renglón NO se borran:
     # quedan sueltos para que el contador los reasigne.
     db.desasignar_renglon(id_renglon)
@@ -632,7 +606,7 @@ def datos_del_resumen(id_cliente):
     """Junta todo lo que hace falta para armar el resumen de un cliente."""
     cliente = db.obtener_cliente(id_cliente)
     if cliente is None:
-        raise HTTPException(status_code=404, detail="Ese cliente no existe.")
+        raise ErrorHttp(404, "Ese cliente no existe.")
 
     renglones = db.listar_checklist(id_cliente)
     archivos = [con_tipo(d) for d in db.listar_documentos(id_cliente)]
@@ -640,14 +614,14 @@ def datos_del_resumen(id_cliente):
 
 
 @app.get("/api/clientes/{id_cliente}/resumen")
-def api_resumen(id_cliente: int):
+def api_resumen(peticion, id_cliente):
     """El resumen del cliente, como datos, para dibujarlo en pantalla."""
     cliente, renglones, archivos = datos_del_resumen(id_cliente)
     return exportar.armar_resumen(cliente, renglones, archivos)
 
 
 @app.get("/api/clientes/{id_cliente}/resumen.txt")
-def api_resumen_txt(id_cliente: int):
+def api_resumen_txt(peticion, id_cliente):
     """El mismo resumen como archivo de texto, para guardarlo o archivarlo."""
     cliente, renglones, archivos = datos_del_resumen(id_cliente)
     resumen = exportar.armar_resumen(cliente, renglones, archivos)
@@ -657,17 +631,19 @@ def api_resumen_txt(id_cliente: int):
     # terminar guardado en el disco de alguien (probablemente en Windows).
     nombre = documentos.sanitizar_nombre("Resumen - " + cliente["nombre"] + ".txt")
 
-    return PlainTextResponse(
+    # El nombre va codificado (filename*=UTF-8) para que las tildes y las
+    # eñes lleguen bien al disco de quien lo descargue.
+    return Respuesta.texto(
         texto,
-        media_type="text/plain; charset=utf-8",
-        headers={
-            "Content-Disposition": "attachment; filename*=UTF-8''" + quote(nombre)
+        cabeceras={
+            "Content-Disposition":
+                "attachment; filename*=UTF-8''" + quote(nombre)
         },
     )
 
 
 @app.get("/api/clientes/{id_cliente}/mensaje")
-def api_mensaje(id_cliente: int):
+def api_mensaje(peticion, id_cliente):
     """El borrador del mensaje de 'esto es lo que me falta'.
 
     Es un borrador a propósito: la pantalla lo muestra en un campo
@@ -675,7 +651,7 @@ def api_mensaje(id_cliente: int):
     """
     cliente = db.obtener_cliente(id_cliente)
     if cliente is None:
-        raise HTTPException(status_code=404, detail="Ese cliente no existe.")
+        raise ErrorHttp(404, "Ese cliente no existe.")
 
     renglones = db.listar_checklist(id_cliente)
     return {"texto": exportar.mensaje_de_faltantes(cliente, renglones)}
@@ -690,29 +666,24 @@ def api_mensaje(id_cliente: int):
 # ----------------------------------------------------------
 
 
-class DocumentoCambios(BaseModel):
-    # Se usa el truco de `...` para distinguir "no me mandaron el campo"
-    # de "me mandaron null para soltar el documento".
-    renglon_id: Optional[int] = None
-
-
 @app.patch("/api/documentos/{id_documento}")
-def api_asignar_documento(id_documento: int, cambios: DocumentoCambios):
+def api_asignar_documento(peticion, id_documento):
     documento = db.obtener_documento(id_documento)
     if documento is None:
-        raise HTTPException(status_code=404, detail="Ese documento no existe.")
+        raise ErrorHttp(404, "Ese documento no existe.")
 
-    renglon_id = cambios.renglon_id
+    datos = peticion.diccionario()
+    renglon_id = datos.get("renglon_id")
 
     if renglon_id is not None:
+        if not isinstance(renglon_id, int) or isinstance(renglon_id, bool):
+            raise ErrorHttp(400, "El renglón tiene que ser un número.")
+
         renglon = db.obtener_renglon(renglon_id)
         if renglon is None:
-            raise HTTPException(status_code=404, detail="Ese renglón no existe.")
+            raise ErrorHttp(404, "Ese renglón no existe.")
         if renglon["cliente_id"] != documento["cliente_id"]:
-            raise HTTPException(
-                status_code=400,
-                detail="Ese renglón es de otro cliente.",
-            )
+            raise ErrorHttp(400, "Ese renglón es de otro cliente.")
         # Asignar un documento a un renglón es decir "esto ya llegó",
         # así que el renglón se marca recibido solo.
         db.actualizar_renglon(renglon_id, estado=checklist.RECIBIDO)
@@ -735,7 +706,7 @@ LETRAS_EN_VISTA = 20000
 
 
 @app.get("/api/documentos/{id_documento}/vista")
-def api_vista_documento(id_documento: int):
+def api_vista_documento(peticion, id_documento):
     """Prepara lo que hace falta para mostrar el documento en pantalla.
 
     Los PDF y las imágenes los sabe mostrar el navegador solo, así que
@@ -744,7 +715,7 @@ def api_vista_documento(id_documento: int):
     """
     documento = db.obtener_documento(id_documento)
     if documento is None:
-        raise HTTPException(status_code=404, detail="Ese documento no existe.")
+        raise ErrorHttp(404, "Ese documento no existe.")
 
     vista = documentos.como_se_previsualiza(documento["extension"])
     direccion = "/api/documentos/" + str(id_documento) + "/archivo"
@@ -767,9 +738,7 @@ def api_vista_documento(id_documento: int):
         documento["cliente_id"], documento["nombre_guardado"]
     )
     if ruta is None or not ruta.is_file():
-        raise HTTPException(
-            status_code=404, detail="El archivo ya no está en el disco."
-        )
+        raise ErrorHttp(404, "El archivo ya no está en el disco.")
 
     contenido = ruta.read_bytes()
 
@@ -828,195 +797,162 @@ def api_vista_documento(id_documento: int):
 # ----------------------------------------------------------
 
 
-class ValorFormulario(BaseModel):
-    """Un valor que se captura en una casilla de la plantilla."""
-
-    celda: str
-    valor: float
-    # De dónde salió el dato. Queda en la bitácora.
-    documento: str = ""
-
-    @field_validator("celda")
-    @classmethod
-    def _revisar_celda(cls, valor):
-        limpia = (valor or "").strip().upper()
-        if not limpia:
-            raise ValueError("Falta decir en qué casilla va el valor.")
-        return limpia
-
-    @field_validator("documento")
-    @classmethod
-    def _revisar_documento(cls, valor):
-        return (valor or "").strip()[:200]
+def limpiar_celda(valor):
+    """El nombre de una casilla de la plantilla, en mayúsculas: G115."""
+    limpia = (valor or "").strip().upper()
+    if not limpia:
+        raise ValueError("Falta decir en qué casilla va el valor.")
+    return limpia
 
 
 def _cliente_o_404(id_cliente):
     cliente = db.obtener_cliente(id_cliente)
     if cliente is None:
-        raise HTTPException(status_code=404, detail="Ese cliente no existe.")
+        raise ErrorHttp(404, "Ese cliente no existe.")
     return cliente
 
 
 @app.get("/api/plantilla")
-def api_plantilla():
+def api_plantilla(peticion):
     """Qué plantilla hay puesta y si LibreOffice está disponible."""
     return formulario.resumen_plantilla()
 
 
-class PlantillaElegida(BaseModel):
-    """Cuál de las plantillas de la carpeta se va a usar."""
-
-    nombre: str
-
-
 @app.put("/api/plantilla/activa")
-def api_elegir_plantilla(datos: PlantillaElegida):
+def api_elegir_plantilla(peticion, **partes):
     """Cambia la plantilla en uso a otra de las que ya están guardadas."""
+    datos = peticion.diccionario()
     try:
-        elegida = formulario.elegir_plantilla(datos.nombre)
+        elegida = formulario.elegir_plantilla(campo_texto(datos, "nombre"))
     except formulario.SinPlantilla as error:
-        raise HTTPException(status_code=400, detail=str(error))
+        raise ErrorHttp(400, str(error))
     return {"archivo": elegida.name}
 
 
-@app.post("/api/plantilla", status_code=201)
-async def api_subir_plantilla(archivo: UploadFile = File(...)):
+@app.post("/api/plantilla", codigo=201)
+def api_subir_plantilla(peticion, **partes):
     """Guarda la plantilla que subió el contador y la deja en uso.
 
     El archivo se guarda tal como llegó. Es de él, con su licencia: el
     programa no le quita ni le cambia nada.
     """
-    contenido = await archivo.read()
+    nombre, contenido = peticion.archivos("archivo")[0]
     try:
-        guardada = formulario.guardar_plantilla_subida(
-            archivo.filename, contenido
-        )
+        guardada = formulario.guardar_plantilla_subida(nombre, contenido)
     except formulario.SinPlantilla as error:
-        raise HTTPException(status_code=400, detail=str(error))
-    return formulario.resumen_plantilla() | {"guardada": guardada.name}
+        raise ErrorHttp(400, str(error))
+
+    resumen = formulario.resumen_plantilla()
+    resumen["guardada"] = guardada.name
+    return resumen
 
 
 @app.get("/api/clientes/{id_cliente}/formulario/hoja")
-def api_hoja_formulario(id_cliente: int):
+def api_hoja_formulario(peticion, id_cliente):
     """La hoja de captura como se ve para este cliente, para el editor."""
     _cliente_o_404(id_cliente)
     try:
         return formulario.hoja_del_cliente(id_cliente)
     except formulario.SinPlantilla as error:
-        raise HTTPException(status_code=409, detail=str(error))
+        raise ErrorHttp(409, str(error))
 
 
 @app.get("/api/plantilla/celdas")
-def api_buscar_celdas(buscar: str = "", todas: bool = False):
+def api_buscar_celdas(peticion, **partes):
     """Busca casillas de la plantilla por palabra, renglón o celda."""
+    buscar = peticion.texto_de("buscar", "")
+    todas = peticion.si_o_no("todas", False)
     try:
         return formulario.buscar_celdas(buscar, solo_esperadas=not todas)
     except formulario.SinPlantilla as error:
-        raise HTTPException(status_code=409, detail=str(error))
+        raise ErrorHttp(409, str(error))
 
 
 @app.get("/api/clientes/{id_cliente}/formulario")
-def api_formulario(id_cliente: int):
+def api_formulario(peticion, id_cliente):
     """Los valores capturados de un cliente y el estado de su archivo."""
     _cliente_o_404(id_cliente)
     try:
         valores = formulario.listar_valores(id_cliente)
     except formulario.SinPlantilla as error:
-        raise HTTPException(status_code=409, detail=str(error))
+        raise ErrorHttp(409, str(error))
     return {"estado": formulario.estado(id_cliente), "valores": valores}
 
 
 @app.put("/api/clientes/{id_cliente}/formulario/valores")
-def api_guardar_valor(id_cliente: int, datos: ValorFormulario):
+def api_guardar_valor(peticion, id_cliente):
     """Guarda el valor de una casilla para este cliente."""
     _cliente_o_404(id_cliente)
+
+    datos = peticion.diccionario()
+    celda = revisado(limpiar_celda, campo_texto(datos, "celda"))
+    valor = campo_numero(datos, "valor")
+    documento = campo_texto(datos, "documento", "").strip()[:200]
+
     try:
-        return formulario.guardar_valor(
-            id_cliente, datos.celda, datos.valor, datos.documento
-        )
+        return formulario.guardar_valor(id_cliente, celda, valor, documento)
     except formulario.SinPlantilla as error:
-        raise HTTPException(status_code=409, detail=str(error))
+        raise ErrorHttp(409, str(error))
     except EscrituraBloqueada as error:
-        raise HTTPException(status_code=400, detail=str(error))
+        raise ErrorHttp(400, str(error))
 
 
-@app.delete("/api/clientes/{id_cliente}/formulario/valores/{celda}",
-            status_code=204)
-def api_borrar_valor(id_cliente: int, celda: str):
+@app.delete("/api/clientes/{id_cliente}/formulario/valores/{celda}")
+def api_borrar_valor(peticion, id_cliente, celda):
     """Quita un valor capturado. La casilla vuelve a lo que trae la plantilla."""
     _cliente_o_404(id_cliente)
     if not db.borrar_valor_210(id_cliente, celda.upper().strip()):
-        raise HTTPException(
-            status_code=404, detail="Esa casilla no tenía ningún valor."
-        )
+        raise ErrorHttp(404, "Esa casilla no tenía ningún valor.")
 
 
 @app.get("/api/clientes/{id_cliente}/formulario/bitacora")
-def api_bitacora_formulario(id_cliente: int):
+def api_bitacora_formulario(peticion, id_cliente):
     """El historial de cambios del formulario de este cliente."""
     _cliente_o_404(id_cliente)
     return db.listar_bitacora_210(id_cliente)
 
 
 @app.post("/api/clientes/{id_cliente}/formulario/generar")
-def api_generar_formulario(id_cliente: int):
+def api_generar_formulario(peticion, id_cliente):
     """Arma el archivo de Excel de este cliente y devuelve cómo salió."""
     cliente = _cliente_o_404(id_cliente)
     try:
         return formulario.generar(cliente)
     except formulario.SinPlantilla as error:
-        raise HTTPException(status_code=409, detail=str(error))
+        raise ErrorHttp(409, str(error))
     except EscrituraBloqueada as error:
-        raise HTTPException(status_code=400, detail=str(error))
+        raise ErrorHttp(400, str(error))
     except VerificacionFallida as error:
         # El archivo se descartó. Es un error grave y hay que decirlo tal
         # cual, sin suavizarlo: el contador no debe usar ese archivo.
-        raise HTTPException(status_code=500, detail=str(error))
+        raise ErrorHttp(500, str(error))
 
 
 @app.get("/api/clientes/{id_cliente}/formulario/archivo")
-def api_descargar_formulario(id_cliente: int):
+def api_descargar_formulario(peticion, id_cliente):
     """Descarga el archivo de Excel ya generado de este cliente."""
     cliente = _cliente_o_404(id_cliente)
     archivo = formulario.archivo_cliente(id_cliente)
     if not archivo.exists():
-        raise HTTPException(
-            status_code=404,
-            detail="Todavía no se ha generado el archivo de este cliente.",
+        raise ErrorHttp(
+            404, "Todavía no se ha generado el archivo de este cliente."
         )
-    return FileResponse(
+    return Respuesta.archivo(
         archivo,
-        media_type=(
-            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-        ),
-        filename=formulario.nombre_para_descargar(cliente),
+        tipo=("application/vnd.openxmlformats-officedocument"
+              ".spreadsheetml.sheet"),
+        nombre_visible=formulario.nombre_para_descargar(cliente),
+        descargar=True,
     )
 
 
 # ----------------------------------------------------------
-# API de Rentai, la asistente
-#
-# Rentai propone; nunca escribe sola. Cada propuesta la confirma el
-# contador desde la pantalla. Ver app/rentai.py.
+# Rentai, la asistente
 # ----------------------------------------------------------
 
 
-class MensajeChat(BaseModel):
-    """Lo que el contador le escribe a Rentai."""
-
-    mensaje: str
-
-
-class PropuestaAceptada(BaseModel):
-    """Una propuesta de Rentai que el contador decidió anotar."""
-
-    celda: str
-    valor: float
-    documento: str = ""
-
-
 @app.get("/api/rentai")
-def api_rentai():
+def api_rentai(peticion):
     """Quién es Rentai y si está disponible ahora mismo."""
     return {
         "nombre": rentai.NOMBRE,
@@ -1026,46 +962,50 @@ def api_rentai():
 
 
 @app.get("/api/clientes/{id_cliente}/chat")
-def api_leer_chat(id_cliente: int):
+def api_leer_chat(peticion, id_cliente):
     """La conversación que va con este cliente."""
     _cliente_o_404(id_cliente)
     return db.listar_mensajes(id_cliente)
 
 
 @app.post("/api/clientes/{id_cliente}/chat")
-def api_hablar(id_cliente: int, datos: MensajeChat):
+def api_hablar(peticion, id_cliente):
     """Le manda un mensaje a Rentai sobre este cliente."""
     cliente = _cliente_o_404(id_cliente)
+    datos = peticion.diccionario()
     try:
-        return rentai.hablar(cliente, datos.mensaje)
+        return rentai.hablar(cliente, campo_texto(datos, "mensaje"))
     except rentai.RentaiApagada as error:
-        raise HTTPException(status_code=409, detail=str(error))
+        raise ErrorHttp(409, str(error))
     except rentai.RentaiFallo as error:
-        raise HTTPException(status_code=502, detail=str(error))
+        raise ErrorHttp(502, str(error))
     except formulario.SinPlantilla as error:
-        raise HTTPException(status_code=409, detail=str(error))
+        raise ErrorHttp(409, str(error))
 
 
-@app.delete("/api/clientes/{id_cliente}/chat", status_code=204)
-def api_borrar_chat(id_cliente: int):
+@app.delete("/api/clientes/{id_cliente}/chat")
+def api_borrar_chat(peticion, id_cliente):
     """Borra la conversación. Los valores ya anotados no se tocan."""
     _cliente_o_404(id_cliente)
     db.borrar_mensajes(id_cliente)
 
 
 @app.post("/api/clientes/{id_cliente}/chat/anotar")
-def api_anotar_propuesta(id_cliente: int, datos: PropuestaAceptada):
+def api_anotar_propuesta(peticion, id_cliente):
     """Anota una propuesta que el contador aceptó."""
     _cliente_o_404(id_cliente)
-    try:
-        return rentai.anotar_propuesta(
-            id_cliente, datos.celda, datos.valor, datos.documento
-        )
-    except EscrituraBloqueada as error:
-        raise HTTPException(status_code=400, detail=str(error))
-    except formulario.SinPlantilla as error:
-        raise HTTPException(status_code=409, detail=str(error))
 
+    datos = peticion.diccionario()
+    celda = revisado(limpiar_celda, campo_texto(datos, "celda"))
+    valor = campo_numero(datos, "valor")
+    documento = campo_texto(datos, "documento", "")
+
+    try:
+        return rentai.anotar_propuesta(id_cliente, celda, valor, documento)
+    except EscrituraBloqueada as error:
+        raise ErrorHttp(400, str(error))
+    except formulario.SinPlantilla as error:
+        raise ErrorHttp(409, str(error))
 
 
 # ----------------------------------------------------------
@@ -1095,62 +1035,6 @@ AJUSTE_NOMBRE = "cuenta_nombre"
 AJUSTE_CORREO = "cuenta_correo"
 
 
-class CuentaCambios(BaseModel):
-    """Los datos de quién usa el programa."""
-
-    nombre: str = ""
-    correo: str = ""
-
-    @field_validator("nombre", "correo")
-    @classmethod
-    def _limpiar(cls, valor):
-        # Se recorta a algo razonable: esto es un rótulo, no un campo libre.
-        return (valor or "").strip()[:120]
-
-
-class AjustesIA(BaseModel):
-    """Cómo queda configurada la IA.
-
-    `llave` en None significa "no la toque". En "" significa "bórrela".
-    """
-
-    sin_ia: bool
-    llave: Optional[str] = None
-    modelo: str = ""
-
-    @field_validator("llave")
-    @classmethod
-    def _revisar_llave(cls, valor):
-        if valor is None:
-            return None
-        limpia = valor.strip()
-        if not limpia:
-            return ""
-        # Una llave no tiene espacios ni saltos de línea. Si los trae, casi
-        # siempre es porque se copió de más y así no va a funcionar.
-        if any(c.isspace() for c in limpia):
-            raise ValueError(
-                "La llave no puede tener espacios. Cópiela completa y sola."
-            )
-        if len(limpia) < 20 or len(limpia) > 200:
-            raise ValueError("Esa llave no tiene la forma de una llave de Groq.")
-        return limpia
-
-    @field_validator("modelo")
-    @classmethod
-    def _revisar_modelo(cls, valor):
-        limpio = (valor or "").strip()[:100]
-        if limpio and any(c.isspace() for c in limpio):
-            raise ValueError("El nombre del modelo no lleva espacios.")
-        return limpio
-
-
-class LlavePorProbar(BaseModel):
-    """Una llave que el contador quiere probar antes de guardarla."""
-
-    llave: str = ""
-
-
 def _cuenta_como_diccionario():
     """Todo lo que la pantalla de Cuenta necesita saber. Sin la llave."""
     datos = configuracion.CONFIG.como_diccionario()
@@ -1171,51 +1055,81 @@ def _cuenta_como_diccionario():
 
 
 @app.get("/api/cuenta")
-def api_cuenta():
+def api_cuenta(peticion):
     """Quién usa el programa, cómo está configurado y dónde están los datos."""
     return _cuenta_como_diccionario()
 
 
 @app.put("/api/cuenta")
-def api_guardar_cuenta(cambios: CuentaCambios):
+def api_guardar_cuenta(peticion, **partes):
     """Guarda el nombre y el correo de quien usa el programa.
 
     No se usan para nada todavía: salen en el resumen impreso el día que
     se quiera y sirven de sitio para el login cuando lo haya.
     """
-    db.guardar_ajuste(AJUSTE_NOMBRE, cambios.nombre)
-    db.guardar_ajuste(AJUSTE_CORREO, cambios.correo)
+    datos = peticion.diccionario()
+    # Se recorta a algo razonable: esto es un rótulo, no un campo libre.
+    db.guardar_ajuste(AJUSTE_NOMBRE, campo_texto(datos, "nombre", "").strip()[:120])
+    db.guardar_ajuste(AJUSTE_CORREO, campo_texto(datos, "correo", "").strip()[:120])
     return _cuenta_como_diccionario()
 
 
+def limpiar_llave(valor):
+    """Revisa una llave de la IA antes de escribirla en el .env."""
+    limpia = valor.strip()
+    if not limpia:
+        return ""
+    # Una llave no tiene espacios ni saltos de línea. Si los trae, casi
+    # siempre es porque se copió de más y así no va a funcionar.
+    if any(c.isspace() for c in limpia):
+        raise ValueError("La llave no puede tener espacios. Cópiela completa y sola.")
+    if len(limpia) < 20 or len(limpia) > 200:
+        raise ValueError("Esa llave no tiene la forma de una llave de Groq.")
+    return limpia
+
+
+def limpiar_modelo(valor):
+    """Revisa el nombre del modelo de IA."""
+    limpio = (valor or "").strip()[:100]
+    if limpio and any(c.isspace() for c in limpio):
+        raise ValueError("El nombre del modelo no lleva espacios.")
+    return limpio
+
+
 @app.put("/api/cuenta/ia")
-def api_guardar_ia(ajustes: AjustesIA):
+def api_guardar_ia(peticion, **partes):
     """Cambia el modo de la IA, la llave y el modelo. Escribe el .env.
 
     Después de escribir se recarga la configuración en caliente, así el
     cambio vale de una vez. La llave se guarda en el .env y nunca en la
     base de datos ni en los logs.
     """
-    cambios = {"SIN_IA": "true" if ajustes.sin_ia else "false"}
+    datos = peticion.diccionario()
 
-    if ajustes.llave is not None:
-        cambios["GROQ_API_KEY"] = ajustes.llave
+    sin_ia = campo_si_o_no(datos, "sin_ia")
+    modelo = revisado(limpiar_modelo, campo_texto(datos, "modelo", ""))
 
-    if ajustes.modelo:
-        cambios["IA_MODELO"] = ajustes.modelo
+    cambios = {"SIN_IA": "true" if sin_ia else "false"}
+
+    # llave sin mandar = "no la toque". Mandada vacía = "bórrela".
+    if "llave" in datos and datos["llave"] is not None:
+        cambios["GROQ_API_KEY"] = revisado(
+            limpiar_llave, campo_texto(datos, "llave", "")
+        )
+
+    if modelo:
+        cambios["IA_MODELO"] = modelo
 
     try:
         configuracion.guardar_en_env(cambios)
     except OSError:
         # No se dice cuál archivo falló con detalle del sistema: eso se
         # queda en el servidor. Al contador se le dice qué hacer.
-        raise HTTPException(
-            status_code=500,
-            detail=(
-                "No se pudo escribir el archivo de configuración (.env)."
-                " Revise que la carpeta del programa no esté protegida"
-                " contra escritura."
-            ),
+        raise ErrorHttp(
+            500,
+            "No se pudo escribir el archivo de configuración (.env)."
+            " Revise que la carpeta del programa no esté protegida"
+            " contra escritura.",
         )
 
     configuracion.CONFIG.recargar()
@@ -1223,13 +1137,14 @@ def api_guardar_ia(ajustes: AjustesIA):
 
 
 @app.post("/api/cuenta/ia/probar")
-def api_probar_llave(datos: LlavePorProbar):
+def api_probar_llave(peticion, **partes):
     """Prueba una llave contra el servicio, sin guardarla ni mandar datos.
 
     Si viene vacía se prueba la que ya está guardada. Lo único que sale
     del computador es la llave misma, para preguntar si sirve.
     """
-    llave = datos.llave.strip() or configuracion.CONFIG.llave
+    datos = peticion.diccionario()
+    llave = campo_texto(datos, "llave", "").strip() or configuracion.CONFIG.llave
     sirve, motivo = rentai.probar_llave(llave)
     return {"sirve": sirve, "motivo": motivo}
 
@@ -1237,6 +1152,7 @@ def api_probar_llave(datos: LlavePorProbar):
 # ----------------------------------------------------------
 # Arrancar el programa
 # ----------------------------------------------------------
+
 
 def arrancar():
     """Prende el servidor. Es lo que llaman iniciar.sh e iniciar.bat."""
@@ -1247,9 +1163,12 @@ def arrancar():
     opciones.add_argument("--maquina", default="127.0.0.1")
     elegidas = opciones.parse_args()
 
-    import uvicorn
-    uvicorn.run(app, host=elegidas.maquina, port=elegidas.puerto,
-                log_level="warning")
+    app.arrancar(
+        maquina=elegidas.maquina,
+        puerto=elegidas.puerto,
+        # Prepara la base de datos si es la primera vez.
+        al_arrancar=db.crear_tablas,
+    )
 
 
 if __name__ == "__main__":

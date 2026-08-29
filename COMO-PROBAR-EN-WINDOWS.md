@@ -189,8 +189,8 @@ Se abre una ventana negra que dice:
 Primera vez: preparando el entorno (esto puede tardar un minuto)...
 ```
 
-**Esto se demora entre uno y tres minutos.** Está bajando de internet las
-piezas que el programa necesita. Se ven pasar muchas líneas de texto: es
+**Esto se demora entre uno y dos minutos.** Está bajando de internet las tres
+librerías que el programa necesita. Se ven pasar muchas líneas de texto: es
 normal, no hay que leerlas. Déjelo quieto.
 
 ### Paso 5.4 — Cuando termine
@@ -355,6 +355,17 @@ pared de texto rojo que termina así:
 ImportError: DLL load failed while importing _pydantic_core:
 An Application Control policy has blocked this file.
 ```
+
+> ### Esto ya no debería pasar
+>
+> En agosto de 2026 esto pasó de verdad, y por eso se le cambió el motor al
+> programa: se sacó FastAPI, que era quien traía el archivo bloqueado, y el
+> servidor se rehízo con lo que Python ya trae. Hoy el programa **no instala
+> ninguna librería con archivos compilados**, así que Windows no tiene nada
+> que bloquear. `revisar.bat` lo comprueba en cada revisión.
+>
+> Esta sección se queda por si algún día vuelve a aparecer un error parecido.
+> Si le sale, **mándemelo**: significa que se coló una librería que no debía.
 
 ### Qué está pasando
 

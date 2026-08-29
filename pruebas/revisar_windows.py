@@ -194,9 +194,8 @@ def revisar_librerias():
 
     # (qué se importa, para qué sirve, cómo se llama al instalarlo)
     librerias = [
-        ("fastapi", "el servidor", "fastapi"),
-        ("uvicorn", "el que lo prende", "uvicorn[standard]"),
-        ("multipart", "recibir los archivos que se suben", "python-multipart"),
+        ("python_multipart", "recibir los archivos que se suben",
+         "python-multipart"),
         ("openpyxl", "leer y escribir el Excel del 210", "openpyxl"),
         ("pypdf", "sacar el texto de los PDF", "pypdf"),
     ]
@@ -249,6 +248,59 @@ def _por_que_no_carga(error, nombre_pip):
 
     return ("instálelo con: .venv\\Scripts\\python.exe -m pip install %s"
             % nombre_pip)
+
+
+# Paquetes cuyos archivos compilados no importan.
+#
+#   pip, setuptools y compañía vienen con el entorno de Python, no los
+#   instala el programa y no se cargan al correr.
+#
+#   playwright y lo suyo salen de requirements-dev.txt: son para probar
+#   las pantallas en el computador del que programa. Al computador del
+#   contador no viajan nunca, porque iniciar.bat solo instala
+#   requirements.txt.
+SE_PERDONAN = ("pip", "setuptools", "pkg_resources", "_distutils_hack",
+               "playwright", "greenlet", "pyee")
+
+
+def revisar_archivos_compilados():
+    """Comprueba que ninguna librería haya traído archivos compilados.
+
+    Esta es la revisión que evita que vuelva a pasar lo de agosto de
+    2026: el programa instalaba FastAPI, FastAPI traía pydantic_core
+    —un archivo compilado sin firmar—, y el Control inteligente de
+    aplicaciones de Windows 11 lo bloqueaba. El programa ni siquiera
+    arrancaba en el computador del contador.
+
+    Mientras todas las librerías sean de Python puro, Windows no tiene
+    qué bloquear. Si algún día alguien agrega una que traiga un .pyd,
+    esta revisión lo dice aquí y no allá.
+    """
+    titulo("C2. Que no haya archivos compilados")
+
+    carpetas = list((RAIZ / ".venv").glob("lib/**/site-packages")) + \
+        list((RAIZ / ".venv").glob("Lib/site-packages"))
+
+    if not carpetas:
+        saltada("los archivos compilados de las librerías",
+                "no se encontró la carpeta .venv; ¿corrió iniciar primero?")
+        return
+
+    compilados = []
+    for carpeta in carpetas:
+        for patron in ("**/*.pyd", "**/*.so"):
+            for archivo in carpeta.glob(patron):
+                partes = archivo.relative_to(carpeta).parts
+                if partes and partes[0] in SE_PERDONAN:
+                    continue
+                compilados.append("/".join(partes))
+
+    comprobar(
+        "ninguna librería trae archivos compilados que Windows pueda bloquear",
+        not compilados,
+        " | ".join(compilados[:6]) if compilados else
+        "todas las librerías son de Python puro",
+    )
 
 
 # ==========================================================
@@ -540,9 +592,10 @@ def revisar_arranque():
     titulo("I. El programa prende y contesta")
 
     puerto = buscar_puerto_libre()
+    # Se arranca igual que lo arranca iniciar.bat, para probar el
+    # programa tal como lo va a usar el contador.
     servidor = subprocess.Popen(
-        [sys.executable, "-m", "uvicorn", "app.main:app",
-         "--host", "127.0.0.1", "--port", str(puerto)],
+        [sys.executable, "-m", "app.main", "--puerto", str(puerto)],
         cwd=str(RAIZ),
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
@@ -603,6 +656,7 @@ def main():
     revisar_computador()
     revisar_proyecto()
     revisar_librerias()
+    revisar_archivos_compilados()
     revisar_nombres()
     revisar_zip()
     revisar_almacenamiento()

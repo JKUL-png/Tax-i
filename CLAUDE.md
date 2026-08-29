@@ -10,7 +10,12 @@ los identifica, dice cuáles faltan por cliente y genera un resumen. **No hace i
 
 ## Stack
 
-- **Backend:** Python 3.11+ con FastAPI
+- **Backend:** Python 3.9+, **sin framework web**. El servidor está en
+  `app/servidor.py`, hecho con lo que Python ya trae (`http.server`).
+  Antes era FastAPI; se sacó en agosto de 2026 porque arrastraba
+  `pydantic_core`, un archivo compilado sin firmar que el Control
+  inteligente de aplicaciones de Windows 11 bloquea, y el programa no
+  arrancaba en el computador de destino.
 - **Base de datos:** SQLite (archivo local)
 - **Frontend:** HTML + CSS + JavaScript plano. **Sin framework, sin build, sin npm.**
 - **IA:** API de Groq (capa gratis), solo para documentos no estructurados.
@@ -21,6 +26,12 @@ los identifica, dice cuáles faltan por cliente y genera un resumen. **No hace i
 Antes de agregar una dependencia nueva, preguntar. Cada librería es una cosa más que puede
 fallar al instalar en el computador del contador.
 
+**Y una regla dura: la librería tiene que ser de Python puro.** Si trae archivos `.pyd`
+o `.so` —código compilado— no entra. Windows 11 los bloquea cuando no vienen firmados por
+una empresa que Microsoft ya conoce, y las librerías de Python no vienen firmadas. Cuando
+eso pasa el programa ni siquiera arranca, y la única salida es pedirle al contador que
+apague una seguridad de su computador. Se comprueba con `pruebas/revisar_windows.py`.
+
 ---
 
 ## Estructura de carpetas
@@ -28,7 +39,8 @@ fallar al instalar en el computador del contador.
 ```
 asistente-renta/
 ├── app/
-│   ├── main.py           # servidor FastAPI
+│   ├── main.py           # las direcciones del programa (la API)
+│   ├── servidor.py       # el servidor web, hecho con lo que trae Python
 │   ├── db.py             # SQLite
 │   ├── documentos.py     # clasificación y extracción
 │   ├── checklist.py      # qué falta por cliente

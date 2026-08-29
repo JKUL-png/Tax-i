@@ -255,24 +255,19 @@ def guardar_contenido(id_cliente, nombre_original, contenido):
     return nombre, len(contenido)
 
 
-async def leer_con_limite(archivo, limite):
-    """Lee una subida por pedazos y se detiene si pasa del límite.
+def dentro_del_limite(contenido, limite):
+    """Devuelve el contenido si cabe en el límite, o None si se pasó.
 
-    Se lee de a un pedazo y no todo de una para que un archivo gigante
-    no se cargue entero en la memoria antes de darnos cuenta.
-    Devuelve None si el archivo era demasiado grande.
+    Antes esto leía la subida por pedazos mientras iba llegando. Ya no
+    hace falta: el servidor rechaza de entrada cualquier petición que
+    pase de su techo (ver LIMITE_PETICION en app/servidor.py), así que
+    cuando el contenido llega hasta aquí ya se sabe que no es absurdo.
+    Lo que queda es comprobar el límite propio de cada cosa: 25 MB un
+    documento suelto, 100 MB un ZIP.
     """
-    pedazos = []
-    total = 0
-    while True:
-        pedazo = await archivo.read(1024 * 1024)   # 1 MB cada vez
-        if not pedazo:
-            break
-        total += len(pedazo)
-        if total > limite:
-            return None
-        pedazos.append(pedazo)
-    return b"".join(pedazos)
+    if contenido is None or len(contenido) > limite:
+        return None
+    return contenido
 
 
 # ----------------------------------------------------------

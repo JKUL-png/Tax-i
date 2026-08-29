@@ -1,5 +1,19 @@
-fastapi
-uvicorn[standard]
-python-multipart
-openpyxl
-pypdf
+# Lo que hace falta para que el programa funcione.
+#
+# Son tres, y las tres son de Python puro: no traen ningún archivo
+# compilado. Eso no es casualidad, es un requisito. El Control inteligente
+# de aplicaciones de Windows 11 bloquea los archivos compilados que no
+# vienen firmados por una empresa que Microsoft ya conoce, y las librerías
+# de Python no vienen firmadas. Cuando eso pasa, el programa ni siquiera
+# arranca, y la única salida es pedirle al contador que apague una
+# seguridad de Windows.
+#
+# Por eso el servidor se hizo con lo que Python ya trae (ver
+# app/servidor.py) en vez de con FastAPI, que arrastraba pydantic_core.
+#
+# ANTES DE AGREGAR UNA LIBRERÍA: revise que no traiga archivos .pyd o .so.
+# Si los trae, es una que puede fallar en el computador del contador.
+
+python-multipart    # separar los archivos que se suben desde el navegador
+openpyxl            # leer y escribir el Excel del Formulario 210
+pypdf               # sacar el texto de los PDF
