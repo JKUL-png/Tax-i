@@ -480,10 +480,10 @@ def revisar_almacenamiento():
             conexion = sqlite3.connect(str(archivo))
             conexion.execute("CREATE TABLE prueba (nombre TEXT)")
             conexion.execute("INSERT INTO prueba VALUES (?)",
-                             ("Declaración de María Ñáñez",))
+                             ("Declaración de Ñoño Peñaloza",))
             fila = conexion.execute("SELECT nombre FROM prueba").fetchone()
             conexion.close()
-            bien = fila[0] == "Declaración de María Ñáñez"
+            bien = fila[0] == "Declaración de Ñoño Peñaloza"
             motivo = ""
         except sqlite3.Error as error:
             bien, motivo = False, str(error)
