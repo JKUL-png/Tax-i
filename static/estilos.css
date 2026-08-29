@@ -1,47 +1,88 @@
 /* ==========================================================
-   Sistema visual del asistente de renta
+   Sistema visual de Tax-i
 
-   Principios:
-   - Minimalista y neutro. El contenido manda, la interfaz no estorba.
+   De dónde sale lo que se ve
+   --------------------------
+   Del papel de contabilidad. No es un adorno: es el objeto con el que
+   el contador lleva cuarenta años trabajando, y de ahí salen las tres
+   decisiones que dan el aspecto de todo el programa.
+
+   1. La hoja. Fondo verde muy pálido —el del papel rayado de columnas—
+      en vez del blanco de pantalla. Las tarjetas sí son blancas, así que
+      cada bloque de trabajo se ve como una hoja puesta sobre el escritorio.
+
+   2. La doble raya. En contabilidad, dos rayas debajo de una cifra
+      significan "este es el total". Aquí se usa UNA sola vez, debajo de
+      la cabecera, y no vuelve a aparecer en ninguna otra parte. Es la
+      firma de la casa.
+
+   3. Las cifras en ancho fijo. Todo lo que sea número —dígitos de la
+      cédula, fechas, plazos, valores, casillas como G115— va en letra de
+      ancho fijo y con tabular-nums, para que las columnas queden
+      cuadradas una debajo de otra. En una hoja de números, que el 1 mida
+      lo mismo que el 8 no es un detalle: es poder revisar de un vistazo.
+
+   Principios que no cambian
+   -------------------------
+   - El contenido manda, la interfaz no estorba.
    - Legible a cualquier edad: texto grande, mucho contraste, mucho aire.
    - Nada escondido: sin menús que aparecen al pasar el mouse,
      sin botones que son solo un icono.
+   - Sin tipografías de internet. Se usan las letras que ya trae el
+     computador: así la pantalla se ve igual sin conexión y ningún
+     servicio de afuera se entera de que el programa se está usando.
    ========================================================== */
 
 :root {
-  /* --- Colores --- */
-  --fondo: #FAFAF8;              /* blanco cálido, fondo de la página */
+  /* --- Tinta y papel --- */
+  --fondo: #ECF1EA;              /* la hoja: verde muy pálido */
   --superficie: #FFFFFF;         /* tarjetas y campos */
-  --texto: #171717;              /* negro suave */
-  --texto-secundario: #4B5563;   /* gris legible (7.2:1 de contraste) */
-  --texto-tenue: #6B7280;        /* solo para etiquetas pequeñas */
-  --borde: #E5E7EB;
-  --borde-fuerte: #D1D5DB;
+  --raya: #E1E9E1;               /* el rayado de la hoja */
+  --regla-doble: #A9C7B5;        /* la doble raya de la cabecera */
+
+  --texto: #14231D;              /* tinta negra, con fondo verde */
+  --texto-secundario: #46574E;   /* gris legible (8:1 de contraste) */
+  --texto-tenue: #6C7D73;        /* solo para etiquetas pequeñas */
+  --borde: #DEE6DE;
+  --borde-fuerte: #C4D0C6;
 
   --primary: #10805F;            /* verde oscuro: pasa contraste con texto blanco */
   --primary-hover: #0C6549;
   --primary-acento: #16A37A;     /* verde vivo: solo adornos, nunca texto */
-  --primary-tenue: #ECFDF5;
+  --primary-tenue: #E9F5EF;
 
   --info: #3B82F6;               /* azul: marca lo que viene de la IA */
   --info-fondo: #EFF6FF;
   --info-texto: #1D4ED8;
 
-  --exito-fondo: #ECFDF5;
-  --exito-texto: #15803D;
+  --exito-fondo: #E9F5EF;
+  --exito-texto: #14663F;
 
-  --alerta-fondo: #FFFBEB;
-  --alerta-texto: #B45309;
+  --alerta-fondo: #FBF3E3;
+  --alerta-texto: #8A5A12;       /* ocre: el plazo que se está acercando */
 
-  --error: #EF4444;
-  --error-fondo: #FEF2F2;
-  --error-texto: #B91C1C;
+  /* Rojo de tinta, no rojo de pantalla. Es el color con el que se
+     anotaba a mano lo vencido, y aquí se reserva para eso mismo. */
+  --error: #A6392D;
+  --error-fondo: #FBF0EE;
+  --error-texto: #8E2F24;
+
+  /* --- Letras --- */
+  /* Las del sistema. En Mac sale San Francisco, en Windows Segoe UI:
+     las dos son buenas y no hay que descargar nada. */
+  --fuente: -apple-system, BlinkMacSystemFont, "Segoe UI Variable Text",
+            "Segoe UI", system-ui, Roboto, sans-serif;
+
+  /* La de las cifras. Ancho fijo, para que las columnas cuadren. */
+  --fuente-cifras: ui-monospace, "SF Mono", SFMono-Regular, "Cascadia Mono",
+                   "Segoe UI Mono", Menlo, Consolas, monospace;
 
   /* --- Medidas --- */
   --radio: 10px;
   --radio-chico: 6px;
-  --sombra: 0 1px 2px rgba(23, 23, 23, 0.05);
-  --ancho-maximo: 880px;
+  --sombra: 0 1px 2px rgba(20, 35, 29, 0.05);
+  --sombra-media: 0 4px 14px rgba(20, 35, 29, 0.08);
+  --ancho-maximo: 940px;
   --alto-control: 46px;          /* alto mínimo de botones y campos */
 }
 
@@ -57,10 +98,28 @@ body {
   margin: 0;
   background: var(--fondo);
   color: var(--texto);
-  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  font-family: var(--fuente);
   font-size: 17px;               /* base grande a propósito */
   line-height: 1.6;
+  letter-spacing: -0.004em;
   -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* Todo lo que sea cifra se escribe con esta clase: ancho fijo y números
+   tabulares, para que una columna de valores quede alineada. */
+.cifra,
+.conteo,
+input[type="date"],
+.cliente-cedula,
+.etiqueta {
+  font-variant-numeric: tabular-nums;
+}
+
+.cifra {
+  font-family: var(--fuente-cifras);
+  font-size: 0.94em;
+  letter-spacing: -0.01em;
 }
 
 .contenedor {
@@ -71,13 +130,16 @@ body {
 
 h1, h2, h3 {
   margin: 0;
-  line-height: 1.3;
+  line-height: 1.25;
   font-weight: 600;
+  /* Las letras un poco más juntas: a este tamaño, la separación normal
+     hace que los títulos se vean sueltos. */
+  letter-spacing: -0.021em;
 }
 
-h1 { font-size: 1.35rem; }
-h2 { font-size: 1.15rem; }
-h3 { font-size: 1.05rem; }
+h1 { font-size: 1.4rem; }
+h2 { font-size: 1.2rem; }
+h3 { font-size: 1.02rem; }
 
 /* Se oculta visualmente pero los lectores de pantalla lo leen. */
 .solo-lectores {
@@ -91,18 +153,27 @@ h3 { font-size: 1.05rem; }
 
 /* ==========================================================
    Cabecera
+
+   Se queda pegada arriba mientras se baja por la página: en la pantalla
+   del cliente, que es larga, el menú tenía que seguir a la mano.
    ========================================================== */
 
 .cabecera {
   background: var(--superficie);
-  border-bottom: 1px solid var(--borde);
-  padding: 20px 0;
-  margin-bottom: 36px;
+  /* La doble raya de contabilidad. Va aquí y en ningún otro lado. */
+  border-bottom: 4px double var(--regla-doble);
+  padding: 14px 0;
+  margin-bottom: 34px;
+  position: sticky;
+  top: 0;
+  /* Por debajo del visor de documentos (50) y de Rentai (60), para que
+     no se les monte encima cuando están abiertos. */
+  z-index: 20;
 }
 
 .cabecera .contenedor {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   gap: 14px;
   flex-wrap: wrap;
 }
@@ -110,7 +181,87 @@ h3 { font-size: 1.05rem; }
 .subtitulo {
   margin: 0;
   color: var(--texto-tenue);
-  font-size: 0.9rem;
+  font-size: 0.88rem;
+  /* Una raya vertical lo separa de la marca, en vez de un punto. */
+  padding-left: 14px;
+  border-left: 1px solid var(--borde);
+}
+
+/* El logotipo: "Tax" en negro y "-i" en el verde de la marca.
+   Se escribe siempre con guion. Junto ("Taxi") se lee como el carro
+   y se pierde el juego de palabras con "tax" (impuesto). */
+.marca {
+  margin: 0;
+  font-size: 1.55rem;
+  font-weight: 700;
+  letter-spacing: -0.035em;
+  color: var(--texto);
+  white-space: nowrap;
+}
+
+.marca-i {
+  color: var(--primary);
+}
+
+/* Cuando la marca es un enlace a la portada, no se ve como enlace. */
+.marca-enlace {
+  text-decoration: none;
+  color: inherit;
+  border-radius: var(--radio-chico);
+}
+
+.marca-enlace:hover .marca-i {
+  color: var(--primary-acento);
+}
+
+/* Recordatorio honesto de que esto todavia no es un producto terminado. */
+.etiqueta-prototipo {
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  font-weight: 600;
+  color: var(--texto-tenue);
+  background: var(--fondo);
+  border: 1px solid var(--borde);
+  border-radius: 999px;
+  padding: 3px 9px;
+}
+
+/* ----- El menú -----
+   Dos sitios nada más: los clientes y la cuenta. Se escriben con todas
+   sus letras; aquí no hay iconos que haya que adivinar. */
+
+.menu {
+  margin-left: auto;
+  display: flex;
+  gap: 4px;
+  align-items: center;
+}
+
+.menu-enlace {
+  display: inline-block;
+  padding: 7px 13px;
+  border-radius: var(--radio-chico);
+  color: var(--texto-secundario);
+  text-decoration: none;
+  font-size: 0.92rem;
+  font-weight: 500;
+  /* Una raya de 2px debajo marca en cuál página se está. Transparente
+     mientras no sea la actual, para que nada se mueva al cambiar. */
+  border-bottom: 2px solid transparent;
+}
+
+.menu-enlace:hover {
+  color: var(--primary);
+  background: var(--primary-tenue);
+}
+
+.menu-actual {
+  color: var(--texto);
+  font-weight: 600;
+  border-bottom-color: var(--primary);
+  border-bottom-left-radius: 0;
+  border-bottom-right-radius: 0;
 }
 
 /* ==========================================================
@@ -126,11 +277,15 @@ h3 { font-size: 1.05rem; }
 }
 
 .seccion {
-  margin-bottom: 36px;
+  margin-bottom: 38px;
 }
 
+/* El título de cada sección va sobre una raya, como el encabezado de
+   una columna en el papel rayado. */
 .seccion > h2 {
-  margin-bottom: 14px;
+  margin-bottom: 16px;
+  padding-bottom: 9px;
+  border-bottom: 1px solid var(--raya);
 }
 
 /* ==========================================================
@@ -144,9 +299,10 @@ h3 { font-size: 1.05rem; }
 }
 
 label {
-  font-size: 0.9rem;
-  font-weight: 500;
+  font-size: 0.86rem;
+  font-weight: 600;
   color: var(--texto-secundario);
+  letter-spacing: 0.005em;
 }
 
 .ayuda {
@@ -156,6 +312,8 @@ label {
 }
 
 input[type="text"],
+input[type="email"],
+input[type="password"],
 input[type="date"] {
   height: var(--alto-control);
   padding: 0 12px;
@@ -168,6 +326,26 @@ input[type="date"] {
   width: 100%;
 }
 
+/* Un hilo de sombra por dentro: el campo se ve hundido en la hoja en vez
+   de dibujado encima.
+
+   Va solo dentro de .campo, no sobre todos los input del programa. Hay
+   campos que a propósito NO se ven como campos —los títulos del
+   checklist, las casillas de la hoja del 210, que son texto hasta que
+   uno hace clic— y una sombra puesta sobre el elemento suelto se les
+   colaba y los dibujaba como cajitas. */
+.campo input[type="text"],
+.campo input[type="email"],
+.campo input[type="password"],
+.campo input[type="date"] {
+  box-shadow: inset 0 1px 2px rgba(20, 35, 29, 0.04);
+}
+
+input::placeholder {
+  color: var(--texto-tenue);
+  opacity: 0.75;
+}
+
 input:focus-visible,
 button:focus-visible {
   outline: 3px solid var(--primary-acento);
@@ -175,6 +353,8 @@ button:focus-visible {
 }
 
 input[type="text"]:focus,
+input[type="email"]:focus,
+input[type="password"]:focus,
 input[type="date"]:focus {
   border-color: var(--primary);
   outline: 3px solid var(--primary-tenue);
@@ -212,14 +392,26 @@ button {
   padding: 0 22px;
   background: var(--primary);
   color: #FFFFFF;
-  border: 1px solid var(--primary);
+  border: 1px solid var(--primary-hover);
   border-radius: var(--radio-chico);
-  font-weight: 500;
+  font-weight: 600;
+  letter-spacing: -0.006em;
+  /* Un brillo de un pixel arriba: le da volumen sin sombras grandes. */
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.16),
+              0 1px 2px rgba(20, 35, 29, 0.10);
 }
 
 .boton:hover {
   background: var(--primary-hover);
   border-color: var(--primary-hover);
+}
+
+/* Al presionar, el botón se hunde un pixel. Es la única animación de la
+   interfaz y dura lo que dura el clic. */
+.boton:active,
+.boton-secundario:active {
+  transform: translateY(1px);
+  box-shadow: none;
 }
 
 .boton[disabled] {
@@ -234,10 +426,14 @@ button {
   color: var(--texto);
   border: 1px solid var(--borde-fuerte);
   border-radius: var(--radio-chico);
+  font-weight: 500;
+  box-shadow: 0 1px 2px rgba(20, 35, 29, 0.04);
 }
 
 .boton-secundario:hover {
   background: var(--fondo);
+  border-color: var(--primary);
+  color: var(--primary-hover);
 }
 
 /* Botón discreto, para acciones poco frecuentes como eliminar */
@@ -270,15 +466,16 @@ button {
   display: inline-block;
   padding: 3px 10px;
   border-radius: 999px;
-  font-size: 0.82rem;
-  font-weight: 500;
+  font-size: 0.8rem;
+  font-weight: 600;
   white-space: nowrap;
+  border: 1px solid transparent;
 }
 
-.etiqueta-neutra { background: var(--fondo);        color: var(--texto-secundario); border: 1px solid var(--borde); }
-.etiqueta-exito  { background: var(--exito-fondo);  color: var(--exito-texto); }
-.etiqueta-alerta { background: var(--alerta-fondo); color: var(--alerta-texto); }
-.etiqueta-error  { background: var(--error-fondo);  color: var(--error-texto); }
+.etiqueta-neutra { background: var(--fondo);        color: var(--texto-secundario); border-color: var(--borde); }
+.etiqueta-exito  { background: var(--exito-fondo);  color: var(--exito-texto);   border-color: #CBE5D8; }
+.etiqueta-alerta { background: var(--alerta-fondo); color: var(--alerta-texto);  border-color: #EDDCB8; }
+.etiqueta-error  { background: var(--error-fondo);  color: var(--error-texto);   border-color: #EBCFC9; }
 
 /* Reservada para datos leídos por IA. Todo lo que lleve esta etiqueta
    debe decir "verificar" — es una obligación del proyecto, no un adorno. */
@@ -304,7 +501,23 @@ button {
   gap: 20px;
   align-items: center;
   flex-wrap: wrap;
+  /* La espina: una franja de color al filo izquierdo de la tarjeta.
+     No es adorno, dice cómo va el plazo de ese cliente y deja leer la
+     lista entera sin tener que ir tarjeta por tarjeta. */
+  border-left: 4px solid var(--borde-fuerte);
 }
+
+/* Al pasar el mouse solo cambia la sombra. El color de la espina no se
+   toca: si aquí se escribiera border-color, le ganaría a las clases de
+   abajo y todas las tarjetas se verían del mismo color al señalarlas. */
+.cliente:hover {
+  box-shadow: var(--sombra-media);
+}
+
+.espina-error  { border-left-color: var(--error); }
+.espina-alerta { border-left-color: #C58A22; }
+.espina-exito  { border-left-color: var(--primary-acento); }
+.espina-neutra { border-left-color: var(--borde-fuerte); }
 
 .cliente-datos {
   flex: 1 1 220px;
@@ -314,11 +527,12 @@ button {
 .cliente-nombre {
   margin: 0;
   overflow-wrap: anywhere;
+  font-size: 1.06rem;
 }
 
 .cliente-cedula {
-  margin: 2px 0 0;
-  font-size: 0.88rem;
+  margin: 3px 0 0;
+  font-size: 0.85rem;
   color: var(--texto-secundario);
 }
 
@@ -359,6 +573,7 @@ button {
   padding: 40px 24px;
   text-align: center;
   color: var(--texto-secundario);
+  font-size: 0.95rem;
 }
 
 .aviso {
@@ -385,10 +600,12 @@ button {
 
 /* Nota fija sobre el estado del prototipo */
 .nota-prototipo {
-  margin-top: 48px;
-  padding: 16px 20px;
-  border-top: 1px solid var(--borde);
-  font-size: 0.85rem;
+  margin-top: 52px;
+  padding: 16px 0 40px;
+  /* La misma doble raya de la cabecera, cerrando la página: arriba abre
+     la hoja y abajo la cierra. */
+  border-top: 4px double var(--regla-doble);
+  font-size: 0.84rem;
   color: var(--texto-tenue);
 }
 
@@ -722,8 +939,17 @@ a {
 }
 
 /* El nombre se ve como texto, no como campo, hasta que se hace clic.
-   Así la lista se lee limpia pero sigue siendo editable. */
-.renglon-titulo {
+   Así la lista se lee limpia pero sigue siendo editable.
+
+   Va escrito input[type="text"].renglon-titulo y no solo .renglon-titulo
+   por una regla del CSS que engaña: un selector con corchetes pesa lo
+   mismo que una clase, así que input[type="text"] le ganaba a
+   .renglon-titulo y los renglones salían dibujados como campos aunque
+   aquí dijera que el borde era transparente. Con el nombre del elemento
+   adelante la cuenta empata y gana este, que está más abajo. (Es la
+   misma forma en que ya estaba escrito .celda-campo, en la hoja del 210:
+   el mismo problema, resuelto igual.) */
+input[type="text"].renglon-titulo {
   flex: 1 1 auto;
   min-width: 0;
   border: 1px solid transparent;
@@ -735,11 +961,11 @@ a {
   color: var(--texto);
 }
 
-.renglon-titulo:hover {
+input[type="text"].renglon-titulo:hover {
   border-color: var(--borde);
 }
 
-.renglon-titulo:focus {
+input[type="text"].renglon-titulo:focus {
   border-color: var(--primary);
   background: var(--superficie);
   outline: none;
@@ -2166,5 +2392,281 @@ input[type="text"].celda-campo:focus {
   }
   .rentai-pastilla {
     max-width: none;
+  }
+}
+
+/* ==========================================================
+   Pantalla de la cuenta
+
+   Es una pantalla de ajustes, y los ajustes de este programa no son de
+   adorno: uno de ellos decide si los documentos de los clientes salen o
+   no de este computador. Por eso las dos opciones del modo se muestran
+   escritas completas, una debajo de la otra, en vez de un interruptor
+   que hay que interpretar.
+   ========================================================== */
+
+.cuenta-encabezado {
+  display: flex;
+  gap: 24px;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  padding-bottom: 20px;
+  margin-bottom: 20px;
+  border-bottom: 1px solid var(--raya);
+}
+
+.cuenta-encabezado > div:first-child {
+  flex: 1 1 320px;
+  min-width: 0;
+}
+
+.cuenta-titulo {
+  margin: 0 0 6px;
+  font-size: 1.2rem;
+  font-weight: 600;
+  letter-spacing: -0.021em;
+  overflow-wrap: anywhere;
+}
+
+.cuenta-estado {
+  margin: 0;
+  font-size: 0.86rem;
+  color: var(--texto-secundario);
+}
+
+.cuenta-estado .etiqueta {
+  margin-right: 6px;
+}
+
+/* Las cifras de la casa: cuántos clientes y cuántos documentos hay.
+   Grandes y en ancho fijo, como el total al pie de una columna. */
+.cuenta-cifras {
+  display: flex;
+  gap: 28px;
+  flex: 0 0 auto;
+}
+
+.cuenta-cifra {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+}
+
+.cuenta-cifra .cifra {
+  font-size: 1.75rem;
+  font-weight: 600;
+  line-height: 1.1;
+  color: var(--primary);
+}
+
+.cuenta-rotulo {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  font-weight: 600;
+  color: var(--texto-tenue);
+}
+
+/* ----- El estado de la IA ----- */
+
+.estado-ia {
+  border: 1px solid var(--borde);
+  border-left: 4px solid var(--borde-fuerte);
+  border-radius: var(--radio-chico);
+  background: var(--fondo);
+  padding: 14px 16px;
+  margin-bottom: 22px;
+}
+
+.estado-ia-encendida {
+  border-left-color: var(--primary-acento);
+  background: var(--primary-tenue);
+}
+
+.estado-ia-linea {
+  margin: 0 0 4px;
+  font-weight: 600;
+}
+
+.estado-ia .ayuda {
+  margin: 0;
+}
+
+/* ----- Las dos opciones del modo ----- */
+
+.opciones-modo {
+  border: none;
+  margin: 0 0 24px;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.opcion-modo {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  padding: 14px 16px;
+  border: 1px solid var(--borde);
+  border-radius: var(--radio-chico);
+  background: var(--superficie);
+  cursor: pointer;
+  font-weight: 400;
+  color: var(--texto);
+}
+
+.opcion-modo:hover {
+  border-color: var(--borde-fuerte);
+  background: var(--fondo);
+}
+
+/* La opción escogida se marca con el verde de la marca en todo el borde,
+   no solo en el puntito del radio. */
+.opcion-modo:has(input:checked) {
+  border-color: var(--primary);
+  box-shadow: inset 0 0 0 1px var(--primary);
+  background: var(--superficie);
+}
+
+.opcion-modo input[type="radio"] {
+  width: 20px;
+  height: 20px;
+  margin: 2px 0 0;
+  accent-color: var(--primary);
+  flex: 0 0 auto;
+}
+
+.opcion-cuerpo {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.opcion-titulo {
+  font-weight: 600;
+}
+
+.opcion-detalle {
+  font-size: 0.86rem;
+  color: var(--texto-secundario);
+  line-height: 1.5;
+}
+
+/* ----- La llave ----- */
+
+.bloque-llave {
+  border-top: 1px solid var(--raya);
+  padding-top: 20px;
+}
+
+.llave-actual {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.llave-actual .cifra {
+  font-size: 1rem;
+  color: var(--texto);
+}
+
+.fila-llave {
+  display: flex;
+  gap: 10px;
+}
+
+.fila-llave input {
+  flex: 1 1 auto;
+  font-family: var(--fuente-cifras);
+  font-size: 0.95rem;
+}
+
+.fila-llave .boton-secundario {
+  flex: 0 0 auto;
+  min-width: 96px;
+}
+
+.resultado-prueba {
+  margin-top: 14px;
+  padding: 11px 14px;
+  border-radius: var(--radio-chico);
+  font-size: 0.9rem;
+}
+
+.resultado-bien { background: var(--exito-fondo); color: var(--exito-texto); }
+.resultado-mal  { background: var(--error-fondo); color: var(--error-texto); }
+
+/* ----- Lo que casi nunca hay que tocar ----- */
+
+.avanzado {
+  margin-top: 24px;
+  border-top: 1px solid var(--raya);
+  padding-top: 14px;
+}
+
+.avanzado > summary {
+  cursor: pointer;
+  font-size: 0.88rem;
+  color: var(--texto-secundario);
+  padding: 4px 0;
+}
+
+.avanzado > summary:hover {
+  color: var(--primary);
+}
+
+.avanzado-cuerpo {
+  padding-top: 14px;
+  max-width: 420px;
+}
+
+/* ----- Dónde están los datos ----- */
+
+.lista-rutas {
+  margin: 18px 0;
+}
+
+.lista-rutas dt {
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-weight: 600;
+  color: var(--texto-tenue);
+  margin-bottom: 4px;
+}
+
+.lista-rutas dd {
+  margin: 0 0 16px;
+  padding: 9px 12px;
+  background: var(--fondo);
+  border: 1px solid var(--borde);
+  border-radius: var(--radio-chico);
+  font-size: 0.85rem;
+  /* Las rutas de Windows son largas: que corten donde toque en vez de
+     empujar la tarjeta a lo ancho. */
+  overflow-wrap: anywhere;
+}
+
+code {
+  font-family: var(--fuente-cifras);
+  font-size: 0.9em;
+  background: var(--fondo);
+  border: 1px solid var(--borde);
+  border-radius: 4px;
+  padding: 1px 5px;
+}
+
+/* En pantallas angostas las cifras de la cuenta se pasan debajo. */
+@media (max-width: 620px) {
+  .cuenta-cifras {
+    width: 100%;
+    justify-content: flex-start;
+    gap: 32px;
+  }
+
+  .cuenta-cifra {
+    align-items: flex-start;
   }
 }

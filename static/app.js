@@ -123,13 +123,17 @@ function dibujarCliente(cliente) {
 
   const cedula = document.createElement("p");
   cedula.className = "cliente-cedula";
-  let detalle = "Cédula termina en " + cliente.dos_digitos;
-  if (cliente.documentos === 1) {
-    detalle += " · 1 documento";
-  } else {
-    detalle += " · " + (cliente.documentos || 0) + " documentos";
-  }
-  cedula.textContent = detalle;
+  // Los dos dígitos van en letra de ancho fijo: son un número, y así
+  // quedan alineados de una tarjeta a la siguiente.
+  cedula.appendChild(document.createTextNode("Cédula termina en "));
+  const digitos = document.createElement("span");
+  digitos.className = "cifra";
+  digitos.textContent = cliente.dos_digitos;
+  cedula.appendChild(digitos);
+  const cuantos = cliente.documentos || 0;
+  cedula.appendChild(document.createTextNode(
+    " · " + cuantos + (cuantos === 1 ? " documento" : " documentos")
+  ));
 
   // Cuánto le falta del checklist: es lo que el contador quiere ver
   // de un vistazo sin tener que entrar cliente por cliente.
@@ -168,6 +172,12 @@ function dibujarCliente(cliente) {
   entradaFecha.value = cliente.fecha_vencimiento || "";
 
   const plazo = etiquetaDePlazo(cliente.fecha_vencimiento);
+
+  // La espina: la franja de color del filo izquierdo de la tarjeta.
+  // Lleva el mismo color que la etiqueta del plazo, para poder recorrer
+  // la lista de arriba abajo viendo solo los filos.
+  tarjeta.classList.add("espina-" + plazo.clase.replace("etiqueta-", ""));
+
   const etiqueta = document.createElement("span");
   etiqueta.className = "etiqueta " + plazo.clase;
   etiqueta.textContent = plazo.texto;

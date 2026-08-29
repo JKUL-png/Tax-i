@@ -377,7 +377,7 @@ async function cargarCliente() {
     if (!respuesta.ok) throw new Error();
     const cliente = await respuesta.json();
     tituloNombre.textContent = cliente.nombre;
-    document.title = cliente.nombre + " · Asistente de renta";
+    document.title = cliente.nombre + " · Tax-i";
 
     let texto = "Cédula termina en " + cliente.dos_digitos;
     if (cliente.fecha_vencimiento) {

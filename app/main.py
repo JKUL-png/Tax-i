@@ -41,7 +41,7 @@ async def ciclo_de_vida(app: FastAPI):
     yield
 
 
-app = FastAPI(title="Asistente de renta", lifespan=ciclo_de_vida)
+app = FastAPI(title="Tax-i", lifespan=ciclo_de_vida)
 
 # Deja disponibles el CSS y el JavaScript en /static/...
 app.mount("/static", StaticFiles(directory=CARPETA_STATIC), name="static")
@@ -68,6 +68,12 @@ def pagina_cliente():
 def pagina_resumen():
     """Entrega el resumen para imprimir. El id va en la dirección: /resumen?id=3"""
     return FileResponse(CARPETA_STATIC / "resumen.html")
+
+
+@app.get("/cuenta")
+def pagina_cuenta():
+    """Entrega la pantalla de la cuenta y los ajustes."""
+    return FileResponse(CARPETA_STATIC / "cuenta.html")
 
 
 @app.get("/api/configuracion")
@@ -1059,3 +1065,170 @@ def api_anotar_propuesta(id_cliente: int, datos: PropuestaAceptada):
         raise HTTPException(status_code=400, detail=str(error))
     except formulario.SinPlantilla as error:
         raise HTTPException(status_code=409, detail=str(error))
+
+
+
+# ----------------------------------------------------------
+# La cuenta
+#
+# Hoy no hay cuentas de verdad: el programa corre en un computador y lo
+# usa una persona. Esta pantalla existe por dos motivos.
+#
+# El primero es práctico y es el de ahora: que el contador pueda cambiar
+# su llave de la IA sin tener que abrir el archivo .env con el bloc de
+# notas. Las llaves se vencen, se cambian y se revocan; pedirle que edite
+# un archivo escondido cada vez era pedirle demasiado.
+#
+# El segundo es que el día que haya login, ya hay un lugar donde ponerlo:
+# los datos de quién es se guardan en la tabla "ajustes" con el prefijo
+# "cuenta_", y las direcciones son /api/cuenta. No se inventó nada de
+# usuarios ni de contraseñas todavía — eso está fuera del alcance de la
+# versión 1 — pero el sitio ya está hecho.
+# ----------------------------------------------------------
+
+# Cómo se llama esta versión del programa cuando alguien pregunta.
+VERSION = "prototipo"
+
+# Los ajustes de la cuenta que se guardan en la base, con el prefijo que
+# los agrupa. El día que haya varias cuentas, esto es lo que se muda.
+AJUSTE_NOMBRE = "cuenta_nombre"
+AJUSTE_CORREO = "cuenta_correo"
+
+
+class CuentaCambios(BaseModel):
+    """Los datos de quién usa el programa."""
+
+    nombre: str = ""
+    correo: str = ""
+
+    @field_validator("nombre", "correo")
+    @classmethod
+    def _limpiar(cls, valor):
+        # Se recorta a algo razonable: esto es un rótulo, no un campo libre.
+        return (valor or "").strip()[:120]
+
+
+class AjustesIA(BaseModel):
+    """Cómo queda configurada la IA.
+
+    `llave` en None significa "no la toque". En "" significa "bórrela".
+    """
+
+    sin_ia: bool
+    llave: Optional[str] = None
+    modelo: str = ""
+
+    @field_validator("llave")
+    @classmethod
+    def _revisar_llave(cls, valor):
+        if valor is None:
+            return None
+        limpia = valor.strip()
+        if not limpia:
+            return ""
+        # Una llave no tiene espacios ni saltos de línea. Si los trae, casi
+        # siempre es porque se copió de más y así no va a funcionar.
+        if any(c.isspace() for c in limpia):
+            raise ValueError(
+                "La llave no puede tener espacios. Cópiela completa y sola."
+            )
+        if len(limpia) < 20 or len(limpia) > 200:
+            raise ValueError("Esa llave no tiene la forma de una llave de Groq.")
+        return limpia
+
+    @field_validator("modelo")
+    @classmethod
+    def _revisar_modelo(cls, valor):
+        limpio = (valor or "").strip()[:100]
+        if limpio and any(c.isspace() for c in limpio):
+            raise ValueError("El nombre del modelo no lleva espacios.")
+        return limpio
+
+
+class LlavePorProbar(BaseModel):
+    """Una llave que el contador quiere probar antes de guardarla."""
+
+    llave: str = ""
+
+
+def _cuenta_como_diccionario():
+    """Todo lo que la pantalla de Cuenta necesita saber. Sin la llave."""
+    datos = configuracion.CONFIG.como_diccionario()
+    datos.update({
+        "version": VERSION,
+        "nombre": db.leer_ajuste(AJUSTE_NOMBRE, ""),
+        "correo": db.leer_ajuste(AJUSTE_CORREO, ""),
+        "clientes": len(db.listar_clientes()),
+        # contar_documentos() devuelve cuántos tiene cada cliente;
+        # aquí solo interesa el total.
+        "documentos": sum(db.contar_documentos().values()),
+        # Dónde quedaron las cosas, por si hay que respaldarlas o mudarlas.
+        "carpeta_datos": str(RAIZ / "datos"),
+        "archivo_env": str(configuracion.ARCHIVO_ENV),
+        "hay_env": configuracion.ARCHIVO_ENV.exists(),
+    })
+    return datos
+
+
+@app.get("/api/cuenta")
+def api_cuenta():
+    """Quién usa el programa, cómo está configurado y dónde están los datos."""
+    return _cuenta_como_diccionario()
+
+
+@app.put("/api/cuenta")
+def api_guardar_cuenta(cambios: CuentaCambios):
+    """Guarda el nombre y el correo de quien usa el programa.
+
+    No se usan para nada todavía: salen en el resumen impreso el día que
+    se quiera y sirven de sitio para el login cuando lo haya.
+    """
+    db.guardar_ajuste(AJUSTE_NOMBRE, cambios.nombre)
+    db.guardar_ajuste(AJUSTE_CORREO, cambios.correo)
+    return _cuenta_como_diccionario()
+
+
+@app.put("/api/cuenta/ia")
+def api_guardar_ia(ajustes: AjustesIA):
+    """Cambia el modo de la IA, la llave y el modelo. Escribe el .env.
+
+    Después de escribir se recarga la configuración en caliente, así el
+    cambio vale de una vez. La llave se guarda en el .env y nunca en la
+    base de datos ni en los logs.
+    """
+    cambios = {"SIN_IA": "true" if ajustes.sin_ia else "false"}
+
+    if ajustes.llave is not None:
+        cambios["GROQ_API_KEY"] = ajustes.llave
+
+    if ajustes.modelo:
+        cambios["IA_MODELO"] = ajustes.modelo
+
+    try:
+        configuracion.guardar_en_env(cambios)
+    except OSError:
+        # No se dice cuál archivo falló con detalle del sistema: eso se
+        # queda en el servidor. Al contador se le dice qué hacer.
+        raise HTTPException(
+            status_code=500,
+            detail=(
+                "No se pudo escribir el archivo de configuración (.env)."
+                " Revise que la carpeta del programa no esté protegida"
+                " contra escritura."
+            ),
+        )
+
+    configuracion.CONFIG.recargar()
+    return _cuenta_como_diccionario()
+
+
+@app.post("/api/cuenta/ia/probar")
+def api_probar_llave(datos: LlavePorProbar):
+    """Prueba una llave contra el servicio, sin guardarla ni mandar datos.
+
+    Si viene vacía se prueba la que ya está guardada. Lo único que sale
+    del computador es la llave misma, para preguntar si sirve.
+    """
+    llave = datos.llave.strip() or configuracion.CONFIG.llave
+    sirve, motivo = rentai.probar_llave(llave)
+    return {"sirve": sirve, "motivo": motivo}

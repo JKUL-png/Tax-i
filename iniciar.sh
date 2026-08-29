@@ -17,7 +17,7 @@ fi
 .venv/bin/python -m pip install -q -r requirements.txt || exit 1
 
 echo ""
-echo "  Asistente de renta corriendo en:  http://localhost:8000"
+echo "  Tax-i corriendo en:                http://localhost:8000"
 echo "  Para apagarlo: Control + C"
 echo ""
 

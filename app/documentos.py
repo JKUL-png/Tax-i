@@ -144,7 +144,12 @@ def sanitizar_nombre(nombre):
     # 3. Separar el nombre de la extensión.
     ruta = Path(limpio)
     base = ruta.stem
-    extension = ruta.suffix.lower()
+    # La extensión también se limpia: en "documento.pdf " (con un espacio
+    # al final, que es como llega un nombre copiado y pegado), Python
+    # considera que la extensión es ".pdf " CON el espacio adentro. Si no
+    # se le quita aquí, el nombre entero termina en espacio y Windows no
+    # lo acepta, por más que la parte de adelante haya quedado limpia.
+    extension = ruta.suffix.lower().rstrip(". ")
 
     # 4. Windows no acepta nombres que terminen en punto o en espacio.
     base = base.strip().rstrip(". ")

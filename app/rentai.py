@@ -44,6 +44,10 @@ NOMBRE = "Rentai"
 # Cómo se presenta el programa ante el servicio.
 IDENTIFICACION = "asistente-renta/1.0"
 
+# La lista de modelos del servicio. Se usa solo para probar una llave: es
+# una consulta de solo lectura, sin ningún dato de ningún cliente adentro.
+SERVICIO_MODELOS = SERVICIO.replace("/chat/completions", "/models")
+
 # Cuánto se espera a que conteste antes de darse por vencido.
 SEGUNDOS_DE_ESPERA = 60
 
@@ -315,8 +319,8 @@ def _llamar_al_servicio(mensajes, modelo, llave):
     except urllib.error.HTTPError as error:
         if error.code == 401:
             raise RentaiFallo(
-                "La llave de la IA no sirve. Revísela en el archivo .env"
-                " (GROQ_API_KEY)."
+                "La llave de la IA no sirve. Cámbiela en la pantalla de"
+                " Cuenta."
             )
         if error.code == 429:
             raise RentaiFallo(
@@ -341,6 +345,49 @@ def _llamar_al_servicio(mensajes, modelo, llave):
         return respuesta["choices"][0]["message"]["content"]
     except (KeyError, IndexError):
         raise RentaiFallo("El servicio de IA contestó algo que no se entendió.")
+
+
+def probar_llave(llave):
+    """Le pregunta al servicio si una llave sirve, y devuelve (sirve, motivo).
+
+    Se pregunta por la lista de modelos, no por una conversación: es una
+    petición de solo lectura que no manda ni un dato de ningún cliente.
+    Sirve para que el contador pegue su llave nueva y sepa en el momento
+    si quedó bien, en vez de descubrirlo cuando le escriba a Rentai.
+    """
+    llave = (llave or "").strip()
+    if not llave:
+        return False, "Falta la llave."
+
+    peticion = urllib.request.Request(
+        SERVICIO_MODELOS,
+        headers={
+            "Authorization": f"Bearer {llave}",
+            # Igual que en la conversación: sin identificarse, Cloudflare
+            # lo rechaza con un 403 creyendo que es un robot.
+            "User-Agent": IDENTIFICACION,
+        },
+        method="GET",
+    )
+
+    try:
+        with urllib.request.urlopen(peticion, timeout=20) as r:
+            datos = json.loads(r.read().decode("utf-8"))
+    except urllib.error.HTTPError as error:
+        if error.code == 401:
+            return False, "La llave no sirve. Revise que la copió completa."
+        if error.code == 429:
+            return False, "El servicio está ocupado. Intente en un minuto."
+        return False, f"El servicio contestó con un error ({error.code})."
+    except urllib.error.URLError:
+        return False, "No hay conexión a internet, o el servicio no responde."
+    except TimeoutError:
+        return False, "El servicio se demoró más de 20 segundos."
+    except (ValueError, KeyError):
+        return False, "El servicio contestó algo que no se entendió."
+
+    cuantos = len(datos.get("data") or [])
+    return True, f"La llave sirve. El servicio ofrece {cuantos} modelos."
 
 
 def _entender_respuesta(texto):
