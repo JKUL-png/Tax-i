@@ -203,15 +203,52 @@ def revisar_librerias():
     for modulo, para_que, nombre_pip in librerias:
         try:
             __import__(modulo)
-            bien = True
-        except ImportError:
-            bien = False
+            bien, motivo = True, ""
+        except ImportError as error:
+            bien, motivo = False, _por_que_no_carga(error, nombre_pip)
         comprobar(
             "está instalado %s (%s)" % (nombre_pip, para_que),
             bien,
-            "" if bien else "instálelo con: .venv\\Scripts\\python.exe -m pip"
-                            " install %s" % nombre_pip,
+            motivo,
         )
+
+
+def _por_que_no_carga(error, nombre_pip):
+    """Explica en español por qué no se pudo cargar una librería.
+
+    Hay dos motivos muy distintos y Python los reporta con el mismo tipo
+    de error:
+
+      - No está instalada. Se instala y ya.
+
+      - Está instalada pero Windows no la deja cargar. Esto pasa con el
+        Control inteligente de aplicaciones (Smart App Control) de
+        Windows 11, que bloquea los archivos compilados que no vienen
+        firmados por una empresa reconocida, y varias librerías de
+        Python traen archivos así. Volver a instalarla no arregla nada,
+        porque el problema no es que falte.
+
+    Distinguirlos importa: sin esto, el revisor decía "no está instalado
+    fastapi" cuando sí lo estaba, y uno se pasa la tarde reinstalando.
+    """
+    texto = str(error)
+
+    marcas_de_bloqueo = (
+        "Application Control policy",              # el mensaje en inglés
+        "directiva de control de aplicaciones",    # y en español
+    )
+    if any(marca in texto for marca in marcas_de_bloqueo):
+        return ("SÍ está instalada, pero WINDOWS LA BLOQUEÓ. Es el Control"
+                " inteligente de aplicaciones. Reinstalar no sirve: lea la"
+                " sección 'Windows bloqueó un archivo' en"
+                " COMO-PROBAR-EN-WINDOWS.md.")
+
+    if "DLL load failed" in texto:
+        return ("SÍ está instalada, pero Windows no la deja cargar: %s"
+                % texto)
+
+    return ("instálelo con: .venv\\Scripts\\python.exe -m pip install %s"
+            % nombre_pip)
 
 
 # ==========================================================

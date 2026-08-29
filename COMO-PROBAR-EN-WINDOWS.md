@@ -339,7 +339,95 @@ la primera vez se demora.
 | El navegador dice "No se puede acceder a este sitio" | El programa no está prendido | Doble clic en `iniciar.bat` y espere a que diga "corriendo en" |
 | `revisar.bat` dice "Todavia no esta preparado el entorno" | Nunca se ha corrido `iniciar.bat` | Haga la Parte 5 primero |
 | Errores raros al guardar documentos | La carpeta quedó muy adentro y Windows corta las rutas a 260 caracteres | Mueva todo a `C:\tax-i` |
+| Un error largo que termina en `An Application Control policy has blocked this file` | Windows bloqueó una pieza del programa | Lea la sección siguiente, **Windows bloqueó un archivo** |
 | Cualquier otra cosa | — | Foto de la pantalla completa y me la manda |
+
+---
+
+# Windows bloqueó un archivo
+
+### Cómo se ve
+
+`iniciar.bat` alcanza a decir *"Tax-i corriendo en..."* y después suelta una
+pared de texto rojo que termina así:
+
+```
+ImportError: DLL load failed while importing _pydantic_core:
+An Application Control policy has blocked this file.
+```
+
+### Qué está pasando
+
+**No es un error del programa.** El programa está bien instalado. Lo que pasa
+es que **Windows 11 se negó a abrir uno de sus archivos.**
+
+El culpable es el **Control inteligente de aplicaciones** (*Smart App
+Control*), una función de seguridad que traen algunos Windows 11 nuevos.
+Funciona así: solo deja correr archivos que vengan **firmados** por una
+empresa que Microsoft ya conoce, o que mucha gente en el mundo haya usado
+antes. Todo lo demás lo bloquea, sin preguntar.
+
+Varias librerías de Python traen adentro archivos compilados sin firmar
+—`_pydantic_core` es uno—, y para el Control inteligente eso es sospechoso
+aunque venga del repositorio oficial de Python.
+
+> **Reinstalar no sirve para nada.** El archivo ya está ahí. Volver a
+> instalarlo, borrar la carpeta `.venv` o reinstalar Python deja todo
+> exactamente igual, porque no falta nada: está bloqueado.
+
+### La única solución: apagar el Control inteligente de aplicaciones
+
+Microsoft lo dice de frente: **no hay forma de permitir un solo programa.**
+Es todo o nada. O se apaga la función, o el programa no corre en ese
+computador.
+
+**Antes de hacerlo, lea esto:**
+
+Al apagarlo, Windows le va a mostrar un aviso diciendo que **no se puede
+volver a activar sin reinstalar Windows desde cero**. Microsoft dice que
+las actualizaciones recientes ya permiten volver a activarlo sin reinstalar,
+pero el aviso sigue apareciendo. **Dé por hecho que es un camino de una sola
+vía** y decida con esa idea: en el computador de pruebas, sin problema; en el
+computador de trabajo de alguien más, pregúntele primero.
+
+### Paso a paso
+
+**Paso 1.** Haga clic en el botón de Inicio y escriba:
+
+```
+Seguridad de Windows
+```
+
+Dele Enter para abrirla.
+
+**Paso 2.** En la columna de la izquierda, haga clic en **"Control de
+aplicaciones y navegador"** (el ícono es una ventanita con un candado).
+
+**Paso 3.** Busque la sección **"Control inteligente de aplicaciones"** y
+haga clic en **"Configuración de Control inteligente de aplicaciones"**.
+
+> **¿No aparece esa sección?** Entonces no es esto. Puede ser una política
+> puesta por una empresa o un colegio en ese computador. Mándeme una foto de
+> esa pantalla.
+
+**Paso 4.** Va a ver tres opciones: *Activado*, *Evaluación* y *Desactivado*.
+Marque **"Desactivado"**.
+
+**Paso 5.** Windows pregunta si está seguro y advierte lo de reinstalar.
+Confirme.
+
+**Paso 6.** **Reinicie el computador.** Sin reiniciar, a veces sigue
+bloqueando.
+
+**Paso 7.** Vuelva a `C:\tax-i` y haga doble clic en `iniciar.bat`. Ahora
+sí tiene que llegar hasta *"Tax-i corriendo en..."* y quedarse ahí, sin
+texto rojo.
+
+### Si prefiere no apagarlo
+
+Es una decisión razonable. En ese caso, ese computador no puede correr Tax-i,
+y toca probarlo en otro Windows. No hay término medio: Microsoft no da forma
+de hacer una excepción para un solo programa.
 
 ---
 
