@@ -1232,3 +1232,25 @@ def api_probar_llave(datos: LlavePorProbar):
     llave = datos.llave.strip() or configuracion.CONFIG.llave
     sirve, motivo = rentai.probar_llave(llave)
     return {"sirve": sirve, "motivo": motivo}
+
+
+# ----------------------------------------------------------
+# Arrancar el programa
+# ----------------------------------------------------------
+
+def arrancar():
+    """Prende el servidor. Es lo que llaman iniciar.sh e iniciar.bat."""
+    import argparse
+
+    opciones = argparse.ArgumentParser(description="Servidor de Tax-i")
+    opciones.add_argument("--puerto", type=int, default=8000)
+    opciones.add_argument("--maquina", default="127.0.0.1")
+    elegidas = opciones.parse_args()
+
+    import uvicorn
+    uvicorn.run(app, host=elegidas.maquina, port=elegidas.puerto,
+                log_level="warning")
+
+
+if __name__ == "__main__":
+    arrancar()
