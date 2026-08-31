@@ -152,14 +152,18 @@
      No son grises ni negros: son el mismo verde de la marca llevado hasta
      abajo de la rampa. Un riel gris al lado de un verde #10805F se ve como
      dos programas pegados; así se ve como uno solo apagando la luz. */
-  --riel-fondo:  #0E1714;   /* el fondo del riel */
-  --riel-alto:   #17231E;   /* el cliente que se está viendo */
-  --riel-borde:  #223029;
-  --riel-texto:  #D7E2DC;   /* 14:1 sobre el fondo del riel */
-  --riel-tenue:  #8C9E95;   /* 6.3:1 — rótulos y cifras de apoyo */
-  --riel-verde:  #3FB88C;   /* el verde de la marca, subido para que se
-                               lea sobre oscuro: el #10805F no alcanza */
-  --riel-rojo:   #E08579;   /* lo mismo con el rojo de tinta */
+  /* Verde de pizarra, no negro. Es el #10805F de siempre con la luz
+     bajada: mismo tono, misma familia. Cada valor de arriba se comprobó
+     contra este fondo — los cuatro pasan AA. */
+  --riel-fondo:  #2A4438;   /* el fondo del riel */
+  --riel-alto:   #365548;   /* el cliente que se está viendo */
+  --riel-borde:  #3F6152;
+  --riel-texto:  #E4EFE9;   /* 8.6:1 sobre el fondo del riel */
+  --riel-tenue:  #A2B4AA;   /* 4.9:1 — rótulos y cifras de apoyo */
+  --riel-verde:  #4FCB9D;   /* 5.2:1 — el verde de la marca, subido para
+                               que se lea sobre el riel: el #10805F da
+                               2.0:1 aquí y desaparece */
+  --riel-rojo:   #EE9C90;   /* 4.9:1 — lo mismo con el rojo de tinta */
   --riel-ancho:  244px;
 
   --radio: 4px;
@@ -233,166 +237,6 @@ h3 { font-size: 1.02rem; }
   overflow: hidden;
   clip: rect(0 0 0 0);
   white-space: nowrap;
-}
-
-/* ==========================================================
-   Cabecera
-
-   Se queda pegada arriba mientras se baja por la página: en la pantalla
-   del cliente, que es larga, el menú tenía que seguir a la mano.
-   ========================================================== */
-
-.cabecera {
-  background: var(--superficie);
-  /* La doble raya de contabilidad. Va aquí y en ningún otro lado. */
-  /* Sin raya de abajo. La doble raya de contabilidad quedaba como un
-     borde suelto de color indefinido cruzando la pantalla. La cabecera
-     se separa por lo que es —superficie blanca sobre el fondo de la
-     página—, y solo cuando se baja aparece una raya de 1px, que es
-     cuando de verdad hace falta para que el contenido no se le pegue. */
-  padding: var(--e4) 0;
-  margin-bottom: var(--e6);
-  transition: box-shadow 120ms ease;
-  position: sticky;
-  top: 0;
-  /* Por debajo del visor de documentos (50) y de Rentai (60), para que
-     no se les monte encima cuando están abiertos. */
-  z-index: 20;
-}
-
-/* Puesta por marca.js cuando la página está desplazada. */
-.cabecera-desplazada {
-  box-shadow: 0 1px 0 var(--raya);
-}
-
-.cabecera .contenedor {
-  display: flex;
-  align-items: center;
-  gap: var(--e3);
-  flex-wrap: wrap;
-}
-
-/* El logo al lado del nombre. 26px: el mismo alto que la mayúscula de
-   "Tax", para que los dos se apoyen en la misma línea. */
-.marca-logo {
-  display: block;
-  width: 30px;
-  height: 30px;
-  flex: 0 0 auto;
-}
-
-/* Los colores del logo salen de los tokens y no de un hex escrito dentro
-   del SVG: si mañana cambia el verde de la marca, cambia aquí y ya. */
-.marca-cara {
-  fill: var(--primary);
-  fill-rule: evenodd;
-  /* El paso de un gesto a otro. Corto: es un parpadeo, no una
-     transformación. */
-  transition: d 90ms ease;
-}
-
-.marca-pliegue {
-  fill: var(--primary-hover);
-}
-
-.portada-logo .marca-cara,
-.portada-logo .marca-pliegue {
-  transition: d 110ms ease;
-}
-
-.subtitulo {
-  margin: 0;
-  color: var(--texto-tenue);
-  font-size: var(--t-meta);
-  /* Una raya vertical lo separa de la marca, en vez de un punto. */
-  padding-left: var(--e3);
-  border-left: 1px solid var(--borde);
-}
-
-/* El logotipo: "Tax" en negro y "-i" en el verde de la marca.
-   Se escribe siempre con guion. Junto ("Taxi") se lee como el carro
-   y se pierde el juego de palabras con "tax" (impuesto). */
-.marca {
-  margin: 0;
-  display: flex;
-  align-items: center;
-  gap: var(--e2);
-  font-size: 1.6rem;
-  font-weight: 700;
-  letter-spacing: -0.035em;
-  color: var(--texto);
-  white-space: nowrap;
-}
-
-.marca-i {
-  color: var(--primary);
-}
-
-/* Cuando la marca es un enlace a la portada, no se ve como enlace. */
-.marca-enlace {
-  text-decoration: none;
-  color: inherit;
-  border-radius: var(--radio-chico);
-}
-
-.marca-enlace {
-  display: flex;
-  align-items: center;
-  gap: var(--e2);
-}
-
-.marca-enlace:hover .marca-i {
-  color: var(--primary-fuerte);
-}
-
-/* Recordatorio honesto de que esto todavia no es un producto terminado. */
-.etiqueta-prototipo {
-  font-family: var(--fuente-cifras);
-  font-size: var(--t-rotulo);
-  text-transform: uppercase;
-  letter-spacing: 0.07em;
-  font-weight: 600;
-  color: var(--texto-tenue);
-  border: 1px solid var(--borde);
-  border-radius: var(--radio-chico);
-  padding: 1px 5px;
-}
-
-/* ----- El menú -----
-   Dos sitios nada más: los clientes y la cuenta. Se escriben con todas
-   sus letras; aquí no hay iconos que haya que adivinar. */
-
-.menu {
-  margin-left: auto;
-  display: flex;
-  gap: 4px;
-  align-items: center;
-}
-
-.menu-enlace {
-  display: inline-block;
-  padding: 7px 13px;
-  border-radius: var(--radio-chico);
-  color: var(--texto-secundario);
-  text-decoration: none;
-  font-size: 0.92rem;
-  font-weight: 500;
-  /* Una raya de 2px debajo marca en cuál página se está. Transparente
-     mientras no sea la actual, para que nada se mueva al cambiar. */
-  border-bottom: 2px solid transparent;
-}
-
-.menu-enlace:hover {
-  color: var(--primary);
-  background: var(--primary-tenue);
-}
-
-.menu-actual {
-  color: var(--texto);
-  font-weight: 600;
-  border-bottom-color: var(--primary);
-  border-bottom-left-radius: 0;
-  border-bottom-right-radius: 0;
 }
 
 /* ==========================================================
@@ -3651,7 +3495,7 @@ code {
 
 /* Dentro del riel el logo se pinta con los verdes de fondo oscuro. */
 .riel .marca-cara { fill: var(--riel-verde); }
-.riel .marca-pliegue { fill: #2A8E6B; }
+.riel .marca-pliegue { fill: #2E9E77; }
 
 .riel-nombre {
   font-size: 1.35rem;
@@ -3713,7 +3557,7 @@ code {
   font-size: var(--t-meta);
 }
 
-.riel-buscar::placeholder { color: #6E8078; }
+.riel-buscar::placeholder { color: #8FA298; }
 
 .riel-buscar:focus-visible {
   outline: 2px solid var(--riel-verde);
@@ -3812,11 +3656,11 @@ code {
 .riel-fila-listo {
   flex: 0 0 auto;
   font-size: var(--t-rotulo);
-  color: #5E7168;
+  color: #8CA095;
 }
 
 .riel-grupo-aldia .riel-fila:not(.riel-fila-actual) {
-  color: #A7B7AE;
+  color: #C3D2C9;
 }
 
 .riel-vacio {
@@ -4016,7 +3860,7 @@ code {
 }
 
 .rentai-pastilla .marca-cara { fill: var(--riel-verde); }
-.rentai-pastilla .marca-pliegue { fill: #2A8E6B; }
+.rentai-pastilla .marca-pliegue { fill: #2E9E77; }
 
 .rentai-apagada .rentai-pastilla .marca-cara { fill: #6E8078; }
 .rentai-apagada .rentai-pastilla .marca-pliegue { fill: #55655D; }
@@ -4079,16 +3923,6 @@ code {
   display: none;
 }
 
-/* La marca, más grande en las dos páginas que conservan cabecera. */
-.marca-logo {
-  width: 34px;
-  height: 34px;
-}
-
-.marca {
-  font-size: 1.75rem;
-}
-
 /* La columna del riel se pinta desde el contenedor, no desde el riel.
    El riel va pegado arriba (position: sticky) y mide una pantalla de
    alto; en una página más larga que eso quedaba una franja clara debajo.
@@ -4142,4 +3976,52 @@ code {
     width: min(1360px, calc(100vw - 48px));
     margin-left: calc((100% - min(1360px, 100vw - 48px)) / 2);
   }
+}
+
+/* ==========================================================
+   La cabecera de las pantallas sin pestañas
+
+   Agregar clientes y Cuenta no tienen vistas: llevan solo el título, así
+   que la raya de abajo la pone la propia cabecera y no la fila de
+   pestañas.
+   ========================================================== */
+
+.area-cabecera-sola {
+  padding-bottom: var(--e3);
+  border-bottom: 1px solid var(--raya);
+}
+
+.area-cabecera-sola .area-cabecera-arriba {
+  margin-bottom: 0;
+}
+
+/* La cédula del cliente y la frase de ayuda de estas dos pantallas usan
+   el mismo sitio, pero aquí es una frase, no un dato: va en la letra de
+   la interfaz y no en la de ancho fijo. */
+.area-cabecera-sola .area-cedula {
+  font-family: var(--fuente);
+  font-size: var(--t-celda);
+  color: var(--texto-secundario);
+}
+
+/* En qué parte del programa se está. El riel marca las tres: el botón de
+   arriba, un cliente de la lista, o los ajustes del pie. Sin esto, en la
+   pantalla de agregar clientes nada del riel se ve seleccionado y no hay
+   forma de saber dónde se está parado. */
+.riel-agregar-actual,
+.riel-agregar-actual:hover {
+  background: var(--riel-verde);
+  border-color: var(--riel-verde);
+  color: #12241C;
+  font-weight: 600;
+}
+
+.riel-agregar-actual .mas {
+  color: #12241C;
+}
+
+.riel-pie-actual {
+  background: var(--riel-alto);
+  color: var(--riel-texto) !important;
+  font-weight: 600;
 }

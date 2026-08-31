@@ -52,9 +52,6 @@
      apareciera de golpe en mitad del trabajo, al entrar a un cliente.
      Una portada de arranque tiene que salir al arrancar y en ningún otro
      momento: dentro de un cliente nunca es bienvenida. */
-  var camino = location.pathname.replace(/\/+$/, "");
-  if (camino !== "" && camino !== "/index.html") return;
-
   /* ¿Ya se vio en esta sesión? En una ventana privada o con el
      almacenamiento bloqueado, sessionStorage revienta al leerlo: si eso
      pasa se prefiere no mostrar la portada antes que romper la página. */
@@ -65,18 +62,31 @@
     yaVista = true;
   }
 
+  /* La sesión se marca en CUALQUIER página, aunque la portada no salga.
+
+     Esto es lo que arregla el error de que la portada apareciera de golpe
+     en mitad del trabajo: antes se marcaba solo al mostrarla, así que
+     quien entraba directo a un cliente dejaba la sesión sin marcar, y la
+     portada le saltaba encima la primera vez que pasaba por la lista.
+     Ahora la primera página que se abra —la que sea— cierra el asunto. */
+  try {
+    sessionStorage.setItem(LLAVE, "si");
+  } catch (e) {
+    /* Sin almacenamiento no se puede recordar. Se prefiere que la portada
+       salga de más antes que el programa no arranque, y es un caso raro. */
+  }
+
   if (yaVista) return;
+
+  /* Y solo se muestra en la lista de clientes, que es por donde se entra
+     al programa. Una portada de arranque tiene que salir al arrancar y en
+     ningún otro momento: dentro de un cliente nunca es bienvenida. */
+  var camino = location.pathname.replace(/\/+$/, "");
+  if (camino !== "" && camino !== "/index.html") return;
 
   /* Se marca el <html> ahora mismo, antes de que se pinte nada: es lo
      que hace visible el div de la portada que está en el HTML. */
   raiz.classList.add("portada-corriendo");
-
-  try {
-    sessionStorage.setItem(LLAVE, "si");
-  } catch (e) {
-    /* Sin almacenamiento la portada saldría en cada página. Se prefiere
-       eso a que el programa no arranque, y es un caso muy raro. */
-  }
 
   var quietos = window.matchMedia &&
                 window.matchMedia("(prefers-reduced-motion: reduce)").matches;

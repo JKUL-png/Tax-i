@@ -215,6 +215,14 @@
     document.querySelectorAll(".area-vista-boton"));
   var LLAVE_VISTA = "taxi-vista-cliente";
 
+  /* Las vistas son solo de la pantalla del cliente. En la de agregar y en
+     la de la cuenta no hay pestañas, y sin esta salida mostrar() se
+     llamaba a sí misma sin parar buscando una que no existe. */
+  if (botones.length === 0) {
+    cargar();
+    return;
+  }
+
   /* Las vistas que ya se abrieron alguna vez en esta carga de la página. */
   var abiertas = {};
 
