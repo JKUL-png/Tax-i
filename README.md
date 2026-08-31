@@ -94,14 +94,47 @@ Desde la terminal es igual:
 
 ### En Windows
 
-Doble clic en **`iniciar.bat`**.
+**Primero desbloquee el ZIP, antes de descomprimirlo.** Clic derecho sobre el
+archivo `.zip` → **Propiedades** → marque **☑ Desbloquear** abajo → Aceptar. Y
+*después* extráigalo.
 
-Si Windows muestra un aviso azul de SmartScreen, es porque el archivo se bajó de
-internet: **Más información → Ejecutar de todas formas**. Si Python no está
-instalado, el propio lanzador lo dice y le da el enlace. Al instalarlo hay que
-marcar la casilla **"Add Python to PATH"** — es el paso donde todo el mundo se
-equivoca, y está explicado con capturas en
+Ese paso no es opcional y no se puede saltar. Windows le pone una marca
+invisible a todo lo que se descarga de internet, y **Smart App Control bloquea
+los archivos `.bat` que la traen**, sin ofrecer ningún botón para continuar. No
+es un aviso que se pueda ignorar: es un muro. Desbloquear el ZIP le quita esa
+marca a todo lo de adentro de una vez, sin apagar ninguna seguridad.
+
+Si ya lo descomprimió y le está pasando, abra PowerShell y corra esto (cambie la
+ruta por la suya):
+
+```powershell
+Get-ChildItem -Path C:\tax-i -Recurse | Unblock-File
+```
+
+Ya con eso: **doble clic en `iniciar.bat`**.
+
+Si sale un aviso *azul* de SmartScreen —que sí trae botón—:
+**Más información → Ejecutar de todas formas**. Si Python no está instalado, el
+propio lanzador lo dice y le da el enlace; al instalarlo hay que marcar la
+casilla **"Add Python to PATH"**. Todo el proceso está explicado paso a paso en
 [`COMO-PROBAR-EN-WINDOWS.md`](COMO-PROBAR-EN-WINDOWS.md).
+
+<details>
+<summary>Si aun así no arranca: prenderlo sin el <code>.bat</code></summary>
+
+El lanzador solo encadena cuatro comandos. Se pueden escribir a mano en
+PowerShell, y así Smart App Control no interviene, porque no hay ningún archivo
+descargado ejecutándose:
+
+```powershell
+cd C:\tax-i
+py -m venv .venv
+.venv\Scripts\python.exe -m pip install -r requirements.txt
+.venv\Scripts\python.exe -m app.main
+```
+
+La primera vez tarda un minuto. Las siguientes basta con la última línea.
+</details>
 
 ### Y ya
 

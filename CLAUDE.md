@@ -119,6 +119,19 @@ cuando ya está en manos del contador y no lo puedes depurar.
 7. **Comando de Python:** en Mac es `python3`, en Windows es `py`. Cada lanzador usa el suyo;
    ambos crean el entorno virtual e instalan `requirements.txt` si no existe.
 
+8. **Un `.bat` descargado de internet lo bloquea el Control inteligente de aplicaciones,
+   y ese bloqueo NO tiene botón para continuar.** Windows le pone la "Marca de la Web"
+   a todo lo que se baja, y Smart App Control rechaza los `.bat` que la traen. Es un
+   bloqueo distinto del que sacó a FastAPI: aquel era por un binario compilado sin
+   firmar y no se podía esquivar; este se quita desbloqueando el archivo
+   (Propiedades → Desbloquear, o `Unblock-File` en PowerShell).
+
+   **Nunca se le dice a nadie que apague el Control inteligente por esto.** Es la
+   protección del computador donde viven documentos tributarios de terceros, y
+   desbloquear el archivo resuelve exactamente lo mismo sin bajar ninguna defensa.
+   La instrucción de desbloquear va ANTES de descomprimir, porque desbloquear el ZIP
+   desbloquea todo lo de adentro de una vez.
+
 8. **Probar en ambos antes de dar algo por terminado.** Si solo se probó en Mac, decirlo
    explícitamente en vez de afirmar que funciona.
 

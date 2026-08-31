@@ -37,6 +37,14 @@ abra el navegador y entre a:
 Botón verde **Code** → **Download ZIP**. Con eso ya tiene el paquete allá y
 puede **saltarse las Partes 1 y 2** y seguir directo en la Parte 3.
 
+> ### 🔴 Y ANTES DE DESCOMPRIMIRLO, DESBLOQUÉELO
+>
+> Clic derecho sobre el `.zip` → **Propiedades** → abajo, marque
+> **☑ Desbloquear** → **Aceptar**. Y *después* sí lo descomprime.
+>
+> Si se salta esto, el programa **no va a arrancar** y el mensaje que sale no
+> tiene botón para continuar. Está explicado en la Parte 5.
+
 Es exactamente el mismo contenido: el ZIP de GitHub y el que arma
 `empacar.sh` traen los mismos archivos, y ninguno de los dos lleva
 documentos de clientes ni la llave de la IA.
@@ -196,7 +204,38 @@ un nivel arriba (Control + V).
 
 En `C:\tax-i`, haga **doble clic en `iniciar.bat`**.
 
-### Paso 5.2 — Si sale una pantalla azul de advertencia
+### 🔴 Paso 5.2 — Si dice "Smart App Control bloqueó esta aplicación"
+
+Este es el mensaje que **no tiene botón para continuar**. No es el aviso azul
+—ese viene después— y no se arregla con "Ejecutar de todas formas", porque esa
+opción no existe aquí.
+
+**Por qué pasa.** Windows le pone una marca invisible (la "Marca de la Web") a
+todo lo que se descarga de internet, y Smart App Control bloquea los archivos
+`.bat` que la traen. No tiene nada que ver con el programa: le pasaría igual a
+cualquier `.bat` bajado de cualquier sitio.
+
+**Cómo se arregla, sin apagar ninguna seguridad.** Hay que quitarle esa marca.
+
+*La forma buena, si todavía tiene el ZIP:* bórre lo que extrajo, clic derecho
+sobre el `.zip` → **Propiedades** → marque **☑ Desbloquear** → **Aceptar**, y
+vuelva a extraer. Desbloquear el ZIP desbloquea todo lo de adentro de una vez.
+
+*Si ya no tiene el ZIP:* abra **PowerShell** (botón de Windows, escriba
+`PowerShell`, Enter) y pegue esto tal cual:
+
+```powershell
+Get-ChildItem -Path C:\tax-i -Recurse | Unblock-File
+```
+
+No dice nada cuando termina — eso significa que funcionó. Vuelva al Paso 5.1.
+
+> **Lo que NO hay que hacer: apagar Smart App Control.** Es la protección del
+> computador donde se van a guardar documentos tributarios de sus clientes.
+> Desbloquear el archivo resuelve esto exactamente igual y no baja ninguna
+> defensa.
+
+### Paso 5.3 — Si en cambio sale una pantalla AZUL de advertencia
 
 Puede aparecer una ventana azul que dice *"Windows protegió su PC"*. Es
 normal: Windows desconfía de todo archivo que llegó de afuera y no está
@@ -205,7 +244,7 @@ firmado por una empresa grande.
 - Haga clic en **"Más información"**
 - Después en **"Ejecutar de todas formas"**
 
-### Paso 5.3 — Espere
+### Paso 5.4 — Espere
 
 Se abre una ventana negra que dice:
 
@@ -217,7 +256,7 @@ Primera vez: preparando el entorno (esto puede tardar un minuto)...
 librerías que el programa necesita. Se ven pasar muchas líneas de texto: es
 normal, no hay que leerlas. Déjelo quieto.
 
-### Paso 5.4 — Cuando termine
+### Paso 5.5 — Cuando termine
 
 La ventana negra queda mostrando esto:
 
@@ -231,7 +270,7 @@ La ventana negra queda mostrando esto:
 > ⚠️ **No cierre esa ventana negra.** Es el programa. Mientras esté abierta,
 > Tax-i está prendido; si la cierra, se apaga.
 
-### Paso 5.5 — Si aparece una alerta del firewall
+### Paso 5.6 — Si aparece una alerta del firewall
 
 Si Windows pregunta si permite el acceso a la red, puede darle **Cancelar**
 tranquilamente. El programa solo habla consigo mismo dentro del computador y
@@ -363,14 +402,33 @@ la primera vez se demora.
 | El navegador dice "No se puede acceder a este sitio" | El programa no está prendido | Doble clic en `iniciar.bat` y espere a que diga "corriendo en" |
 | `revisar.bat` dice "Todavia no esta preparado el entorno" | Nunca se ha corrido `iniciar.bat` | Haga la Parte 5 primero |
 | Errores raros al guardar documentos | La carpeta quedó muy adentro y Windows corta las rutas a 260 caracteres | Mueva todo a `C:\tax-i` |
-| Un error largo que termina en `An Application Control policy has blocked this file` | Windows bloqueó una pieza del programa | Lea la sección siguiente, **Windows bloqueó un archivo** |
+| Al abrir `iniciar.bat` sale **"Smart App Control bloqueó esta aplicación"** y no hay botón para continuar | El `.bat` se bajó de internet y trae la Marca de la Web | **Desbloquee el archivo** — Paso 5.2. No hay que apagar nada |
+| Un error largo que termina en `An Application Control policy has blocked this file` | Windows bloqueó una pieza *de adentro* del programa | Lea la sección siguiente, **Windows bloqueó un archivo** |
 | Cualquier otra cosa | — | Foto de la pantalla completa y me la manda |
 
 ---
 
 # Windows bloqueó un archivo
 
-### Cómo se ve
+> ## Antes de leer: hay DOS bloqueos distintos y se arreglan distinto
+>
+> Los dos los hace el **Control inteligente de aplicaciones** (*Smart App
+> Control*), pero por razones distintas. Mire cuál le salió:
+>
+> **A) "Smart App Control bloqueó esta aplicación"**, al hacer doble clic en
+> `iniciar.bat`, y sin ningún botón para continuar.
+> → Es el `.bat` con la **Marca de la Web**, la etiqueta que Windows le pone a
+> todo lo que se descarga. **Se arregla desbloqueando el archivo** (Paso 5.2)
+> y **no hay que apagar nada**. Es el caso común, y le pasaría igual con
+> cualquier `.bat` bajado de cualquier sitio.
+>
+> **B) Una pared de texto rojo que termina en `An Application Control policy
+> has blocked this file`**, con el nombre de un archivo `.pyd` o `.dll`.
+> → Eso es lo que cuenta el resto de esta sección: un archivo **compilado**
+> de adentro del programa. Ahí desbloquear no sirve, porque no es cosa de la
+> Marca de la Web sino de la firma. **Hoy no debería pasar** — siga leyendo.
+
+### Cómo se ve (el caso B)
 
 `iniciar.bat` alcanza a decir *"Tax-i corriendo en..."* y después suelta una
 pared de texto rojo que termina así:
@@ -410,10 +468,15 @@ aunque venga del repositorio oficial de Python.
 > instalarlo, borrar la carpeta `.venv` o reinstalar Python deja todo
 > exactamente igual, porque no falta nada: está bloqueado.
 
-### La única solución: apagar el Control inteligente de aplicaciones
+### Para el caso B, la única solución: apagar el Control inteligente
 
-Microsoft lo dice de frente: **no hay forma de permitir un solo programa.**
-Es todo o nada. O se apaga la función, o el programa no corre en ese
+**Esto es solo para el caso B** —el archivo compilado—, no para el bloqueo del
+`.bat`. Si lo que le salió fue "Smart App Control bloqueó esta aplicación",
+**no siga por aquí**: vuelva al Paso 5.2 y desbloquee el archivo, que resuelve
+lo mismo sin bajar ninguna defensa.
+
+Para el caso B, Microsoft lo dice de frente: **no hay forma de permitir un solo
+programa.** Es todo o nada. O se apaga la función, o el programa no corre en ese
 computador.
 
 **Antes de hacerlo, lea esto:**
