@@ -1,168 +1,129 @@
 /* ==========================================================
-   La portada de inicio
+   La portada de la pantalla de inicio
 
-   Escribe "Tax-i" letra por letra, dibuja el logo y lo deja hacer su
-   gesto. Dura 2,8 segundos como máximo y sale una sola vez por sesión.
+   Escribe "Tax-i" letra por letra, deja caer el logo, abre la frase que
+   define el programa y termina con el guiño del logo. Dura 2,1 segundos
+   y no tapa nada: es la pantalla de inicio, no un telón encima de ella.
 
-   Por qué tan corta y tan fácil de saltar
-   ---------------------------------------
-   El contador abre esto veinte veces al día en temporada. Una portada
-   que no se puede saltar es de las cosas que más estorban en una
-   herramienta de trabajo: la primera vez es bonita y la número quince es
-   una piedra en el camino. Por eso:
-
-     - 2.800 ms de tope, contados abajo en la línea de tiempo. El
-       segundo y medio de más no es espera: es el logo haciendo su
-       gesto —abre los ojos, los entrecierra, guiña—, que es lo que hay
-       que ver una vez para entender de qué va la marca.
-     - Se corta con un clic o con cualquier tecla.
-     - Se guarda en sessionStorage, así que aparece al abrir el programa
-       y no vuelve a salir al moverse entre pantallas.
-     - Si el sistema pide menos movimiento (prefers-reduced-motion), se
-       muestra quieta medio segundo y se va.
+   Qué era antes y por qué cambió
+   ------------------------------
+   Esto era una portada a pantalla completa que salía una vez por sesión
+   y había que saltarse con un clic. Se quitó cuando la misma animación
+   pasó a vivir fija en la pantalla de inicio: con las dos puestas se veía
+   dos veces seguidas —el telón encima y, al quitarse, otra vez debajo—.
+   La pantalla de inicio es la entrada del programa; no necesita un telón
+   delante. Ya no hay nada que saltar, nada que recordar en sessionStorage
+   y nada que tape la aplicación.
 
    Este archivo se carga en el <head> SIN defer, a propósito: tiene que
-   marcar el <html> antes del primer pintado, o se alcanza a ver la
-   pantalla de la aplicación un instante antes de que aparezca la
-   portada.
+   marcar el <html> antes del primer pintado. Esa marca es la que esconde
+   las letras; sin ella se alcanza a ver "Tax-i" completo un instante
+   antes de que empiece a escribirse.
+
+   Si el JavaScript no corre, la marca nunca se pone: la portada se ve
+   quieta y completa. Es la falla correcta para una animación.
    ========================================================== */
 
 (function () {
   "use strict";
 
-  var LLAVE = "taxi-portada-vista";
-  var PALABRA = "Tax-i";
+  /* La palabra, partida donde cambia de color: "Tax" en tinta y "-i" en
+     verde. Se escribe de corrido, pero son dos trozos porque el verde de
+     la "-i" es parte de la marca y se perdería si esto fuera un solo
+     texto plano. */
+  var PARTE_UNO = "Tax";
+  var PARTE_DOS = "-i";
+  var LETRAS = PARTE_UNO.length + PARTE_DOS.length;
 
   /* --- Los tiempos, en milisegundos desde que arranca --- */
+  var EMPIEZA_TEXTO = 180;
   var POR_LETRA = 130;      // 5 letras = 650 ms escribiendo
-  var EMPIEZA_TEXTO = 150;
-  var ENTRA_LOGO = 850;     // entra con los dos ojos abiertos
-  var ENTRA_SUB = 1150;
-  var GESTO_LEYENDO = 1550; // entrecierra
-  var GESTO_LISTO = 1950;   // y guiña: el visto, revisado
-  var EMPIEZA_SALIDA = 2600;
-  var DURA_SALIDA = 200;    // total: 2.800 ms
+  var ENTRA_LOGO = 900;     // el logo cae cuando el nombre ya está escrito
+  var ENTRA_FRASE = 1200;   // la definición y la doble raya
+  var ENTRA_RESTO = 1500;   // la cuenta de clientes y el indicio de abajo
+  var GESTO_LEYENDO = 1750; // entrecierra los ojos
+  var GESTO_LISTO = 2100;   // y guiña: el visto, revisado
 
   var raiz = document.documentElement;
 
-  /* Solo en la lista de clientes, que es por donde se entra al programa.
-
-     Antes salía en las tres páginas y bastaba con que sessionStorage
-     estuviera vacío —una pestaña nueva, una ventana privada— para que
-     apareciera de golpe en mitad del trabajo, al entrar a un cliente.
-     Una portada de arranque tiene que salir al arrancar y en ningún otro
-     momento: dentro de un cliente nunca es bienvenida. */
-  /* ¿Ya se vio en esta sesión? En una ventana privada o con el
-     almacenamiento bloqueado, sessionStorage revienta al leerlo: si eso
-     pasa se prefiere no mostrar la portada antes que romper la página. */
-  var yaVista = true;
-  try {
-    yaVista = sessionStorage.getItem(LLAVE) === "si";
-  } catch (e) {
-    yaVista = true;
-  }
-
-  /* La sesión se marca en CUALQUIER página, aunque la portada no salga.
-
-     Esto es lo que arregla el error de que la portada apareciera de golpe
-     en mitad del trabajo: antes se marcaba solo al mostrarla, así que
-     quien entraba directo a un cliente dejaba la sesión sin marcar, y la
-     portada le saltaba encima la primera vez que pasaba por la lista.
-     Ahora la primera página que se abra —la que sea— cierra el asunto. */
-  try {
-    sessionStorage.setItem(LLAVE, "si");
-  } catch (e) {
-    /* Sin almacenamiento no se puede recordar. Se prefiere que la portada
-       salga de más antes que el programa no arranque, y es un caso raro. */
-  }
-
-  if (yaVista) return;
-
-  /* Y solo se muestra en la lista de clientes, que es por donde se entra
-     al programa. Una portada de arranque tiene que salir al arrancar y en
-     ningún otro momento: dentro de un cliente nunca es bienvenida. */
+  /* Solo en la pantalla de inicio. El <script> ya no está en las demás
+     páginas, pero la comprobación se queda: si alguien lo vuelve a pegar
+     en otra, no pasa nada. */
   var camino = location.pathname.replace(/\/+$/, "");
   if (camino !== "" && camino !== "/index.html") return;
 
-  /* Se marca el <html> ahora mismo, antes de que se pinte nada: es lo
-     que hace visible el div de la portada que está en el HTML. */
-  raiz.classList.add("portada-corriendo");
+  /* Se marca el <html> ahora mismo, antes de que se pinte nada. */
+  raiz.classList.add("inicio-animada");
 
   var quietos = window.matchMedia &&
                 window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
   document.addEventListener("DOMContentLoaded", function () {
-    var portada = document.querySelector(".portada-inicio");
-    if (!portada) {
-      /* Si por lo que sea no está el div, se quita la marca y la
-         aplicación sigue como si nada. */
-      raiz.classList.remove("portada-corriendo");
+    var uno = document.querySelector(".inicio-parte-uno");
+    var dos = document.querySelector(".inicio-parte-dos");
+    var logo = document.querySelector(".inicio-logo");
+
+    /* Si por lo que sea no están los trozos del nombre, se quita la marca
+       y la pantalla queda completa y quieta. Nunca escondida. */
+    if (!uno || !dos) {
+      raiz.classList.remove("inicio-animada");
       return;
     }
 
-    var escrito = portada.querySelector(".portada-escrito");
-    var relojes = [];
-    var terminada = false;
-
-    function despues(ms, hacer) {
-      relojes.push(window.setTimeout(hacer, ms));
+    /* Todo encendido de una vez. Es el estado final de la animación. */
+    function mostrarTodo() {
+      uno.textContent = PARTE_UNO;
+      dos.textContent = PARTE_DOS;
+      raiz.classList.add("inicio-escribiendo", "inicio-con-logo",
+                         "inicio-con-frase", "inicio-lista");
     }
 
-    /* Quitar la portada. Se puede llamar dos veces sin que pase nada. */
-    function cerrar() {
-      if (terminada) return;
-      terminada = true;
-
-      relojes.forEach(window.clearTimeout);
-      document.removeEventListener("keydown", saltar, true);
-      document.removeEventListener("pointerdown", saltar, true);
-
-      portada.classList.add("portada-saliendo");
-      window.setTimeout(function () {
-        raiz.classList.remove("portada-corriendo");
-        if (portada.parentNode) portada.parentNode.removeChild(portada);
-      }, quietos ? 0 : DURA_SALIDA);
-    }
-
-    function saltar() {
-      cerrar();
-    }
-
-    /* Cualquier tecla y cualquier clic la cortan. En captura, para que
-       ningún otro manejador se los coma antes. */
-    document.addEventListener("keydown", saltar, true);
-    document.addEventListener("pointerdown", saltar, true);
-
-    /* --- Sin movimiento: se muestra el estado final y se va --- */
+    /* --- Sin movimiento: el estado final y ya --- */
     if (quietos) {
-      if (escrito) escrito.textContent = PALABRA;
-      portada.classList.add("portada-quieta");
-      despues(500, cerrar);
+      mostrarTodo();
       return;
     }
 
     /* --- Con movimiento: la máquina de escribir --- */
-    for (var i = 1; i <= PALABRA.length; i++) {
-      (function (letras) {
-        despues(EMPIEZA_TEXTO + letras * POR_LETRA, function () {
-          if (escrito) escrito.textContent = PALABRA.slice(0, letras);
+
+    /* Las letras arrancan vacías y la caja se hace visible: hasta aquí
+       estaban escondidas por CSS, no borradas, para que sin JavaScript se
+       leyeran completas. */
+    uno.textContent = "";
+    dos.textContent = "";
+    raiz.classList.add("inicio-escribiendo");
+
+    function escribir(cuantas) {
+      uno.textContent = PARTE_UNO.slice(0, cuantas);
+      dos.textContent = cuantas > PARTE_UNO.length
+        ? PARTE_DOS.slice(0, cuantas - PARTE_UNO.length)
+        : "";
+    }
+
+    function despues(ms, hacer) {
+      window.setTimeout(hacer, ms);
+    }
+
+    for (var i = 1; i <= LETRAS; i++) {
+      (function (cuantas) {
+        despues(EMPIEZA_TEXTO + cuantas * POR_LETRA, function () {
+          escribir(cuantas);
         });
       })(i);
     }
 
-    var logo = portada.querySelector(".portada-logo");
-    var marca = window.MarcaTaxi;
+    despues(ENTRA_LOGO,  function () { raiz.classList.add("inicio-con-logo"); });
+    despues(ENTRA_FRASE, function () { raiz.classList.add("inicio-con-frase"); });
+    despues(ENTRA_RESTO, function () { raiz.classList.add("inicio-lista"); });
 
     /* El logo entra con los dos ojos abiertos y termina guiñando. Ese
-       recorrido es el que explica la marca sin una sola palabra. */
-    if (marca) marca.gesto(logo, "esperando");
-
-    despues(ENTRA_LOGO, function () { portada.classList.add("portada-con-logo"); });
-    despues(ENTRA_SUB, function () { portada.classList.add("portada-con-sub"); });
+       recorrido es el que explica la marca sin una sola palabra. De aquí
+       en adelante lo sigue haciendo parpadear marca.js. */
+    var marca = window.MarcaTaxi;
     if (marca) {
+      marca.gesto(logo, "esperando");
       despues(GESTO_LEYENDO, function () { marca.gesto(logo, "leyendo"); });
-      despues(GESTO_LISTO, function () { marca.gesto(logo, "listo"); });
+      despues(GESTO_LISTO,   function () { marca.gesto(logo, "listo"); });
     }
-    despues(EMPIEZA_SALIDA, cerrar);
   });
 })();

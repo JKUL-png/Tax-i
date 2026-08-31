@@ -149,6 +149,12 @@ def main():
             revisar("dice que NO hace impuestos",
                     "no hace impuestos" in pagina.locator(".inicio-limite")
                                                  .inner_text().lower())
+            # Lo mismo con la condición de uso: "sin garantía" y "responde
+            # por el uso que le dé" es lo que separa un proyecto libre de un
+            # servicio contratado, y va en la portada, no escondido.
+            revisar("dice en qué condiciones se usa",
+                    "sin garantía" in pagina.locator(".inicio-quien")
+                                            .inner_text().lower())
             revisar("dice cuántos clientes hay cargados",
                     "cliente" in pagina.locator("#inicio-cuenta").inner_text())
             # El riel es el programa entero: tiene que estar aquí también.

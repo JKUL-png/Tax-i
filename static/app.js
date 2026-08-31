@@ -105,9 +105,12 @@ function dibujarFila(cliente) {
   /* --- Cuánto le falta del checklist --- */
   const total = cliente.checklist_total || 0;
   const recibidos = cliente.checklist_recibidos || 0;
+  /* "2 de 11" lleva una palabra en medio, así que va en la letra de la
+     interfaz. La columna cuadra igual: .tabla-admin td alinea los
+     dígitos con tabular-nums. */
   const tdAvance = celda(
     total === 0 ? "sin lista" : recibidos + " de " + total,
-    total === 0 ? "avance-neutro" : "cifra");
+    total === 0 ? "avance-neutro" : "");
   fila.appendChild(tdAvance);
 
   /* --- La fecha, editable. Se guarda sola al cambiarla --- */

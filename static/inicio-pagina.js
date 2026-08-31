@@ -3,10 +3,11 @@
 
    Lo único que necesita: decir cuántos clientes hay cargados, para que
    la portada no sea un folleto sino el estado real del programa. Si
-   todavía no hay ninguno, lo dice y el botón de al lado es lo que hay
-   que hacer.
+   todavía no hay ninguno, lo dice, y el riel de la izquierda es por
+   donde se agregan.
 
-   Todo lo demás de esta pantalla es texto fijo en el HTML.
+   Todo lo demás de esta pantalla es texto fijo en el HTML, y la
+   animación de entrada está en static/marca/inicio.js.
    ========================================================== */
 
 (function () {

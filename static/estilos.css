@@ -117,16 +117,29 @@
   --error-texto: #8E2F24;
 
   /* --- Letras ---
-     DOS familias en todo el programa y ni una más: la de la interfaz y la
-     de las cifras. Las del sistema — en Mac sale San Francisco, en Windows
-     Segoe UI Variable. Son las tipografías de interfaz de Apple y de
-     Microsoft: están hechas para pantallas densas, no hay que descargar
+     UNA letra para todo lo que se lee, y una monoespaciada SOLO para
+     cifras. Las dos son del sistema — en Mac sale San Francisco, en
+     Windows Segoe UI Variable. Son las tipografías de interfaz de Apple y
+     de Microsoft: están hechas para pantallas densas, no hay que descargar
      nada, la pantalla se ve igual sin conexión y ningún servicio de afuera
      se entera de que el programa se abrió.
 
-     El carácter no lo pone una tipografía de display: lo pone cuánto
-     trabajo hace la monoespaciada. Aquí no es solo para cifras — también
-     lleva códigos de casilla, fechas, números de renglón y estados. */
+     La regla de la monoespaciada, y no tiene excepciones
+     ----------------------------------------------------
+     Entra si es un dato que se lee carácter por carácter: dígitos,
+     fechas, cédulas, importes, códigos de casilla, números de renglón,
+     rutas de archivo, llaves y teclas.
+
+     NO entra ninguna palabra. Ni encabezados de columna, ni pastillas de
+     estado, ni rótulos, ni frases. Eso estaba mal antes y es la razón de
+     que la pantalla pareciera hecha con cuatro tipografías: una palabra
+     en versalitas monoespaciadas —VENCIÓ HACE 1 DÍA, CLIENTE, FALTA— no
+     se lee como la misma letra de al lado, se lee como otra letra. Las
+     versalitas siguen existiendo, pero en la letra de la interfaz.
+
+     Se ve en la pantalla de inicio, que es la que quedó bien desde el
+     principio: todo en la letra de la interfaz y la monoespaciada solo en
+     los números de paso. El resto del programa se ajustó a eso. */
   --fuente: -apple-system, BlinkMacSystemFont, "Segoe UI Variable Text",
             "Segoe UI", system-ui, Roboto, sans-serif;
 
@@ -253,9 +266,20 @@ input[type="date"],
   font-variant-numeric: tabular-nums;
 }
 
+/* Negrita: la del sistema es 700 y aquí los pesos son tres —400, 500 y
+   600— y ni uno más. Sin esto, cada <strong> metía un cuarto peso que en
+   Windows se lee como otra tipografía. */
+strong, b {
+  font-weight: var(--p-fuerte);
+}
+
 .cifra {
   font-family: var(--fuente-cifras);
-  font-size: 0.94em;
+  /* Relativa, no fija: la monoespaciada dibuja más grande que la letra de
+     al lado al mismo tamaño, y el 0.94 las empareja. El suelo de 11 px es
+     el escalón más chico de la escala; sin él, dentro de un texto de
+     12 px esto caía a 10,8. */
+  font-size: max(0.94em, var(--t-rotulo));
   letter-spacing: var(--sep-cifra);
 }
 
@@ -517,7 +541,6 @@ button {
   display: inline-block;
   padding: 1px 5px;
   border-radius: var(--radio-chico);
-  font-family: var(--fuente-cifras);
   font-size: var(--t-rotulo);
   font-weight: var(--p-fuerte);
   text-transform: uppercase;
@@ -606,11 +629,10 @@ button {
   margin-bottom: var(--e4);
 }
 
-/* El rótulo que encabeza un error: "error" en versalitas monoespaciadas.
-   Dice qué pasó y el renglón siguiente dice cómo se arregla. */
+/* El rótulo que encabeza un error: "error" en versalitas. Dice qué pasó
+   y el renglón siguiente dice cómo se arregla. */
 .aviso-rotulo {
   display: block;
-  font-family: var(--fuente-cifras);
   font-size: var(--t-rotulo);
   text-transform: uppercase;
   letter-spacing: var(--sep-rotulo);
@@ -1541,7 +1563,6 @@ a.boton-secundario {
 
 .lectura-titulo {
   margin: 0 0 var(--e2);
-  font-family: var(--fuente-cifras);
   font-size: var(--t-rotulo);
   font-weight: var(--p-fuerte);
   text-transform: uppercase;
@@ -1593,9 +1614,10 @@ a.boton-secundario {
   padding-bottom: 1px;
 }
 
-/* El rótulo "auto". En gris, a propósito. */
+/* El rótulo "auto". En gris, a propósito. Es una palabra, así que va en
+   la letra de la interfaz: lo que marca el dato leído por la máquina es
+   la raya punteada de abajo, no un cambio de tipografía. */
 .marca-auto {
-  font-family: var(--fuente-cifras);
   font-size: var(--t-rotulo);
   text-transform: uppercase;
   letter-spacing: var(--sep-rotulo);
@@ -2799,7 +2821,7 @@ input[type="text"].celda-campo:focus {
 
 code {
   font-family: var(--fuente-cifras);
-  font-size: 0.9em;
+  font-size: max(0.9em, var(--t-rotulo));
   background: var(--fondo);
   border: 1px solid var(--borde);
   border-radius: 4px;
@@ -2856,6 +2878,7 @@ code {
 .perfil-posicion {
   color: var(--texto-tenue);
   font-size: var(--t-celda);
+  font-variant-numeric: tabular-nums;
 }
 
 /* --- Las tres cifras --- */
@@ -3210,136 +3233,19 @@ code {
 .acciones-lote .aviso { flex: 1 1 100%; margin: 4px 0 0; }
 
 /* ==========================================================
-   La portada de inicio
+   El telón de arranque: se quitó
 
-   Sale una sola vez por sesión, dura 1,5 segundos y se corta con un clic
-   o cualquier tecla. Toda la lógica está en static/marca/inicio.js, que
-   se carga sin defer para poder marcar el <html> antes del primer
-   pintado: si no, se alcanza a ver la aplicación un instante antes de
-   que aparezca la portada.
+   Aquí vivía una portada a pantalla completa que salía una vez por
+   sesión, tapaba la aplicación 2,8 segundos y se cortaba con un clic.
 
-   Se muestra SOLO cuando .portada-corriendo está en el <html>. Si el
-   JavaScript no corre, la portada nunca aparece y el programa arranca
-   directo — que es la falla correcta para una pantalla decorativa.
+   Se retiró porque la misma animación pasó a vivir fija en la pantalla
+   de inicio, que es por donde se entra al programa. Con las dos puestas
+   se veía la animación dos veces seguidas: el telón encima y, al
+   quitarse, otra vez debajo. La pantalla de inicio ES la entrada; no
+   hace falta un telón delante de ella.
+
+   Lo que quedó de aquello está más abajo, en LA PANTALLA DE INICIO.
    ========================================================== */
-
-.portada-inicio {
-  display: none;
-}
-
-.portada-corriendo .portada-inicio {
-  display: flex;
-  position: fixed;
-  inset: 0;
-  z-index: 200;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: var(--e4);
-  background: var(--superficie);
-  opacity: 1;
-  transition: opacity 180ms ease;
-}
-
-.portada-corriendo body {
-  /* Nada se desplaza detrás de la portada mientras está puesta. */
-  overflow: hidden;
-}
-
-.portada-saliendo {
-  opacity: 0;
-}
-
-.portada-marca {
-  font-family: var(--fuente-display);
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: var(--e5);
-  font-size: var(--t-portada);
-  font-weight: var(--p-fuerte);
-  letter-spacing: var(--sep-titulo);
-  color: var(--texto);
-}
-
-/* El logo entra después del texto, no al mismo tiempo: primero se
-   escribe el nombre y el logo lo remata. */
-/* El logo crece con la marca en vez de quedarse en 52 px fijos: en una
-   portada a pantalla completa, 52 px se pierden. */
-.portada-logo {
-  width: clamp(64px, 9vw, 96px);
-  height: clamp(64px, 9vw, 96px);
-  opacity: 0;
-  transform: translateY(4px);
-  transition: opacity 180ms ease, transform 180ms ease;
-}
-
-.portada-con-logo .portada-logo,
-.portada-quieta .portada-logo {
-  opacity: 1;
-  transform: none;
-}
-
-.portada-texto {
-  display: inline-flex;
-  align-items: baseline;
-  /* El ancho se reserva desde el principio para que nada brinque
-     mientras se escriben las letras... */
-  min-width: 3.4em;
-  /* ...y el texto va centrado DENTRO de ese ancho reservado. Sin esto
-     las letras nacen pegadas a la izquierda de una caja de 3.4em y la
-     palabra se ve corrida hacia un lado en toda la animación. */
-  justify-content: center;
-}
-
-/* El cursor de la máquina de escribir: un bloque, no una rayita.
-
-   El margen derecho negativo cancela su propio ancho, así que el cursor
-   se dibuja pero no ocupa sitio al centrar. Sin esto, lo que queda
-   centrado es "Tax-i" MÁS el cursor, y la palabra —que es lo que se
-   mira— termina corrida media pulgada a la izquierda. */
-.portada-cursor {
-  display: inline-block;
-  width: 0.5em;
-  height: 1em;
-  margin-left: 0.06em;
-  margin-right: -0.56em;
-  background: var(--primary);
-}
-
-/* Sin parpadeo. La portada entera dura 1,2 segundos: un cursor que se
-   apaga la mitad del tiempo alcanza a estar apagado justo cuando alguien
-   mira, y entonces no parece un cursor sino un error de dibujo. */
-
-.portada-sub {
-  margin: 0;
-  font-size: var(--t-ui);
-  color: var(--texto-tenue);
-  opacity: 0;
-  transition: opacity 200ms ease;
-}
-
-.portada-con-sub .portada-sub,
-.portada-quieta .portada-sub {
-  opacity: 1;
-}
-
-/* Quien pide menos movimiento ve la portada quieta y completa: sin
-   escritura letra por letra, sin cursor parpadeando y sin entradas. */
-.portada-quieta .portada-cursor {
-  display: none;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .portada-inicio,
-  .portada-logo,
-  .portada-sub {
-    transition: none;
-  }
-  .portada-cursor {
-    animation: none;
-  }
-}
 
 /* ==========================================================
    EL RIEL — la pantalla del cliente
@@ -3489,8 +3395,8 @@ code {
   align-items: baseline;
   gap: var(--e2);
   padding: var(--e2) var(--e4) var(--e1);
-  font-family: var(--fuente-cifras);
   font-size: var(--t-rotulo);
+  font-weight: var(--p-medio);
   text-transform: uppercase;
   letter-spacing: var(--sep-rotulo);
   color: var(--riel-tenue);
@@ -3666,9 +3572,11 @@ code {
   letter-spacing: var(--sep-titulo);
 }
 
+/* "Cédula termina en 41". Es una frase, no una cifra: va en la letra de
+   la interfaz y solo los dos dígitos se alinean con tabular-nums. */
 .area-cedula {
-  font-family: var(--fuente-cifras);
   font-size: var(--t-meta);
+  font-variant-numeric: tabular-nums;
   color: var(--texto-tenue);
 }
 
@@ -3714,10 +3622,10 @@ code {
   border-bottom-color: var(--primary);
 }
 
-/* La cuenta de cada pestaña, en ancho fijo para que no baile al cambiar
-   de 9 a 10. */
+/* La cuenta de cada pestaña. Lleva palabras, así que va en la letra de
+   la interfaz; los dígitos se alinean con tabular-nums, que es lo que
+   evita que baile al cambiar de 9 a 10. */
 .area-vista-boton .conteo {
-  font-family: var(--fuente-cifras);
   font-variant-numeric: tabular-nums;
   font-size: var(--t-meta);
   color: var(--texto-tenue);
@@ -3960,11 +3868,19 @@ code {
    LA PANTALLA DE INICIO
 
    Es la única pantalla del programa que no es densa, y a propósito: no
-   se trabaja aquí, se entra por aquí. Aun así sigue las mismas reglas
-   —nada flota, el margen izquierdo manda, la doble raya cierra— para
-   que no parezca el folleto de otro producto pegado al principio.
+   se trabaja aquí, se entra por aquí.
 
-   La doble raya debajo de la frase de arriba es la firma de la casa: en
+   Y es la única centrada. En el resto del programa manda el margen
+   izquierdo, porque se lee columna abajo; aquí no hay nada que revisar
+   —hay una marca, una definición y tres explicaciones cortas— y el eje
+   central es lo que las sostiene. Esa excepción vale para esta pantalla
+   y para ninguna otra: la de un cliente centrada sería ilegible.
+
+   La portada ocupa la ventana entera y se centra en el medio. Debajo, al
+   desplazarse, están las tres explicaciones. Por eso hay un indicio
+   abajo de todo: si no se ve que hay más, no hay cómo saberlo.
+
+   La doble raya debajo de la definición es la firma de la casa: en
    contabilidad, dos rayas debajo de una cifra significan "este es el
    total". Aquí cierra la definición de qué es el programa.
    ========================================================== */
@@ -3973,15 +3889,25 @@ code {
   padding-bottom: var(--e9);
 }
 
+/* ----- La portada -----
+   Alto de la ventana y centrada. El 100vh es del alto visible: el riel
+   de al lado ya ocupa el suyo, así que las dos columnas arrancan juntas. */
+
 .inicio-portada {
-  padding: var(--e9) 0 var(--e8);
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: var(--e8) 0 var(--e7);
 }
 
 /* El logo grande. Es el mismo SVG del riel, y marca.js lo hace parpadear
    como al de la esquina: es la marca, no una ilustración. */
 .inicio-logo {
-  width: 72px;
-  height: 72px;
+  width: clamp(64px, 8vw, 88px);
+  height: clamp(64px, 8vw, 88px);
   display: block;
   margin-bottom: var(--e5);
 }
@@ -3993,6 +3919,14 @@ code {
   letter-spacing: var(--sep-titulo);
   line-height: 1.05;
   margin-bottom: var(--e4);
+  /* El ancho se reserva desde el principio para que nada brinque
+     mientras se escriben las letras, y lo escrito va centrado DENTRO de
+     ese ancho: sin esto las letras nacen pegadas a la izquierda de la
+     caja y la palabra se ve corrida durante toda la animación. */
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  min-width: 3.4em;
 }
 
 /* La "-i" en verde, igual que en el riel: es la misma marca escrita en
@@ -4002,42 +3936,152 @@ code {
   color: var(--primary);
 }
 
+/* El cursor de la máquina de escribir: un bloque, no una rayita.
+
+   El margen derecho negativo cancela su propio ancho, así que el cursor
+   se dibuja pero no ocupa sitio al centrar. Sin esto, lo que queda
+   centrado es "Tax-i" MÁS el cursor, y la palabra —que es lo que se
+   mira— termina corrida media pulgada a la izquierda. */
+.inicio-cursor {
+  display: inline-block;
+  width: 0.5em;
+  height: 0.86em;
+  margin-left: 0.06em;
+  margin-right: -0.56em;
+  background: var(--primary);
+  opacity: 0;
+  transition: opacity 160ms ease;
+}
+
 .inicio-frase {
   margin: 0;
-  max-width: 54ch;
+  max-width: 52ch;
   font-size: var(--t-h2);
   line-height: 1.45;
   color: var(--texto-secundario);
 }
 
-/* La doble raya: 1px, hueco, 1px. */
+/* La doble raya: 1px, hueco, 1px. Corta y centrada, que es como cierra
+   una columna de cifras. */
 .inicio-doble-raya {
-  max-width: 54ch;
-  margin: var(--e6) 0 var(--e6);
+  width: 96px;
+  margin: var(--e6) 0;
   height: 3px;
   border-top: 1px solid var(--regla-doble);
   border-bottom: 1px solid var(--regla-doble);
 }
 
-.inicio-acciones {
-  display: flex;
-  align-items: center;
-  gap: var(--e4);
-  flex-wrap: wrap;
-}
-
+/* Cuántos clientes hay cargados. Lleva palabras, así que va en la letra
+   de la interfaz; solo los dígitos se alinean. */
 .inicio-cuenta {
   margin: 0;
-  font-family: var(--fuente-cifras);
-  font-size: var(--t-celda);
+  min-height: 1.2em;
+  font-size: var(--t-lista);
   font-variant-numeric: tabular-nums;
   color: var(--texto-tenue);
 }
 
+/* El indicio de que hay más abajo. No es adorno: la portada ocupa la
+   ventana entera, y sin esto no hay manera de saber que debajo está la
+   explicación del programa. */
+.inicio-abajo {
+  margin-top: var(--e8);
+  font-size: var(--t-meta);
+  text-transform: uppercase;
+  letter-spacing: var(--sep-rotulo);
+  color: var(--texto-tenue);
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--e2);
+}
+
+.inicio-abajo:hover {
+  color: var(--texto-secundario);
+}
+
+.inicio-abajo .flecha {
+  font-size: var(--t-texto);
+  line-height: 1;
+}
+
+/* ----- La animación de entrada -----
+   El <html> lleva la marca `inicio-animada` desde el <head>, antes del
+   primer pintado: es lo que esconde las letras y apaga lo demás para que
+   no se alcance a ver la pantalla completa un instante antes de que
+   empiece a escribirse. Si el JavaScript no corre, la marca nunca se
+   pone y todo se ve quieto y completo, que es la falla correcta.
+
+   Toda la línea de tiempo está en static/marca/inicio.js. */
+
+.inicio-animada .inicio-escrito {
+  visibility: hidden;
+}
+
+.inicio-animada .inicio-logo,
+.inicio-animada .inicio-frase,
+.inicio-animada .inicio-doble-raya,
+.inicio-animada .inicio-cuenta,
+.inicio-animada .inicio-abajo {
+  opacity: 0;
+}
+
+.inicio-animada .inicio-logo {
+  transform: translateY(5px);
+}
+
+/* Cada paso enciende lo suyo. El orden lo marca inicio.js. */
+.inicio-escribiendo .inicio-escrito { visibility: visible; }
+.inicio-escribiendo .inicio-cursor  { opacity: 1; }
+
+.inicio-con-logo .inicio-logo {
+  opacity: 1;
+  transform: none;
+  transition: opacity 200ms ease, transform 200ms ease;
+}
+
+.inicio-con-frase .inicio-frase,
+.inicio-con-frase .inicio-doble-raya {
+  opacity: 1;
+  transition: opacity 240ms ease;
+}
+
+.inicio-con-frase .inicio-cursor {
+  opacity: 0;
+}
+
+.inicio-lista .inicio-cuenta,
+.inicio-lista .inicio-abajo {
+  opacity: 1;
+  transition: opacity 240ms ease;
+}
+
+/* ----- Las tres explicaciones -----
+   Van centradas y en una columna angosta: es texto para leer una vez,
+   no una tabla para revisar. */
+
+.inicio .seccion {
+  max-width: 66ch;
+  margin: 0 auto var(--e8);
+  text-align: center;
+}
+
+/* Aquí el título NO lleva su raya de abajo, al revés que en el resto del
+   programa. Cada bloque de esta pantalla ya empieza con la suya —la de
+   los pasos, la del recuadro— y las dos juntas salían como dos hairlines
+   paralelas separadas 20 px: parece un error de dibujo, no una decisión.
+   Se queda la del bloque, que es la que separa algo de verdad. */
+.inicio .seccion > h2 {
+  margin-bottom: var(--e5);
+  padding-bottom: 0;
+  border-bottom: 0;
+}
+
 /* ----- Cómo funciona -----
    Numerados porque son un orden real: no se puede saber qué falta antes
-   de que lleguen los documentos. El número va en la monoespaciada y con
-   cero delante, como el número de renglón de un formulario. */
+   de que lleguen los documentos. El número va con cero delante, como el
+   número de renglón de un formulario, y es de lo poco que se queda en la
+   monoespaciada: es una cifra, no una palabra. */
 
 .inicio-pasos {
   list-style: none;
@@ -4047,18 +4091,15 @@ code {
 }
 
 .inicio-pasos li {
-  display: flex;
-  gap: var(--e5);
-  padding: var(--e5) 0;
+  padding: var(--e6) 0;
   border-bottom: 1px solid var(--raya);
 }
 
 .inicio-paso-numero {
-  flex: 0 0 auto;
-  width: 2.5em;
+  display: block;
   font-size: var(--t-celda);
   color: var(--n5);
-  padding-top: 2px;
+  margin-bottom: var(--e2);
 }
 
 .inicio-pasos h3 {
@@ -4067,47 +4108,93 @@ code {
 }
 
 .inicio-pasos p {
-  margin: 0;
-  max-width: 62ch;
+  margin: 0 auto;
+  max-width: 58ch;
   font-size: var(--t-ui);
   line-height: 1.55;
   color: var(--texto-secundario);
 }
 
-/* ----- Qué no hace -----
+/* ----- Qué no hace y quién lo hace -----
    Sin rojo y sin signos de admiración. No es una advertencia: es la
-   definición del producto, y se lee como tal. La raya gruesa de la
-   izquierda es la misma que separa un total en el formulario. */
+   definición del producto, y se lee como tal. La raya de arriba y la de
+   abajo encierran el bloque como una casilla del formulario; centrado,
+   una raya solo a la izquierda quedaba descolgada. */
 
-.inicio-limite {
-  border-left: 3px solid var(--borde-fuerte);
+/* Dos recuadros iguales con nombres distintos, a propósito: .inicio-limite
+   nombra la línea legal y solo a ella, porque pruebas/probar_pantallas.py
+   la busca por ese nombre para comprobar que sigue a la vista. */
+.inicio-limite,
+.inicio-quien {
+  border-top: 1px solid var(--borde-fuerte);
+  border-bottom: 1px solid var(--borde-fuerte);
+  border-left: 0;
+  border-right: 0;
+  border-radius: 0;
+  padding: var(--e6) var(--e5);
+  background: none;
 }
 
 .inicio-limite p,
+.inicio-quien p,
 .inicio-nosotros {
-  margin: 0 0 var(--e3);
-  max-width: 68ch;
+  margin: 0 auto var(--e4);
+  max-width: 58ch;
   font-size: var(--t-ui);
   line-height: 1.6;
   color: var(--texto-secundario);
 }
 
 .inicio-limite p:last-child,
+.inicio-quien p:last-child,
 .inicio-nosotros:last-child {
   margin-bottom: 0;
 }
 
-.inicio-limite strong {
+.inicio-limite strong,
+.inicio-quien strong,
+.inicio-nosotros strong {
   color: var(--texto);
+}
+
+/* La firma. Es lo último de la pantalla y va sola. */
+.inicio-firma {
+  font-size: var(--t-h3);
+  font-weight: var(--p-fuerte);
+  letter-spacing: var(--sep-rotulo);
+  color: var(--texto);
+  margin: 0 0 var(--e4);
+}
+
+/* La nota del pie también va al centro, como todo lo de esta pantalla. */
+.inicio .nota-prototipo {
+  text-align: center;
+}
+
+/* Por debajo de 1000px el riel deja de estar al lado y se pone ARRIBA,
+   en horizontal. Ahí el alto de ventana de la portada deja de tener
+   sentido: el riel ya se comió media pantalla, y centrar en 100vh empuja
+   el nombre y el indicio de abajo fuera de la vista. Sin alto forzado, la
+   portada es el primer bloque de la página y se lee entera. */
+@media (max-width: 1000px) {
+  .inicio-portada {
+    min-height: 0;
+    padding: var(--e8) 0 var(--e7);
+  }
+  .inicio-abajo { margin-top: var(--e6); }
 }
 
 /* En una pantalla angosta el aire de la portada sobra. */
 @media (max-width: 700px) {
   .inicio-portada { padding: var(--e7) 0 var(--e6); }
-  .inicio-pasos li { flex-direction: column; gap: var(--e2); }
-  .inicio-paso-numero { padding-top: 0; }
 }
 
+/* Quien pide menos movimiento ve la portada quieta y completa: sin
+   escritura letra por letra, sin cursor y sin entradas. inicio.js
+   detecta lo mismo y pinta el estado final de una vez. */
+@media (prefers-reduced-motion: reduce) {
+  .inicio-cursor { display: none; }
+}
 
 /* ==========================================================
    LA TABLA DE ADMINISTRAR CLIENTES
@@ -4128,7 +4215,6 @@ code {
   text-align: left;
   padding: var(--e2) var(--e3);
   border-bottom: 1px solid var(--borde-fuerte);
-  font-family: var(--fuente-cifras);
   font-size: var(--t-rotulo);
   font-weight: var(--p-medio);
   text-transform: uppercase;
@@ -4137,7 +4223,10 @@ code {
   white-space: nowrap;
 }
 
+/* Las celdas llevan dígitos —los dos de la cédula, el "2 de 11"— y la
+   columna tiene que cuadrar sin cambiar de letra. */
 .tabla-admin td {
+  font-variant-numeric: tabular-nums;
   padding: var(--e2) var(--e3);
   border-bottom: 1px solid var(--raya);
   vertical-align: middle;
