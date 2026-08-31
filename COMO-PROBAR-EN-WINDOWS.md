@@ -26,7 +26,31 @@ Necesita tres cosas:
 
 ---
 
-# PARTE 1 — En el Mac: armar el paquete
+# El atajo: bajarlo de internet
+
+Desde que el programa está publicado en GitHub, **si el computador con
+Windows tiene internet no hace falta la memoria USB**. En ese computador,
+abra el navegador y entre a:
+
+    https://github.com/JKUL-png/Tax-i
+
+Botón verde **Code** → **Download ZIP**. Con eso ya tiene el paquete allá y
+puede **saltarse las Partes 1 y 2** y seguir directo en la Parte 3.
+
+Es exactamente el mismo contenido: el ZIP de GitHub y el que arma
+`empacar.sh` traen los mismos archivos, y ninguno de los dos lleva
+documentos de clientes ni la llave de la IA.
+
+> Windows va a mostrar un aviso azul de SmartScreen al abrir el `.bat`,
+> porque el archivo se bajó de internet. Es normal:
+> **Más información → Ejecutar de todas formas**.
+
+Las Partes 1 y 2 siguen aquí para cuando ese computador **no tenga
+internet**, que pasa más de lo que uno cree en una oficina.
+
+---
+
+# PARTE 1 — En el Mac: armar el paquete (solo si no hay internet)
 
 ### Paso 1.1
 
@@ -63,7 +87,7 @@ Copie `tax-i.zip` a la memoria USB.
 
 ---
 
-# PARTE 2 — Pasar el paquete al Windows
+# PARTE 2 — Pasar el paquete al Windows (solo si no hay internet)
 
 Conecte la memoria USB al computador con Windows y **copie `tax-i.zip` al
 disco C:**
