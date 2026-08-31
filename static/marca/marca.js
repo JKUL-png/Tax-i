@@ -65,15 +65,22 @@
     /* ---------- El parpadeo ---------- */
     if (quietos) return;
 
-    var logo = document.querySelector(".marca-logo");
-    if (!logo) return;
+    /* Todos los logos de la página, no solo el primero. En la pantalla de
+       inicio hay dos —el del riel y el grande de la portada— y con
+       querySelector a secas parpadeaba el del riel mientras el grande,
+       que es el que se está mirando, se quedaba tieso. Parpadean juntos:
+       es la misma marca en dos tamaños, no dos dibujos. */
+    var logos = document.querySelectorAll(".marca-logo");
+    if (logos.length === 0) return;
 
-    /* El logo de la cabecera arranca en "listo" (el guiño), que es como
-       está dibujado en el HTML. Parpadear es pasar por "leyendo" un
-       instante y volver. */
+    /* Los logos arrancan en "listo" (el guiño), que es como están
+       dibujados en el HTML. Parpadear es pasar por "leyendo" un instante
+       y volver. */
     function parpadear() {
-      gesto(logo, "leyendo");
-      window.setTimeout(function () { gesto(logo, "listo"); }, 130);
+      logos.forEach(function (logo) { gesto(logo, "leyendo"); });
+      window.setTimeout(function () {
+        logos.forEach(function (logo) { gesto(logo, "listo"); });
+      }, 130);
       window.setTimeout(parpadear, 6000 + Math.random() * 4000);
     }
 

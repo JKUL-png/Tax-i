@@ -40,6 +40,39 @@
   var clientes = [];
 
   /* ----------------------------------------------------------
+     En cuál parada se está
+
+     El riel lleva a tres sitios: agregar clientes, un cliente, y la
+     cuenta. Cuál está seleccionado se calcula AQUÍ, mirando la
+     dirección, y no se escribe a mano en cada archivo HTML: cuando se
+     agregó la pantalla de /clientes, la clase escrita a mano en el HTML
+     de inicio se quedó marcando la parada equivocada.
+     ---------------------------------------------------------- */
+
+  (function marcarParada() {
+    var camino = location.pathname.replace(/\/+$/, "") || "/";
+
+    var agregar = document.querySelector(".riel-agregar");
+    if (agregar && camino === "/clientes") {
+      agregar.classList.add("riel-agregar-actual");
+      agregar.setAttribute("aria-current", "page");
+    }
+
+    var cuenta = document.querySelector(".riel-pie a");
+    if (cuenta && camino === "/cuenta") {
+      cuenta.classList.add("riel-pie-actual");
+      cuenta.setAttribute("aria-current", "page");
+    }
+
+    /* La marca de arriba lleva al inicio, así que cuando se está en el
+       inicio no hay a dónde ir: se marca y ya. */
+    var marca = document.querySelector(".riel-marca");
+    if (marca && camino === "/") {
+      marca.setAttribute("aria-current", "page");
+    }
+  })();
+
+  /* ----------------------------------------------------------
      Los grupos
      ---------------------------------------------------------- */
 
@@ -207,6 +240,12 @@
     buscador.addEventListener("input", dibujar);
   }
 
+  /* Se deja una manija afuera para que la pantalla de agregar clientes
+     pueda pedir que el riel se vuelva a cargar. Sin esto, agregar o
+     eliminar un cliente dejaba el riel mostrando lo de antes hasta que
+     alguien recargara la página a mano. */
+  window.RielTaxi = { recargar: cargar };
+
   /* ==========================================================
      Las tres vistas
      ========================================================== */
@@ -265,6 +304,13 @@
       }
     }
   }
+
+  /* Los botones del perfil del cliente necesitan poder saltar a otra
+     pestaña: "Generar el mensaje para el cliente" vive en la pestaña de
+     Historial, no en la de Documentos. Sin esta manija, esos botones
+     abrían una sección que estaba dentro de un panel escondido y no
+     pasaba absolutamente nada al apretarlos. */
+  window.RielTaxi.mostrarVista = function (cual) { mostrar(cual, true); };
 
   botones.forEach(function (boton) {
     boton.addEventListener("click", function () {

@@ -17,8 +17,19 @@ from app.api.base import app, _pagina
 
 @app.get("/")
 def inicio(peticion):
-    """Entrega la página principal: la lista de clientes."""
+    """Entrega la portada: qué es el programa y qué hace.
+
+    Antes esta dirección era la de agregar e importar clientes, mezclada
+    con la lista completa. Se separó: agregar tiene su propia pantalla
+    (/clientes) y aquí quedó lo que corresponde a una página de inicio.
+    """
     return _pagina("index.html")
+
+
+@app.get("/clientes")
+def pagina_clientes(peticion):
+    """Entrega la pantalla de agregar, importar y administrar clientes."""
+    return _pagina("clientes.html")
 
 
 @app.get("/cliente")

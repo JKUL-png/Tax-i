@@ -1,7 +1,24 @@
 /* ==========================================================
-   Pantalla de clientes.
+   Pantalla de agregar, importar y administrar clientes  (/clientes)
 
-   Habla con el servidor por /api/clientes y dibuja la lista.
+   Tres cosas, en este orden:
+
+     1. Agregar un cliente a mano.
+     2. Importar el Excel de la oficina, en dos pasos.
+     3. Una tabla apretada para corregir la fecha o eliminar.
+
+   Lo que YA NO está aquí
+   ----------------------
+   La lista de clientes con buscador, orden y filtros. Vivía en esta
+   pantalla y era la forma de navegar el programa; desde que existe el
+   riel —que está a la vista en todas las pantallas y además ordena por
+   urgencia— era la misma lista dos veces, y la de aquí era la peor:
+   había que llegar a esta página para usarla.
+
+   Lo único que el riel no hace es corregir una fecha y eliminar un
+   cliente. Eso es lo que quedó, y por eso quedó como tabla y no como
+   tarjetas: es administración, no navegación.
+
    JavaScript plano, sin librerías: se abre y se entiende leyéndolo.
    ========================================================== */
 
@@ -9,8 +26,13 @@ const formulario = document.getElementById("formulario-cliente");
 const campoNombre = document.getElementById("nombre");
 const campoDigitos = document.getElementById("digitos");
 const campoFecha = document.getElementById("fecha");
-const contenedorLista = document.getElementById("lista-clientes");
+const cuerpoTabla = document.getElementById("tabla-clientes");
+const conteoClientes = document.getElementById("conteo-clientes");
 const aviso = document.getElementById("aviso");
+
+/* Todos los clientes tal como llegaron. Los botones de lote de más
+   abajo también lo usan para saber a cuántos les van a hacer algo. */
+let todosLosClientes = [];
 
 
 /* ----------------------------------------------------------
@@ -23,77 +45,12 @@ function ocultarAviso() { ocultarAvisoEn(aviso); }
 
 
 /* ----------------------------------------------------------
-   Buscar, ordenar y filtrar
+   La tabla de administración
 
-   La lista completa llega en una sola petición, así que todo esto se
-   hace aquí en el navegador: es inmediato y no molesta al servidor.
+   Ordenada por nombre, que es como se busca a alguien en una tabla de
+   administración. La urgencia la ordena el riel; aquí lo que se quiere
+   es encontrar a una persona concreta para corregirle algo.
    ---------------------------------------------------------- */
-
-const campoBuscar = document.getElementById("buscar-cliente");
-const selectorOrden = document.getElementById("orden-clientes");
-const cajaFiltros = document.getElementById("filtro-estado");
-const resumenFiltro = document.getElementById("resumen-filtro");
-const conteoClientes = document.getElementById("conteo-clientes");
-
-/* Cuántos días adelante cuentan como "vence pronto". Quince es el mismo
-   número con el que la etiqueta de plazo se pone ámbar, para que el
-   filtro y el color digan lo mismo. */
-const DIAS_QUE_SON_PRONTO = 15;
-
-/* Todos los clientes tal como llegaron, sin filtrar. */
-let todosLosClientes = [];
-let estadoElegido = "todos";
-
-/* Quita tildes y mayúsculas para poder buscar "Maria" y encontrar
-   "María". En una lista de nombres colombianos esto no es un lujo. */
-function parejo(texto) {
-  return (texto || "")
-    .toString()
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase()
-    .trim();
-}
-
-function cuantoFalta(cliente) {
-  const total = cliente.checklist_total || 0;
-  const recibidos = cliente.checklist_recibidos || 0;
-  return total - recibidos;
-}
-
-function estaCompleto(cliente) {
-  const total = cliente.checklist_total || 0;
-  return total > 0 && cuantoFalta(cliente) === 0;
-}
-
-function vencePronto(cliente) {
-  if (!cliente.fecha_vencimiento) return false;
-  // Los vencidos también entran: son los más urgentes de todos.
-  return diasQueFaltan(cliente.fecha_vencimiento) <= DIAS_QUE_SON_PRONTO;
-}
-
-function filtrarYOrdenar() {
-  const busqueda = parejo(campoBuscar.value);
-
-  let lista = todosLosClientes.filter(function (cliente) {
-    if (busqueda) {
-      const nombre = parejo(cliente.nombre);
-      const digitos = cliente.dos_digitos || "";
-      if (nombre.indexOf(busqueda) === -1 && digitos.indexOf(busqueda) === -1) {
-        return false;
-      }
-    }
-    if (estadoElegido === "completos") return estaCompleto(cliente);
-    if (estadoElegido === "incompletos") return !estaCompleto(cliente);
-    if (estadoElegido === "pronto") return vencePronto(cliente);
-    return true;
-  });
-
-  lista = lista.slice().sort(comparadores[selectorOrden.value] || comparadores.vencimiento);
-
-  dibujarLista(lista);
-  contarLoQueSeVe(lista.length);
-}
 
 /* Compara nombres como los ordenaría una persona: sin importar tildes
    ni mayúsculas, y con la ñ en su sitio. */
@@ -101,162 +58,69 @@ function porNombre(a, b) {
   return a.nombre.localeCompare(b.nombre, "es", { sensitivity: "base" });
 }
 
-const comparadores = {
-  vencimiento: function (a, b) {
-    // Los que no tienen fecha van al final: lo urgente primero.
-    if (!a.fecha_vencimiento && !b.fecha_vencimiento) return porNombre(a, b);
-    if (!a.fecha_vencimiento) return 1;
-    if (!b.fecha_vencimiento) return -1;
-    if (a.fecha_vencimiento !== b.fecha_vencimiento) {
-      return a.fecha_vencimiento < b.fecha_vencimiento ? -1 : 1;
-    }
-    return porNombre(a, b);
-  },
+function celda(texto, clase) {
+  const td = document.createElement("td");
+  if (clase) td.className = clase;
+  if (texto !== undefined) td.textContent = texto;
+  return td;
+}
 
-  nombre: porNombre,
+function dibujarTabla() {
+  cuerpoTabla.textContent = "";
 
-  faltantes: function (a, b) {
-    // Más faltantes primero: son los que hay que perseguir.
-    const diferencia = cuantoFalta(b) - cuantoFalta(a);
-    return diferencia !== 0 ? diferencia : porNombre(a, b);
-  }
-};
+  conteoClientes.textContent = todosLosClientes.length > 0
+    ? "(" + todosLosClientes.length + ")"
+    : "";
 
-function contarLoQueSeVe(cuantos) {
-  const total = todosLosClientes.length;
-  conteoClientes.textContent = total > 0 ? "(" + total + ")" : "";
-
-  if (total === 0) { resumenFiltro.textContent = ""; return; }
-
-  if (cuantos === total) {
-    // Sin filtro puesto no hace falta decir nada, salvo lo que importa:
-    // cuántos tienen algo pendiente y vencen pronto.
-    const urgentes = todosLosClientes.filter(function (c) {
-      return vencePronto(c) && !estaCompleto(c);
-    }).length;
-    resumenFiltro.textContent = urgentes === 0
-      ? ""
-      : "Atención: " + contar(urgentes, "cliente tiene", "clientes tienen") +
-        " documentos pendientes y vencimiento a menos de " +
-        DIAS_QUE_SON_PRONTO + " días.";
+  if (todosLosClientes.length === 0) {
+    const fila = document.createElement("tr");
+    const hueco = celda(
+      "Todavía no hay clientes. Agregue el primero con el formulario de arriba.",
+      "vacio");
+    hueco.colSpan = 5;
+    fila.appendChild(hueco);
+    cuerpoTabla.appendChild(fila);
     return;
   }
 
-  resumenFiltro.textContent =
-    "Mostrando " + cuantos + " de " + contar(total, "cliente", "clientes") + ".";
-}
-
-campoBuscar.addEventListener("input", filtrarYOrdenar);
-selectorOrden.addEventListener("change", filtrarYOrdenar);
-
-cajaFiltros.addEventListener("click", function (evento) {
-  const boton = evento.target.closest(".filtro");
-  if (!boton) return;
-
-  estadoElegido = boton.dataset.estado;
-  cajaFiltros.querySelectorAll(".filtro").forEach(function (uno) {
-    uno.classList.toggle("filtro-activo", uno === boton);
-  });
-  filtrarYOrdenar();
-});
-
-
-/* ----------------------------------------------------------
-   Dibujar la lista
-   ---------------------------------------------------------- */
-
-function dibujarLista(clientes) {
-  contenedorLista.innerHTML = "";
-
-  if (clientes.length === 0) {
-    const vacio = document.createElement("div");
-    vacio.className = "vacio";
-    vacio.textContent = todosLosClientes.length === 0
-      ? "Todavía no hay clientes. Agregue el primero arriba."
-      : "Ningún cliente coincide con lo que buscó.";
-    contenedorLista.appendChild(vacio);
-    return;
-  }
-
-  clientes.forEach(function (cliente) {
-    contenedorLista.appendChild(dibujarCliente(cliente));
+  todosLosClientes.slice().sort(porNombre).forEach(function (cliente) {
+    cuerpoTabla.appendChild(dibujarFila(cliente));
   });
 }
 
-function dibujarCliente(cliente) {
-  const tarjeta = document.createElement("article");
-  tarjeta.className = "cliente";
+function dibujarFila(cliente) {
+  const fila = document.createElement("tr");
 
-  /* --- Nombre y cédula --- */
-  const datos = document.createElement("div");
-  datos.className = "cliente-datos";
+  /* --- Nombre: enlace de verdad a la pantalla del cliente --- */
+  const tdNombre = celda();
+  const enlace = document.createElement("a");
+  enlace.href = "/cliente?id=" + cliente.id;
+  enlace.textContent = cliente.nombre;
+  tdNombre.appendChild(enlace);
+  fila.appendChild(tdNombre);
 
-  // El nombre es un enlace a la pantalla de documentos del cliente.
-  const nombre = document.createElement("h3");
-  nombre.className = "cliente-nombre";
-  const enlaceNombre = document.createElement("a");
-  enlaceNombre.href = "/cliente?id=" + cliente.id;
-  enlaceNombre.textContent = cliente.nombre;
-  nombre.appendChild(enlaceNombre);
+  /* --- Los dos dígitos de la cédula --- */
+  fila.appendChild(celda(cliente.dos_digitos, "cifra"));
 
-  const cedula = document.createElement("p");
-  cedula.className = "cliente-cedula";
-  // Los dos dígitos van en letra de ancho fijo: son un número, y así
-  // quedan alineados de una tarjeta a la siguiente.
-  cedula.appendChild(document.createTextNode("Cédula termina en "));
-  const digitos = document.createElement("span");
-  digitos.className = "cifra";
-  digitos.textContent = cliente.dos_digitos;
-  cedula.appendChild(digitos);
-  const cuantos = cliente.documentos || 0;
-  cedula.appendChild(document.createTextNode(
-    " · " + cuantos + (cuantos === 1 ? " documento" : " documentos")
-  ));
-
-  // Cuánto le falta del checklist: es lo que el contador quiere ver
-  // de un vistazo sin tener que entrar cliente por cliente.
-  const avanceCliente = document.createElement("p");
-  avanceCliente.className = "cliente-avance";
+  /* --- Cuánto le falta del checklist --- */
   const total = cliente.checklist_total || 0;
   const recibidos = cliente.checklist_recibidos || 0;
+  const tdAvance = celda(
+    total === 0 ? "sin lista" : recibidos + " de " + total,
+    total === 0 ? "avance-neutro" : "cifra");
+  fila.appendChild(tdAvance);
 
-  if (total === 0) {
-    avanceCliente.textContent = "Sin checklist";
-    avanceCliente.classList.add("avance-neutro");
-  } else if (recibidos === total) {
-    avanceCliente.textContent = "no falta ninguno de " + total;
-    avanceCliente.classList.add("avance-completo");
-  } else {
-    const faltan = total - recibidos;
-    avanceCliente.textContent =
-      (faltan === 1 ? "falta 1" : "faltan " + faltan) + " de " + total;
-    avanceCliente.classList.add("avance-pendiente");
-  }
-
-  datos.appendChild(nombre);
-  datos.appendChild(cedula);
-  datos.appendChild(avanceCliente);
-
-  /* --- Fecha de vencimiento, editable --- */
-  const bloqueFecha = document.createElement("div");
-  bloqueFecha.className = "cliente-fecha";
-
-  const etiquetaCampo = document.createElement("label");
-  etiquetaCampo.textContent = "Fecha de vencimiento";
-  etiquetaCampo.setAttribute("for", "fecha-" + cliente.id);
-
-  const entradaFecha = document.createElement("input");
-  entradaFecha.type = "date";
-  entradaFecha.id = "fecha-" + cliente.id;
-  entradaFecha.value = cliente.fecha_vencimiento || "";
+  /* --- La fecha, editable. Se guarda sola al cambiarla --- */
+  const tdFecha = celda();
+  const entrada = document.createElement("input");
+  entrada.type = "date";
+  entrada.value = cliente.fecha_vencimiento || "";
+  entrada.setAttribute("aria-label", "Fecha de vencimiento de " + cliente.nombre);
+  entrada.addEventListener("change", function () {
+    guardarFecha(cliente.id, entrada.value);
+  });
 
   const plazo = etiquetaDePlazo(cliente.fecha_vencimiento);
-
-  // La espina: la franja de color del filo izquierdo de la tarjeta.
-  // Lleva el mismo color que la etiqueta del plazo, para poder recorrer
-  // la lista de arriba abajo viendo solo los filos.
-  tarjeta.classList.add("espina-" + plazo.clase.replace("etiqueta-", ""));
-
   const etiqueta = document.createElement("span");
   etiqueta.className = "etiqueta " + plazo.clase;
   etiqueta.textContent = plazo.texto;
@@ -264,64 +128,21 @@ function dibujarCliente(cliente) {
     etiqueta.title = fechaEnPalabras(cliente.fecha_vencimiento);
   }
 
-  // Al cambiar la fecha se guarda sola, sin botón de guardar.
-  entradaFecha.addEventListener("change", function () {
-    guardarFecha(cliente.id, entradaFecha.value);
-  });
-
-  bloqueFecha.appendChild(etiquetaCampo);
-  bloqueFecha.appendChild(entradaFecha);
-  bloqueFecha.appendChild(etiqueta);
+  tdFecha.appendChild(entrada);
+  tdFecha.appendChild(etiqueta);
+  fila.appendChild(tdFecha);
 
   /* --- Eliminar --- */
-  const acciones = document.createElement("div");
-  acciones.className = "cliente-acciones";
+  const tdBorrar = celda();
+  const borrar = document.createElement("button");
+  borrar.type = "button";
+  borrar.className = "boton-texto boton-texto-peligro";
+  borrar.textContent = "Eliminar";
+  borrar.addEventListener("click", function () { eliminarCliente(cliente); });
+  tdBorrar.appendChild(borrar);
+  fila.appendChild(tdBorrar);
 
-  const botonEliminar = document.createElement("button");
-  botonEliminar.type = "button";
-  botonEliminar.className = "boton-texto boton-texto-peligro";
-  botonEliminar.textContent = "Eliminar el cliente";
-  botonEliminar.addEventListener("click", function () {
-    eliminarCliente(cliente);
-  });
-
-  acciones.appendChild(botonEliminar);
-
-  /* --- La fila entera abre el cliente ---
-
-     Antes había que apuntarle a un enlace que decía "Documentos", al
-     borde derecho de una fila de 1200px de ancho. Ahora se hace clic en
-     cualquier parte del renglón.
-
-     El nombre sigue siendo un enlace de verdad, y eso importa: es lo que
-     permite llegar con el tabulador, abrir en otra pestaña con el botón
-     de en medio y ver a dónde va antes de apretar. El clic en la fila es
-     la comodidad; el enlace es el camino de verdad.
-
-     La flecha del borde derecho está siempre puesta, no aparece al pasar
-     el mouse: en este programa nada se esconde. */
-  const flecha = document.createElement("span");
-  flecha.className = "cliente-flecha";
-  flecha.setAttribute("aria-hidden", "true");
-  flecha.textContent = "\u2192";
-
-  tarjeta.classList.add("cliente-enlazado");
-  tarjeta.addEventListener("click", function (evento) {
-    /* Si el clic cayó sobre algo que ya hace lo suyo —la fecha, el botón
-       de eliminar, el propio enlace del nombre— no se hace nada más. Sin
-       esto, cambiar una fecha abriría el cliente. */
-    if (evento.target.closest("a, button, input, select, textarea, label")) return;
-    /* Y si el contador está seleccionando texto para copiarlo, tampoco. */
-    const seleccion = window.getSelection();
-    if (seleccion && String(seleccion).length > 0) return;
-    window.location.href = "/cliente?id=" + cliente.id;
-  });
-
-  tarjeta.appendChild(datos);
-  tarjeta.appendChild(bloqueFecha);
-  tarjeta.appendChild(acciones);
-  tarjeta.appendChild(flecha);
-  return tarjeta;
+  return fila;
 }
 
 
@@ -334,14 +155,24 @@ async function cargarClientes() {
     const respuesta = await fetch("/api/clientes");
     if (!respuesta.ok) throw new Error();
     todosLosClientes = await respuesta.json();
-    // Se dibuja pasando por el filtro para no perder lo que el contador
-    // tuviera buscando o filtrado cuando cambió algo de la lista.
-    filtrarYOrdenar();
+    dibujarTabla();
   } catch (e) {
-    contenedorLista.innerHTML =
-      '<div class="vacio">No se pudo conectar con el servidor. ' +
-      "Verifique que la aplicación esté encendida.</div>";
+    cuerpoTabla.textContent = "";
+    const fila = document.createElement("tr");
+    const hueco = celda(
+      "No se pudo conectar con el servidor. Verifique que la aplicación " +
+      "esté encendida.", "vacio");
+    hueco.colSpan = 5;
+    fila.appendChild(hueco);
+    cuerpoTabla.appendChild(fila);
   }
+}
+
+/* Después de crear, cambiar o eliminar, el riel de la izquierda está
+   mostrando lo de antes. Se le pide que se vuelva a cargar. */
+function refrescarTodo() {
+  cargarClientes();
+  if (window.RielTaxi) window.RielTaxi.recargar();
 }
 
 async function agregarCliente(evento) {
@@ -368,7 +199,7 @@ async function agregarCliente(evento) {
 
   formulario.reset();
   campoNombre.focus();   // listo para escribir el siguiente
-  cargarClientes();
+  refrescarTodo();
 }
 
 async function guardarFecha(idCliente, fecha) {
@@ -382,7 +213,7 @@ async function guardarFecha(idCliente, fecha) {
     mostrarAviso(await textoDelError(respuesta), "error");
     return;
   }
-  cargarClientes();   // se redibuja para actualizar la etiqueta de plazo
+  refrescarTodo();   // se redibuja para actualizar la etiqueta de plazo
 }
 
 async function eliminarCliente(cliente) {
@@ -401,7 +232,7 @@ async function eliminarCliente(cliente) {
     mostrarAviso(await textoDelError(respuesta), "error");
     return;
   }
-  cargarClientes();
+  refrescarTodo();
 }
 
 
@@ -627,7 +458,7 @@ async function confirmarImportacion() {
 
   mostrarAvisoImportar(texto, resultado.errores.length > 0 ? "error" : "exito");
   cerrarRevision();
-  cargarClientes();
+  refrescarTodo();
 }
 
 
@@ -700,7 +531,7 @@ botonListaBase.addEventListener("click", async function () {
         ? " " + contar(r.saltados, "ya tenía", "ya tenían") + " checklist y no se tocaron."
         : ""),
       "exito");
-    cargarClientes();
+    refrescarTodo();
   } catch (e) {
     avisarEn(avisoLote, "No se pudo conectar con el servidor.", "error");
   } finally {
@@ -745,7 +576,7 @@ botonVencimientos.addEventListener("click", async function () {
                " en la tabla.";
     }
     avisarEn(avisoLote, texto, "exito");
-    cargarClientes();
+    refrescarTodo();
   } catch (e) {
     avisarEn(avisoLote, "No se pudo conectar con el servidor.", "error");
   } finally {

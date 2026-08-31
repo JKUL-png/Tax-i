@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Agregar o importar clientes · Tax-i</title>
+  <link rel="stylesheet" href="/static/estilos.css">
+  <link rel="icon" href="/static/marca/favicon.svg" type="image/svg+xml">
+  <script src="/static/marca/marca.js"></script>
+  <script src="/static/marca/inicio.js"></script>
+</head>
+<body>
+
+  <div class="con-riel">
+
+  <!-- ---------- El riel ---------- -->
+  <aside class="riel" aria-label="Clientes">
+    <a class="riel-marca" href="/">
+      <svg class="marca-logo" viewBox="0 0 32 32" aria-hidden="true"><path class="marca-cara" d="M6 3h13.5L29 12.5V26a3 3 0 0 1-3 3H6a3 3 0 0 1-3-3V6a3 3 0 0 1 3-3Zm3.2 9.9v5.2h4.4v-5.2H9.2Zm8.4 2.7-1.9 1.9 3.8 3.8 6-6.7-1.9-1.7-4.1 4.6-1.9-1.9Z"/><path class="marca-pliegue" d="M19.5 3 29 12.5h-6.5a3 3 0 0 1-3-3V3Z"/></svg>
+      <span class="riel-nombre">Tax<i>-i</i></span>
+    </a>
+
+    <a class="riel-agregar" href="/clientes">
+      <span class="mas" aria-hidden="true">+</span>
+      Agregar o importar clientes
+    </a>
+
+    <input type="search" class="riel-buscar" id="riel-buscar"
+           placeholder="Buscar cliente" autocomplete="off"
+           aria-label="Buscar un cliente por nombre o cédula">
+
+    <div class="riel-lista" id="riel-lista"></div>
+
+    <div class="riel-pie">
+      <a href="/cuenta">
+        <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 5.4a2.6 2.6 0 1 0 0 5.2 2.6 2.6 0 0 0 0-5.2Zm0 4a1.4 1.4 0 1 1 0-2.8 1.4 1.4 0 0 1 0 2.8Z"/><path d="m14.3 9.6-.9-.5a5.6 5.6 0 0 0 0-2.2l.9-.5a.7.7 0 0 0 .3-.9l-1-1.7a.7.7 0 0 0-.9-.3l-.9.5a5.6 5.6 0 0 0-1.9-1.1V1.9a.7.7 0 0 0-.7-.7H7a.7.7 0 0 0-.7.7v1a5.6 5.6 0 0 0-1.9 1.1l-.9-.5a.7.7 0 0 0-.9.3l-1 1.7a.7.7 0 0 0 .3.9l.9.5a5.6 5.6 0 0 0 0 2.2l-.9.5a.7.7 0 0 0-.3.9l1 1.7a.7.7 0 0 0 .9.3l.9-.5a5.6 5.6 0 0 0 1.9 1.1v1a.7.7 0 0 0 .7.7h2.2a.7.7 0 0 0 .7-.7v-1a5.6 5.6 0 0 0 1.9-1.1l.9.5a.7.7 0 0 0 .9-.3l1-1.7a.7.7 0 0 0-.3-.9ZM8 12.2A4.2 4.2 0 1 1 8 3.8a4.2 4.2 0 0 1 0 8.4Z"/></svg>
+        Cuenta y ajustes
+      </a>
+    </div>
+  </aside>
+
+  <div class="area">
+  <div class="contenedor">
+
+    <header class="area-cabecera area-cabecera-sola">
+      <div class="area-cabecera-arriba">
+        <h1 class="area-titulo">Agregar o importar clientes</h1>
+        <p class="area-cedula">Uno a uno, o el Excel completo de la oficina</p>
+      </div>
+    </header>
+
+  <main>
+
+    <!-- ---------- Agregar cliente ---------- -->
+    <section class="seccion" id="agregar">
+      <h2>Agregar un cliente</h2>
+
+      <div class="tarjeta">
+        <div id="aviso" class="aviso oculto" role="alert"></div>
+
+        <form id="formulario-cliente" novalidate>
+          <div class="fila">
+            <div class="campo">
+              <label for="nombre">Nombre del cliente</label>
+              <input type="text" id="nombre" name="nombre"
+                     autocomplete="off" placeholder="Ej: María Gómez">
+            </div>
+
+            <div class="campo campo-corto">
+              <label for="digitos">Últimos 2 dígitos</label>
+              <input type="text" id="digitos" name="digitos"
+                     inputmode="numeric" maxlength="2"
+                     autocomplete="off" placeholder="07">
+            </div>
+
+            <div class="campo">
+              <label for="fecha">Fecha de vencimiento</label>
+              <input type="date" id="fecha" name="fecha">
+            </div>
+
+            <button type="submit" class="boton">Guardar cliente</button>
+          </div>
+
+          <p class="ayuda" style="margin-top:12px">
+            La fecha la escribe usted según el calendario oficial. El sistema
+            todavía no la calcula solo, y siempre se puede cambiar después.
+          </p>
+        </form>
+      </div>
+    </section>
+
+    <!-- ---------- Importar desde Excel ---------- -->
+    <section class="seccion">
+      <h2>Importar desde un archivo</h2>
+
+      <div class="tarjeta">
+        <p class="ayuda" style="margin-top:0">
+          Suba un Excel (.xlsx) o un CSV con la lista de clientes. El programa
+          lee las columnas, le muestra lo que entendió y usted corrige antes
+          de que se guarde nada.
+        </p>
+        <p class="ayuda">
+          Debe tener una fila de títulos con al menos <strong>Nombre</strong> y
+          <strong>Cédula</strong>. Si trae una columna de fecha de vencimiento,
+          también la lee. De la cédula solo se guardan los dos últimos dígitos:
+          el número completo nunca entra a la base de datos.
+        </p>
+
+        <button type="button" class="boton" id="boton-importar">
+          Elegir archivo
+        </button>
+        <input type="file" id="campo-importar"
+               accept=".xlsx,.csv" class="oculto">
+
+        <div id="aviso-importar" class="aviso oculto" role="alert"></div>
+      </div>
+
+      <!-- Lo que el programa entendió. Nada de esto está guardado todavía. -->
+      <div id="revision" class="revision oculto">
+        <div class="tarjeta">
+          <h3>Revise antes de crear</h3>
+          <p id="revision-resumen" class="ayuda"></p>
+          <div id="revision-columnas" class="ayuda"></div>
+
+          <div class="tabla-envoltura">
+            <table class="tabla-revision">
+              <thead>
+                <tr>
+                  <th class="columna-marca">Crear</th>
+                  <th>Nombre</th>
+                  <th class="columna-corta">Dígitos</th>
+                  <th class="columna-fecha">Vencimiento</th>
+                  <th>Revisar</th>
+                </tr>
+              </thead>
+              <tbody id="revision-filas"></tbody>
+            </table>
+          </div>
+
+          <div class="revision-botones">
+            <button type="button" class="boton" id="boton-confirmar">
+              Crear los clientes marcados
+            </button>
+            <button type="button" class="boton-secundario" id="boton-cancelar">
+              Cancelar
+            </button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ---------- Acciones sobre todos a la vez ----------
+         Después de importar un Excel de 150, dejarlos listos uno por uno
+         son 150 visitas. -->
+    <section class="seccion">
+      <h2>Dejarlos listos de una vez</h2>
+
+      <div class="tarjeta">
+        <p class="ayuda" style="margin-top:0">
+          Los dos respetan lo que usted ya haya puesto a mano: a un cliente que
+          ya tiene checklist o que ya tiene fecha no se le toca nada.
+        </p>
+        <div class="acciones-lote">
+          <button type="button" class="boton-secundario" id="boton-lista-base">
+            Poner la lista base a los que no tengan checklist
+          </button>
+          <button type="button" class="boton-secundario oculto"
+                  id="boton-vencimientos">
+            Poner los vencimientos del calendario
+          </button>
+          <div id="aviso-lote" class="aviso oculto" role="alert"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ---------- Administrar ----------
+         Esto NO es la lista para navegar: para eso está el riel, que
+         está siempre a la vista y ordena por urgencia. Aquí solo viven
+         las dos cosas que el riel no puede hacer —corregir la fecha y
+         eliminar— y por eso es una tabla apretada y no unas tarjetas.
+         La lista con buscador, orden y filtros que había aquí antes se
+         quitó: repetía el riel entero. -->
+    <section class="seccion">
+      <div class="clientes-cabeza">
+        <h2>Administrar <span id="conteo-clientes" class="conteo"></span></h2>
+      </div>
+
+      <p class="ayuda" style="margin-top:0">
+        Para trabajarle a un cliente, ábralo desde el riel de la izquierda.
+        Esta tabla es solo para corregir la fecha de vencimiento o eliminar.
+      </p>
+
+      <div class="tabla-envoltura">
+        <table class="tabla-admin">
+          <thead>
+            <tr>
+              <th>Cliente</th>
+              <th class="columna-corta">Cédula</th>
+              <th class="columna-corta">Checklist</th>
+              <th class="columna-fecha">Vencimiento</th>
+              <th class="columna-corta"><span class="solo-lectores">Eliminar</span></th>
+            </tr>
+          </thead>
+          <tbody id="tabla-clientes">
+            <tr><td colspan="5" class="vacio">Cargando…</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <p class="nota-prototipo">
+      Prototipo en construcción. Los archivos y los datos se guardan únicamente
+      en este computador.
+    </p>
+
+  </main>
+  </div>
+  </div>
+  </div>
+
+  <script src="/static/comun.js"></script>
+  <script src="/static/riel.js"></script>
+  <script src="/static/app.js"></script>
+</body>
+</html>

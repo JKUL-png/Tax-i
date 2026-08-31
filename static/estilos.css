@@ -84,12 +84,14 @@
   --borde-fuerte: var(--n4);
 
   /* --- El verde de la marca ---
-     #10805F se queda: es la identidad. Pero el blanco encima da 4.3:1 y
-     no llega a AA, así que los botones llenos usan el más oscuro, que ya
-     existía aquí como --primary-hover. No es un color nuevo: es un ascenso. */
-  --primary: #10805F;            /* marca, foco, rayas de acento */
-  --primary-fuerte: #0C6A4B;     /* botón lleno y enlace — 6.6:1 */
-  --primary-hover: #0A5A40;
+     #10805F en todas partes, que es como se usaba antes: marca, botones,
+     enlaces y foco. Estuvo un tiempo relegado a los acentos porque un
+     comentario aquí decía que el blanco encima daba 4.3:1 y no llegaba a
+     AA. La cuenta estaba mal: da 4.91:1 y sí pasa. El verde oscuro que lo
+     había reemplazado en los botones se queda solo para el hover. */
+  --primary: #10805F;            /* EL verde: marca, botón, enlace, foco */
+  --primary-fuerte: #10805F;     /* botón lleno — blanco encima, 4.91:1 */
+  --primary-hover: #0C6A4B;      /* el mismo, un paso más oscuro */
   --primary-tenue: #E9F2ED;      /* la única superficie teñida que queda */
   --primary-acento: var(--primary);  /* alias: antes era un segundo verde */
 
@@ -115,8 +117,11 @@
   --error-texto: #8E2F24;
 
   /* --- Letras ---
-     Las del sistema. En Mac sale San Francisco, en Windows Segoe UI: las
-     dos son buenas, no hay que descargar nada, y ningún servicio de afuera
+     DOS familias en todo el programa y ni una más: la de la interfaz y la
+     de las cifras. Las del sistema — en Mac sale San Francisco, en Windows
+     Segoe UI Variable. Son las tipografías de interfaz de Apple y de
+     Microsoft: están hechas para pantallas densas, no hay que descargar
+     nada, la pantalla se ve igual sin conexión y ningún servicio de afuera
      se entera de que el programa se abrió.
 
      El carácter no lo pone una tipografía de display: lo pone cuánto
@@ -128,17 +133,55 @@
   --fuente-cifras: ui-monospace, "SF Mono", SFMono-Regular, "Cascadia Mono",
                    "Segoe UI Mono", Menlo, Consolas, monospace;
 
+  /* La MISMA tipografía, en su corte para tamaños grandes.
+
+     No es una tercera familia: Segoe UI Variable viene en tres cortes
+     ópticos —Small, Text y Display— y el de arriba pide Text, que está
+     dibujado para 12-16 px: más abierto y con los trazos más gruesos de
+     lo que conviene. Puesto a 34 o 64 px se ve blando y separado. Este
+     pide Display, que es el corte hecho para titulares.
+
+     En Mac no cambia nada: San Francisco ya hace este ajuste sola. */
+  --fuente-display: -apple-system, BlinkMacSystemFont,
+                    "Segoe UI Variable Display", "Segoe UI Variable Text",
+                    "Segoe UI", system-ui, Roboto, sans-serif;
+
   /* --- Escala de tamaños ---
-     La base baja de 17 a 16 px y no más. La densidad se saca del relleno,
-     no del tamaño de la letra: quien tiene 55 años y lleva seis horas
-     mirando esto necesita el texto igual de grande y las filas más juntas. */
-  --t-rotulo: 0.6875rem;   /* 11px — encabezado de columna, versalitas */
-  --t-meta:   0.75rem;     /* 12px — ayuda, detalle de archivo */
-  --t-celda:  0.8125rem;   /* 13px — celda de tabla densa */
-  --t-ui:     0.9375rem;   /* 15px — el tamaño de trabajo */
-  --t-texto:  1rem;        /* 16px — texto corrido */
-  --t-h2:     1.1875rem;   /* 19px */
-  --t-h1:     1.5rem;      /* 24px — título de página y marca */
+     Diez escalones y ninguno suelto. Antes había 35 tamaños distintos
+     escritos a mano —0.82rem, 0.86rem, 12.5px, 0.92rem…— y esa es la
+     razón real de que la pantalla pareciera hecha con diez tipografías:
+     no eran familias distintas, eran tamaños que no formaban serie.
+     Cualquier tamaño nuevo se agrega AQUÍ o no se agrega.
+
+     La base es 16 px y no baja. La densidad se saca del relleno, no del
+     tamaño de la letra: quien tiene 55 años y lleva seis horas mirando
+     esto necesita el texto igual de grande y las filas más juntas. */
+  --t-rotulo:  0.6875rem;  /* 11px — encabezado de columna, versalitas */
+  --t-meta:    0.75rem;    /* 12px — ayuda, detalle de archivo */
+  --t-celda:   0.8125rem;  /* 13px — celda de tabla densa */
+  --t-lista:   0.875rem;   /* 14px — riel, listas, pastilla de RentAI */
+  --t-ui:      0.9375rem;  /* 15px — el tamaño de trabajo */
+  --t-texto:   1rem;       /* 16px — texto corrido */
+  --t-h3:      1.0625rem;  /* 17px */
+  --t-h2:      1.1875rem;  /* 19px */
+  --t-h1:      1.5rem;     /* 24px — título de página y marca */
+  --t-display: 2.125rem;   /* 34px — titular de la pantalla de inicio */
+  --t-portada: clamp(2.75rem, 7vw, 4rem);  /* la marca de la portada */
+
+  /* --- Pesos ---
+     Tres y nada más. Antes andaban sueltos un 620 y un 560 que nadie
+     puede distinguir de un 600 y que en Windows ni siquiera existen:
+     Segoe UI Variable los redondea, así que eran variedad imaginaria. */
+  --p-normal: 400;
+  --p-medio:  500;
+  --p-fuerte: 600;
+
+  /* --- Separación entre letras ---
+     Dos apretados para los títulos grandes y uno abierto para las
+     versalitas. Había catorce valores distintos. */
+  --sep-titulo: -0.02em;   /* títulos y marca */
+  --sep-cifra:  -0.01em;   /* la monoespaciada, que viene ancha */
+  --sep-rotulo: 0.07em;    /* VERSALITAS, que necesitan aire */
 
   /* --- Espaciado, rejilla de 4 --- */
   --e1: 4px;  --e2: 8px;  --e3: 12px; --e4: 16px; --e5: 20px;
@@ -148,23 +191,30 @@
      Radio 10/6 -> 4/2 y las pastillas de 999 -> 2. Fuera las sombras: los
      bloques se separan con una raya de 1px que separa de verdad, no con un
      desenfoque. La única que queda es la del visor, que sí flota encima. */
-  /* --- El riel oscuro de la pantalla del cliente ---
-     No son grises ni negros: son el mismo verde de la marca llevado hasta
-     abajo de la rampa. Un riel gris al lado de un verde #10805F se ve como
-     dos programas pegados; así se ve como uno solo apagando la luz. */
-  /* Verde de pizarra, no negro. Es el #10805F de siempre con la luz
-     bajada: mismo tono, misma familia. Cada valor de arriba se comprobó
-     contra este fondo — los cuatro pasan AA. */
-  --riel-fondo:  #2A4438;   /* el fondo del riel */
-  --riel-alto:   #365548;   /* el cliente que se está viendo */
-  --riel-borde:  #3F6152;
-  --riel-texto:  #E4EFE9;   /* 8.6:1 sobre el fondo del riel */
-  --riel-tenue:  #A2B4AA;   /* 4.9:1 — rótulos y cifras de apoyo */
-  --riel-verde:  #4FCB9D;   /* 5.2:1 — el verde de la marca, subido para
-                               que se lea sobre el riel: el #10805F da
-                               2.0:1 aquí y desaparece */
-  --riel-rojo:   #EE9C90;   /* 4.9:1 — lo mismo con el rojo de tinta */
-  --riel-ancho:  244px;
+  /* --- El riel oscuro ---
+     Grafito, no verde. El riel estuvo un tiempo en verde de pizarra
+     (#2A4438) para que fuera "la misma familia" que la marca, y el
+     resultado fue que dos verdes distintos se peleaban en la misma
+     pantalla y ninguno se leía como el de la marca.
+
+     Ahora el riel es neutro —un negro que no llega a negro— y el verde
+     aparece una sola vez ahí adentro: en lo que está seleccionado. Un
+     fondo neutro es lo que deja que #10805F siga siendo EL color del
+     programa en vez de uno de tres.
+
+     Todos los valores medidos contra --riel-fondo; el más bajo da 6.1:1,
+     de sobra para AA. */
+  --riel-fondo:  #1F2220;   /* el fondo del riel */
+  --riel-alto:   #2C302E;   /* el cliente que se está viendo */
+  --riel-borde:  #3A3F3C;
+  --riel-texto:  #ECEFED;   /* 13.9:1 */
+  --riel-tenue:  #A8AFAB;   /* 7.2:1 — rótulos y cifras de apoyo */
+  --riel-verde:  #2FBE8D;   /* 6.8:1 — es #10805F con la luz subida.
+                               El #10805F puro da 3.3:1 sobre este fondo
+                               y no se puede leer; el tono es el mismo. */
+  --riel-rojo:   #E89486;   /* 6.9:1 — lo mismo con el rojo de tinta */
+  --riel-ancho:  256px;     /* 12 px más: los nombres de cuatro apellidos
+                               se cortaban en 244 */
 
   --radio: 4px;
   --radio-chico: 2px;
@@ -199,7 +249,6 @@ body {
 .cifra,
 .conteo,
 input[type="date"],
-.cliente-cedula,
 .etiqueta {
   font-variant-numeric: tabular-nums;
 }
@@ -207,7 +256,7 @@ input[type="date"],
 .cifra {
   font-family: var(--fuente-cifras);
   font-size: 0.94em;
-  letter-spacing: -0.01em;
+  letter-spacing: var(--sep-cifra);
 }
 
 .contenedor {
@@ -219,15 +268,30 @@ input[type="date"],
 h1, h2, h3 {
   margin: 0;
   line-height: 1.25;
-  font-weight: 600;
+  font-weight: var(--p-fuerte);
   /* Las letras un poco más juntas: a este tamaño, la separación normal
      hace que los títulos se vean sueltos. */
-  letter-spacing: -0.021em;
+  letter-spacing: var(--sep-titulo);
 }
 
-h1 { font-size: 1.4rem; }
-h2 { font-size: 1.2rem; }
-h3 { font-size: 1.02rem; }
+h1 { font-size: var(--t-h1); }
+h2 { font-size: var(--t-h2); }
+h3 { font-size: var(--t-h3); }
+
+/* ----------------------------------------------------------
+   El logo, en verde
+
+   El logo es un SVG de dos trazos —la cara y la esquina doblada— sin
+   `fill` propio, así que toma el que le dé el CSS. Estaban pintados solo
+   dentro del riel y dentro del botón de RentAI; en cualquier otro sitio
+   caía al `fill` de fábrica de SVG, que es NEGRO. Por eso el logo de la
+   portada de arranque salía negro.
+
+   Aquí se pinta por defecto, y los sitios de fondo oscuro lo pisan.
+   ---------------------------------------------------------- */
+
+.marca-cara    { fill: var(--primary); }
+.marca-pliegue { fill: var(--primary-hover); }
 
 /* Se oculta visualmente pero los lectores de pantalla lo leen. */
 .solo-lectores {
@@ -280,14 +344,13 @@ p + .campo,
 }
 
 label {
-  font-size: 0.86rem;
-  font-weight: 600;
+  font-size: var(--t-lista);
+  font-weight: var(--p-fuerte);
   color: var(--texto-secundario);
-  letter-spacing: 0.005em;
-}
+  }
 
 .ayuda {
-  font-size: 0.82rem;
+  font-size: var(--t-celda);
   color: var(--texto-tenue);
   margin: 0;
 }
@@ -299,7 +362,7 @@ input[type="date"] {
   height: var(--alto-control);
   padding: 0 12px;
   font-family: inherit;
-  font-size: 1rem;
+  font-size: var(--t-texto);
   color: var(--texto);
   background: var(--superficie);
   border: 1px solid var(--borde-fuerte);
@@ -371,21 +434,20 @@ input[type="date"]:focus {
 
 button {
   font-family: inherit;
-  font-size: 1rem;
+  font-size: var(--t-texto);
   cursor: pointer;
 }
 
 .boton {
   height: var(--alto-control);
   padding: 0 22px;
-  /* El verde oscuro, no el de la marca: el blanco encima del #10805F da
-     4.3:1 y no llega a AA. Este da 6.6:1. */
+  /* El verde de la marca. El blanco encima da 4.91:1 y pasa AA. */
   background: var(--primary-fuerte);
   color: #FFFFFF;
   border: 1px solid var(--primary-fuerte);
   border-radius: var(--radio);
-  font-weight: 560;
-  letter-spacing: -0.006em;
+  font-weight: var(--p-fuerte);
+  letter-spacing: var(--sep-cifra);
 }
 
 .boton:hover {
@@ -413,7 +475,7 @@ button {
   color: var(--texto);
   border: 1px solid var(--borde-fuerte);
   border-radius: var(--radio);
-  font-weight: 500;
+  font-weight: var(--p-medio);
 }
 
 .boton-secundario:hover {
@@ -457,9 +519,9 @@ button {
   border-radius: var(--radio-chico);
   font-family: var(--fuente-cifras);
   font-size: var(--t-rotulo);
-  font-weight: 600;
+  font-weight: var(--p-fuerte);
   text-transform: uppercase;
-  letter-spacing: 0.06em;
+  letter-spacing: var(--sep-rotulo);
   white-space: nowrap;
   background: none;
   border: 1px solid var(--borde);
@@ -479,11 +541,14 @@ button {
 .etiqueta-ia     { color: var(--texto-tenue); border-color: var(--n4); }
 
 /* ==========================================================
-   Lista de clientes
+   Listas rayadas
 
-   Un solo bloque rayado, no una pila de tarjetas separadas. Con el hueco
-   de 12px que había antes, cada cliente era una tarjeta flotando y en
-   1366px cabían ocho; pegadas y con la raya compartida caben catorce.
+   Un solo bloque con las filas pegadas y la raya compartida, no una pila
+   de tarjetas flotando. Lo usan la lista de documentos y el checklist.
+
+   Aquí vivían también las tarjetas de cliente y la barra de buscar,
+   ordenar y filtrar. Se fueron con la lista de clientes de la pantalla
+   de inicio: el riel hace lo mismo, mejor y desde cualquier pantalla.
    ========================================================== */
 
 .lista {
@@ -493,106 +558,6 @@ button {
   border: 1px solid var(--borde);
   border-radius: var(--radio);
   overflow: hidden;
-}
-
-.cliente {
-  background: var(--superficie);
-  border-bottom: 1px solid var(--raya);
-  padding: var(--e3) var(--e4);
-  display: flex;
-  gap: var(--e4);
-  align-items: center;
-  flex-wrap: wrap;
-  /* La espina: una franja de color al filo izquierdo del renglón. No es
-     adorno, dice cómo va el plazo de ese cliente y deja leer la lista
-     entera sin tener que ir renglón por renglón. */
-  border-left: 3px solid transparent;
-}
-
-.cliente:last-child {
-  border-bottom: 0;
-}
-
-/* Al pasar el mouse solo cambia el fondo. El color de la espina no se
-   toca: si aquí se escribiera border-color, le ganaría a las clases de
-   abajo y todos los renglones se verían del mismo color al señalarlos. */
-.cliente:hover {
-  background: var(--n2);
-}
-
-/* La fila entera abre el cliente. */
-.cliente-enlazado {
-  cursor: pointer;
-  transition: background 90ms ease;
-}
-
-/* La flecha del borde derecho: dice que el renglón lleva a algún lado.
-   Está siempre puesta —no aparece al pasar el mouse— y solo se aviva un
-   poco cuando el renglón está señalado. */
-.cliente-flecha {
-  flex: 0 0 auto;
-  margin-left: var(--e1);
-  color: var(--n5);
-  font-size: 1rem;
-  line-height: 1;
-  transition: color 90ms ease, transform 90ms ease;
-}
-
-.cliente-enlazado:hover .cliente-flecha {
-  color: var(--primary);
-  transform: translateX(2px);
-}
-
-
-.espina-error  { border-left-color: var(--error); }
-.espina-alerta { border-left-color: var(--alerta-texto); }
-.espina-exito  { border-left-color: transparent; }
-.espina-neutra { border-left-color: transparent; }
-
-.cliente-datos {
-  flex: 1 1 220px;
-  min-width: 0;
-}
-
-.cliente-nombre {
-  margin: 0;
-  overflow-wrap: anywhere;
-  font-size: var(--t-ui);
-  font-weight: 600;
-}
-
-.cliente-cedula {
-  margin: 2px 0 0;
-  font-family: var(--fuente-cifras);
-  font-size: var(--t-meta);
-  color: var(--texto-secundario);
-}
-
-.cliente-avance {
-  margin: 2px 0 0;
-  font-family: var(--fuente-cifras);
-  font-size: var(--t-meta);
-  font-weight: 500;
-}
-
-.avance-completo  { color: var(--texto-tenue); font-weight: 400; }
-.avance-pendiente { color: var(--alerta-texto); }
-.avance-neutro    { color: var(--texto-tenue); font-weight: 400; }
-
-.cliente-fecha {
-  flex: 0 0 auto;
-  display: flex;
-  flex-direction: column;
-  gap: var(--e1);
-  min-width: 176px;
-}
-
-.cliente-fecha input[type="date"] {
-  height: var(--alto-control);
-}
-
-.cliente-acciones {
-  flex: 0 0 auto;
 }
 
 /* ==========================================================
@@ -614,7 +579,7 @@ button {
 .vacio-titulo {
   margin: 0 0 var(--e1);
   font-size: var(--t-ui);
-  font-weight: 620;
+  font-weight: var(--p-fuerte);
   color: var(--texto);
 }
 
@@ -648,8 +613,8 @@ button {
   font-family: var(--fuente-cifras);
   font-size: var(--t-rotulo);
   text-transform: uppercase;
-  letter-spacing: 0.07em;
-  font-weight: 600;
+  letter-spacing: var(--sep-rotulo);
+  font-weight: var(--p-fuerte);
   margin-bottom: 2px;
 }
 
@@ -698,7 +663,7 @@ a {
 
 .migas {
   margin: -12px 0 24px;
-  font-size: 0.92rem;
+  font-size: var(--t-ui);
 }
 
 .migas a {
@@ -711,21 +676,8 @@ a {
   text-decoration: underline;
 }
 
-.cliente-nombre a {
-  color: inherit;
-  text-decoration: none;
-}
-
-/* Señalar cualquier parte de la fila subraya el nombre: es la señal de
-   que el renglón entero abre el cliente. */
-.cliente-nombre a:hover,
-.cliente-enlazado:hover .cliente-nombre a {
-  color: var(--primary-fuerte);
-  text-decoration: underline;
-}
-
 .conteo {
-  font-weight: 400;
+  font-weight: var(--p-normal);
   color: var(--texto-tenue);
 }
 
@@ -750,8 +702,8 @@ a {
 
 .zona-titulo {
   margin: 0 0 6px;
-  font-weight: 600;
-  font-size: 1.05rem;
+  font-weight: var(--p-fuerte);
+  font-size: var(--t-h3);
 }
 
 .zona-arrastre .ayuda {
@@ -776,7 +728,7 @@ a {
   border-radius: var(--radio-chico);
   background: var(--primary-tenue);
   color: var(--primary-hover);
-  font-size: 0.92rem;
+  font-size: var(--t-ui);
 }
 
 .progreso p {
@@ -789,19 +741,19 @@ a {
   border: 1px solid var(--borde);
   border-radius: var(--radio);
   background: var(--superficie);
-  font-size: 0.92rem;
+  font-size: var(--t-ui);
 }
 
 .informe-resumen {
   margin: 0;
-  font-weight: 600;
+  font-weight: var(--p-fuerte);
   color: var(--exito-texto);
 }
 
 .informe-titulo {
   margin: 14px 0 6px;
   color: var(--alerta-texto);
-  font-weight: 600;
+  font-weight: var(--p-fuerte);
 }
 
 .informe-lista {
@@ -839,9 +791,9 @@ a {
   background: var(--fondo);
   border: 1px solid var(--borde);
   color: var(--texto-secundario);
-  font-size: 0.75rem;
-  font-weight: 600;
-  letter-spacing: 0.03em;
+  font-size: var(--t-meta);
+  font-weight: var(--p-fuerte);
+  letter-spacing: var(--sep-rotulo);
   text-transform: uppercase;
 }
 
@@ -852,13 +804,13 @@ a {
 
 .documento-nombre {
   margin: 0;
-  font-weight: 500;
+  font-weight: var(--p-medio);
   overflow-wrap: anywhere;
 }
 
 .documento-detalle {
   margin: 2px 0 0;
-  font-size: 0.85rem;
+  font-size: var(--t-lista);
   color: var(--texto-tenue);
 }
 
@@ -906,7 +858,7 @@ a {
 .tabla-revision {
   width: 100%;
   border-collapse: collapse;
-  font-size: 0.92rem;
+  font-size: var(--t-ui);
 }
 
 .tabla-revision th {
@@ -914,10 +866,10 @@ a {
   padding: 10px 12px;
   background: var(--fondo);
   border-bottom: 1px solid var(--borde);
-  font-weight: 600;
-  font-size: 0.82rem;
+  font-weight: var(--p-fuerte);
+  font-size: var(--t-celda);
   text-transform: uppercase;
-  letter-spacing: 0.03em;
+  letter-spacing: var(--sep-rotulo);
   color: var(--texto-secundario);
   white-space: nowrap;
 }
@@ -944,7 +896,7 @@ a {
   border: 1px solid var(--borde-fuerte);
   border-radius: var(--radio-chico);
   font-family: inherit;
-  font-size: 0.92rem;
+  font-size: var(--t-ui);
   background: var(--superficie);
 }
 
@@ -971,7 +923,7 @@ a {
 
 .casilla-avisos {
   color: var(--alerta-texto);
-  font-size: 0.85rem;
+  font-size: var(--t-lista);
   min-width: 200px;
 }
 
@@ -1071,7 +1023,7 @@ input[type="text"].renglon-titulo {
   border-radius: var(--radio-chico);
   font-family: inherit;
   font-size: var(--t-ui);
-  font-weight: 620;
+  font-weight: var(--p-fuerte);
   color: var(--texto);
 }
 
@@ -1102,8 +1054,8 @@ input[type="text"].renglon-titulo:focus {
 .tarjeta-agregar label {
   display: block;
   margin-bottom: 8px;
-  font-size: 0.9rem;
-  font-weight: 500;
+  font-size: var(--t-lista);
+  font-weight: var(--p-medio);
 }
 
 /* En pantallas angostas el renglón se parte en dos líneas. */
@@ -1127,7 +1079,7 @@ input[type="text"].renglon-titulo:focus {
   border: 1px solid var(--borde-fuerte);
   border-radius: var(--radio-chico);
   font-family: inherit;
-  font-size: 0.95rem;
+  font-size: var(--t-ui);
   line-height: 1.6;
   resize: vertical;
   background: var(--superficie);
@@ -1146,11 +1098,14 @@ input[type="text"].renglon-titulo:focus {
   margin-top: 16px;
 }
 
-/* Los enlaces que se ven como botones necesitan alinearse como tales. */
-.fila-botones .boton,
-.fila-botones .boton-secundario {
+/* Un enlace con pinta de botón se alinea y se comporta como un botón,
+   esté donde esté. Antes esto valía solo dentro de .fila-botones, y el
+   botón de la pantalla de inicio salía con la rayita del enlace debajo. */
+a.boton,
+a.boton-secundario {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   text-decoration: none;
 }
 
@@ -1196,19 +1151,19 @@ input[type="text"].renglon-titulo:focus {
 .barra-resumen a {
   color: var(--texto-secundario);
   text-decoration: none;
-  font-size: 0.92rem;
+  font-size: var(--t-ui);
 }
 
 .resumen-titulo {
-  font-size: 0.82rem;
+  font-size: var(--t-celda);
   text-transform: uppercase;
-  letter-spacing: 0.08em;
+  letter-spacing: var(--sep-rotulo);
   color: var(--texto-tenue);
   margin-bottom: 8px;
 }
 
 .resumen-cliente {
-  font-size: 1.6rem;
+  font-size: var(--t-h1);
   margin-bottom: 8px;
 }
 
@@ -1219,7 +1174,7 @@ input[type="text"].renglon-titulo:focus {
 
 .resumen-referencia {
   margin: 4px 0 0;
-  font-size: 0.82rem;
+  font-size: var(--t-celda);
   color: var(--texto-tenue);
   font-style: italic;
 }
@@ -1247,8 +1202,8 @@ input[type="text"].renglon-titulo:focus {
 }
 
 .marcador-numero {
-  font-size: 1.5rem;
-  font-weight: 600;
+  font-size: var(--t-h1);
+  font-weight: var(--p-fuerte);
   color: var(--exito-texto);
 }
 
@@ -1258,16 +1213,16 @@ input[type="text"].renglon-titulo:focus {
 
 .marcador-texto {
   color: var(--texto-secundario);
-  font-size: 0.92rem;
+  font-size: var(--t-ui);
 }
 
 .resumen-seccion {
   margin: 28px 0 10px;
   padding-bottom: 6px;
   border-bottom: 1px solid var(--borde);
-  font-size: 0.82rem;
+  font-size: var(--t-celda);
   text-transform: uppercase;
-  letter-spacing: 0.06em;
+  letter-spacing: var(--sep-rotulo);
   color: var(--texto-secundario);
 }
 
@@ -1286,7 +1241,7 @@ input[type="text"].renglon-titulo:focus {
 
 .casilla {
   flex: 0 0 auto;
-  font-size: 1.05rem;
+  font-size: var(--t-h3);
   line-height: 1.4;
 }
 
@@ -1303,7 +1258,7 @@ input[type="text"].renglon-titulo:focus {
 .tabla-archivos {
   width: 100%;
   border-collapse: collapse;
-  font-size: 0.9rem;
+  font-size: var(--t-lista);
 }
 
 .tabla-archivos td {
@@ -1315,15 +1270,15 @@ input[type="text"].renglon-titulo:focus {
 .tabla-archivos .columna-tipo {
   width: 60px;
   color: var(--texto-tenue);
-  font-size: 0.75rem;
+  font-size: var(--t-meta);
   text-transform: uppercase;
-  letter-spacing: 0.03em;
+  letter-spacing: var(--sep-rotulo);
   padding-top: 9px;
 }
 
 .tabla-archivos .columna-detalle {
   color: var(--texto-tenue);
-  font-size: 0.82rem;
+  font-size: var(--t-celda);
   white-space: nowrap;
 }
 
@@ -1331,7 +1286,7 @@ input[type="text"].renglon-titulo:focus {
   margin-top: 40px;
   padding-top: 20px;
   border-top: 1px solid var(--borde);
-  font-size: 0.8rem;
+  font-size: var(--t-celda);
   color: var(--texto-tenue);
 }
 
@@ -1392,7 +1347,7 @@ input[type="text"].renglon-titulo:focus {
   border-radius: var(--radio-chico);
   background: var(--fondo);
   border: 1px solid var(--borde);
-  font-size: 0.85rem;
+  font-size: var(--t-lista);
   color: var(--texto-secundario);
 }
 
@@ -1433,7 +1388,7 @@ input[type="text"].renglon-titulo:focus {
   border-radius: var(--radio-chico);
   background: var(--superficie);
   font-family: inherit;
-  font-size: 0.88rem;
+  font-size: var(--t-lista);
   color: var(--texto);
 }
 
@@ -1458,7 +1413,7 @@ input[type="text"].renglon-titulo:focus {
 
 .renglon-archivos {
   flex: 0 0 auto;
-  font-size: 0.78rem;
+  font-size: var(--t-meta);
   color: var(--texto-tenue);
   white-space: nowrap;
 }
@@ -1500,7 +1455,7 @@ input[type="text"].renglon-titulo:focus {
 
 .visor-titulo {
   margin: 0;
-  font-weight: 500;
+  font-weight: var(--p-medio);
   overflow-wrap: anywhere;
 }
 
@@ -1539,7 +1494,7 @@ input[type="text"].renglon-titulo:focus {
   padding: 14px;
   background: var(--fondo);
   border-radius: var(--radio-chico);
-  font-size: 0.82rem;
+  font-size: var(--t-celda);
   line-height: 1.5;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
@@ -1552,7 +1507,7 @@ input[type="text"].renglon-titulo:focus {
 
 .tabla-vista {
   border-collapse: collapse;
-  font-size: 0.85rem;
+  font-size: var(--t-lista);
   white-space: nowrap;
 }
 
@@ -1565,7 +1520,7 @@ input[type="text"].renglon-titulo:focus {
 
 .tabla-vista th {
   background: var(--fondo);
-  font-weight: 600;
+  font-weight: var(--p-fuerte);
   position: sticky;
   top: 0;
 }
@@ -1588,9 +1543,9 @@ input[type="text"].renglon-titulo:focus {
   margin: 0 0 var(--e2);
   font-family: var(--fuente-cifras);
   font-size: var(--t-rotulo);
-  font-weight: 600;
+  font-weight: var(--p-fuerte);
   text-transform: uppercase;
-  letter-spacing: 0.07em;
+  letter-spacing: var(--sep-rotulo);
   color: var(--primary-fuerte);
 }
 
@@ -1643,7 +1598,7 @@ input[type="text"].renglon-titulo:focus {
   font-family: var(--fuente-cifras);
   font-size: var(--t-rotulo);
   text-transform: uppercase;
-  letter-spacing: 0.07em;
+  letter-spacing: var(--sep-rotulo);
   color: var(--texto-tenue);
   border: 1px solid var(--borde-fuerte);
   border-radius: var(--radio-chico);
@@ -1699,9 +1654,9 @@ input[type="text"].renglon-titulo:focus {
   display: flex;
   align-items: center;
   gap: 8px;
-  font-size: 0.85rem;
+  font-size: var(--t-lista);
   color: var(--texto-secundario);
-  font-weight: 400;
+  font-weight: var(--p-normal);
   margin-bottom: 16px;
   cursor: pointer;
 }
@@ -1738,19 +1693,19 @@ input[type="text"].renglon-titulo:focus {
 
 .valor-titulo {
   margin: 0;
-  font-size: 0.95rem;
+  font-size: var(--t-ui);
 }
 
 .valor-detalle {
   margin: 2px 0 0;
-  font-size: 0.8rem;
+  font-size: var(--t-celda);
   color: var(--texto-tenue);
 }
 
 .valor-monto {
   margin: 0;
   flex: 0 0 auto;
-  font-weight: 600;
+  font-weight: var(--p-fuerte);
   font-variant-numeric: tabular-nums;
 }
 
@@ -1768,7 +1723,7 @@ input[type="text"].renglon-titulo:focus {
 
 .resultado-bien {
   color: var(--exito-texto);
-  font-weight: 500;
+  font-weight: var(--p-medio);
 }
 
 .resultado-aviso {
@@ -1777,7 +1732,7 @@ input[type="text"].renglon-titulo:focus {
 
 .resultado-mal {
   color: var(--error-texto);
-  font-weight: 500;
+  font-weight: var(--p-medio);
 }
 
 /* --- Totales --- */
@@ -1788,7 +1743,7 @@ input[type="text"].renglon-titulo:focus {
 
 .totales > summary {
   cursor: pointer;
-  font-weight: 500;
+  font-weight: var(--p-medio);
   padding: 6px 0;
 }
 
@@ -1800,10 +1755,10 @@ input[type="text"].renglon-titulo:focus {
 
 .total-seccion {
   margin: 16px 0 6px;
-  font-size: 0.8rem;
-  font-weight: 600;
+  font-size: var(--t-celda);
+  font-weight: var(--p-fuerte);
   text-transform: uppercase;
-  letter-spacing: 0.04em;
+  letter-spacing: var(--sep-rotulo);
   color: var(--texto-tenue);
 }
 
@@ -1825,13 +1780,13 @@ input[type="text"].renglon-titulo:focus {
 .total-descripcion {
   flex: 1 1 auto;
   min-width: 0;
-  font-size: 0.9rem;
+  font-size: var(--t-lista);
   color: var(--texto-secundario);
 }
 
 .total-monto {
   flex: 0 0 auto;
-  font-weight: 600;
+  font-weight: var(--p-fuerte);
   font-variant-numeric: tabular-nums;
 }
 
@@ -1847,7 +1802,7 @@ input[type="text"].renglon-titulo:focus {
 /* Los ceros se atenúan: son la mayoría y no aportan nada a la lectura. */
 .total-cero {
   color: var(--texto-tenue);
-  font-weight: 400;
+  font-weight: var(--p-normal);
 }
 
 /* --- Historial --- */
@@ -1860,7 +1815,7 @@ input[type="text"].renglon-titulo:focus {
 
 .historial > summary {
   cursor: pointer;
-  font-size: 0.9rem;
+  font-size: var(--t-lista);
   color: var(--texto-secundario);
 }
 
@@ -1872,7 +1827,7 @@ input[type="text"].renglon-titulo:focus {
 
 .movimiento {
   margin: 0 0 6px;
-  font-size: 0.82rem;
+  font-size: var(--t-celda);
   color: var(--texto-tenue);
   font-variant-numeric: tabular-nums;
 }
@@ -1974,7 +1929,7 @@ input[type="text"].renglon-titulo:focus {
   background: none;
   padding: 10px 16px;
   font-family: inherit;
-  font-size: 0.95rem;
+  font-size: var(--t-ui);
   color: var(--texto-secundario);
   cursor: pointer;
   border-bottom: 2px solid transparent;
@@ -1987,7 +1942,7 @@ input[type="text"].renglon-titulo:focus {
 
 .pestana-activa {
   color: var(--primary);
-  font-weight: 600;
+  font-weight: var(--p-fuerte);
   border-bottom-color: var(--primary);
 }
 
@@ -2025,7 +1980,7 @@ input[type="text"].renglon-titulo:focus {
   border-radius: var(--radio);
   padding: 12px 16px;
   margin: 12px 0;
-  font-size: 0.9rem;
+  font-size: var(--t-lista);
 }
 
 .aviso-pendientes .boton {
@@ -2052,7 +2007,7 @@ input[type="text"].renglon-titulo:focus {
 .tabla-captura {
   width: 100%;
   border-collapse: collapse;
-  font-size: 0.88rem;
+  font-size: var(--t-lista);
 }
 
 /* La fila de títulos se queda pegada arriba al bajar por la hoja. */
@@ -2064,10 +2019,10 @@ input[type="text"].renglon-titulo:focus {
   border-bottom: 1px solid var(--borde-fuerte);
   padding: 10px 12px;
   text-align: left;
-  font-size: 0.78rem;
-  font-weight: 600;
+  font-size: var(--t-meta);
+  font-weight: var(--p-fuerte);
   text-transform: uppercase;
-  letter-spacing: 0.04em;
+  letter-spacing: var(--sep-rotulo);
   color: var(--texto-tenue);
 }
 
@@ -2095,7 +2050,7 @@ input[type="text"].renglon-titulo:focus {
 /* Los renglones oficiales del formulario pesan más que las filas de
    detalle: se marcan con el texto más oscuro. */
 .fila-renglon .columna-concepto {
-  font-weight: 600;
+  font-weight: var(--p-fuerte);
   color: var(--texto);
 }
 
@@ -2120,7 +2075,7 @@ input[type="text"].renglon-titulo:focus {
 
 /* Las notas al pie son párrafos de explicación, no conceptos. */
 .fila-nota .columna-concepto {
-  font-size: 0.8rem;
+  font-size: var(--t-celda);
   font-style: italic;
   color: var(--texto-tenue);
 }
@@ -2132,10 +2087,10 @@ input[type="text"].renglon-titulo:focus {
   z-index: 1;
   background: var(--primary-tenue);
   color: var(--primary-hover);
-  font-size: 0.78rem;
-  font-weight: 600;
+  font-size: var(--t-meta);
+  font-weight: var(--p-fuerte);
   text-transform: uppercase;
-  letter-spacing: 0.04em;
+  letter-spacing: var(--sep-rotulo);
   padding: 8px 12px;
   border-bottom: 1px solid var(--borde);
 }
@@ -2150,13 +2105,13 @@ input[type="text"].renglon-titulo:focus {
 .celda-formula {
   background: var(--fondo);
   color: var(--texto-secundario);
-  font-weight: 500;
+  font-weight: var(--p-medio);
   padding-right: 14px;
 }
 
 .celda-cero {
   color: var(--texto-tenue);
-  font-weight: 400;
+  font-weight: var(--p-normal);
 }
 
 /* Fuera de la tabla: en esa fila esa columna no existe. */
@@ -2173,7 +2128,7 @@ input[type="text"].celda-campo {
   height: 32px;
   padding: 0 8px;
   text-align: right;
-  font-size: 0.88rem;
+  font-size: var(--t-lista);
   font-variant-numeric: tabular-nums;
   border: 1px solid transparent;
   border-radius: var(--radio-chico);
@@ -2200,7 +2155,7 @@ input[type="text"].celda-campo:focus {
 
 .celda-anotada input[type="text"].celda-campo {
   color: var(--primary-hover);
-  font-weight: 600;
+  font-weight: var(--p-fuerte);
 }
 
 /* Cambiada pero todavía no recalculada: los totales de al lado no la
@@ -2220,7 +2175,7 @@ input[type="text"].celda-campo:focus {
   width: 100%;
   padding: 0 10px;
   font-family: inherit;
-  font-size: 0.95rem;
+  font-size: var(--t-ui);
   color: var(--texto);
   background: var(--superficie);
   border: 1px solid var(--borde-fuerte);
@@ -2229,7 +2184,7 @@ input[type="text"].celda-campo:focus {
 
 .valor-alerta {
   margin: 4px 0 0;
-  font-size: 0.8rem;
+  font-size: var(--t-celda);
   color: var(--alerta-texto);
 }
 
@@ -2290,7 +2245,7 @@ input[type="text"].celda-campo:focus {
 }
 
 .rentai-nombre {
-  font-weight: 600;
+  font-weight: var(--p-fuerte);
   color: var(--texto);
   flex: 0 0 auto;
 }
@@ -2355,13 +2310,13 @@ input[type="text"].celda-campo:focus {
   display: flex;
   align-items: center;
   gap: 8px;
-  font-weight: 600;
+  font-weight: var(--p-fuerte);
   min-width: 0;
 }
 
 .rentai-estado {
-  font-size: 0.75rem;
-  font-weight: 400;
+  font-size: var(--t-meta);
+  font-weight: var(--p-normal);
   color: var(--texto-tenue);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -2375,7 +2330,7 @@ input[type="text"].celda-campo:focus {
 }
 
 .rentai-acciones .boton-texto {
-  font-size: 0.8rem;
+  font-size: var(--t-celda);
 }
 
 /* --- Los mensajes --- */
@@ -2391,7 +2346,7 @@ input[type="text"].celda-campo:focus {
 
 .rentai-vacio {
   color: var(--texto-tenue);
-  font-size: 0.85rem;
+  font-size: var(--t-lista);
   line-height: 1.5;
   text-align: center;
   padding: 24px 8px;
@@ -2401,7 +2356,7 @@ input[type="text"].celda-campo:focus {
   max-width: 92%;
   padding: 10px 14px;
   border-radius: var(--radio);
-  font-size: 0.9rem;
+  font-size: var(--t-lista);
   line-height: 1.5;
 }
 
@@ -2421,7 +2376,7 @@ input[type="text"].celda-campo:focus {
   align-self: stretch;
   background: var(--error-fondo);
   color: var(--error-texto);
-  font-size: 0.85rem;
+  font-size: var(--t-lista);
 }
 
 .rentai-pensando {
@@ -2436,7 +2391,7 @@ input[type="text"].celda-campo:focus {
 
 .rentai-nota {
   margin: 0;
-  font-size: 0.78rem;
+  font-size: var(--t-meta);
   color: var(--texto-tenue);
   text-align: center;
 }
@@ -2457,14 +2412,14 @@ input[type="text"].celda-campo:focus {
 
 .propuesta-rastro {
   margin: 8px 0 2px;
-  font-size: 0.75rem;
+  font-size: var(--t-meta);
   color: var(--texto-tenue);
 }
 
 .propuesta-titulo {
   margin: 6px 0 4px;
-  font-size: 0.9rem;
-  font-weight: 500;
+  font-size: var(--t-lista);
+  font-weight: var(--p-medio);
   /* Algunos conceptos de la plantilla son un párrafo entero. Se muestran
      tres renglones; el texto completo aparece al pasar el mouse. */
   display: -webkit-box;
@@ -2477,7 +2432,7 @@ input[type="text"].celda-campo:focus {
   margin: 0 0 var(--e1);
   font-family: var(--fuente-cifras);
   font-size: var(--t-texto);
-  font-weight: 600;
+  font-weight: var(--p-fuerte);
   font-variant-numeric: tabular-nums;
   /* La raya punteada: el espacio en blanco de un formulario de papel.
      Es lo que dice "esto lo leyó la máquina, verifíquelo". */
@@ -2488,13 +2443,13 @@ input[type="text"].celda-campo:focus {
 
 .propuesta-detalle {
   margin: 0;
-  font-size: 0.78rem;
+  font-size: var(--t-meta);
   color: var(--texto-tenue);
 }
 
 .propuesta-porque {
   margin: 6px 0 0;
-  font-size: 0.8rem;
+  font-size: var(--t-celda);
   color: var(--texto-secundario);
   font-style: italic;
 }
@@ -2509,7 +2464,7 @@ input[type="text"].celda-campo:focus {
 .propuesta-botones .boton {
   height: 36px;
   padding: 0 16px;
-  font-size: 0.85rem;
+  font-size: var(--t-lista);
 }
 
 .propuesta-anotada {
@@ -2519,8 +2474,8 @@ input[type="text"].celda-campo:focus {
 
 .propuesta-lista {
   margin: 10px 0 0;
-  font-size: 0.82rem;
-  font-weight: 500;
+  font-size: var(--t-celda);
+  font-weight: var(--p-medio);
   color: var(--exito-texto);
 }
 
@@ -2544,7 +2499,7 @@ input[type="text"].celda-campo:focus {
   max-height: 140px;
   padding: 11px 12px;
   font-family: inherit;
-  font-size: 0.9rem;
+  font-size: var(--t-lista);
   line-height: 1.4;
   color: var(--texto);
   background: var(--superficie);
@@ -2567,7 +2522,7 @@ input[type="text"].celda-campo:focus {
 .rentai-pie {
   margin: 0;
   padding: 4px 16px 12px;
-  font-size: 0.75rem;
+  font-size: var(--t-meta);
   color: var(--texto-tenue);
   text-align: center;
 }
@@ -2616,15 +2571,15 @@ input[type="text"].celda-campo:focus {
 
 .cuenta-titulo {
   margin: 0 0 6px;
-  font-size: 1.2rem;
-  font-weight: 600;
-  letter-spacing: -0.021em;
+  font-size: var(--t-h2);
+  font-weight: var(--p-fuerte);
+  letter-spacing: var(--sep-titulo);
   overflow-wrap: anywhere;
 }
 
 .cuenta-estado {
   margin: 0;
-  font-size: 0.86rem;
+  font-size: var(--t-lista);
   color: var(--texto-secundario);
 }
 
@@ -2647,17 +2602,17 @@ input[type="text"].celda-campo:focus {
 }
 
 .cuenta-cifra .cifra {
-  font-size: 1.75rem;
-  font-weight: 600;
+  font-size: var(--t-h1);
+  font-weight: var(--p-fuerte);
   line-height: 1.1;
   color: var(--primary);
 }
 
 .cuenta-rotulo {
-  font-size: 0.7rem;
+  font-size: var(--t-rotulo);
   text-transform: uppercase;
-  letter-spacing: 0.09em;
-  font-weight: 600;
+  letter-spacing: var(--sep-rotulo);
+  font-weight: var(--p-fuerte);
   color: var(--texto-tenue);
 }
 
@@ -2678,7 +2633,7 @@ input[type="text"].celda-campo:focus {
 
 .estado-ia-linea {
   margin: 0 0 4px;
-  font-weight: 600;
+  font-weight: var(--p-fuerte);
 }
 
 .estado-ia .ayuda {
@@ -2705,7 +2660,7 @@ input[type="text"].celda-campo:focus {
   border-radius: var(--radio-chico);
   background: var(--superficie);
   cursor: pointer;
-  font-weight: 400;
+  font-weight: var(--p-normal);
   color: var(--texto);
 }
 
@@ -2737,11 +2692,11 @@ input[type="text"].celda-campo:focus {
 }
 
 .opcion-titulo {
-  font-weight: 600;
+  font-weight: var(--p-fuerte);
 }
 
 .opcion-detalle {
-  font-size: 0.86rem;
+  font-size: var(--t-lista);
   color: var(--texto-secundario);
   line-height: 1.5;
 }
@@ -2761,7 +2716,7 @@ input[type="text"].celda-campo:focus {
 }
 
 .llave-actual .cifra {
-  font-size: 1rem;
+  font-size: var(--t-texto);
   color: var(--texto);
 }
 
@@ -2773,7 +2728,7 @@ input[type="text"].celda-campo:focus {
 .fila-llave input {
   flex: 1 1 auto;
   font-family: var(--fuente-cifras);
-  font-size: 0.95rem;
+  font-size: var(--t-ui);
 }
 
 .fila-llave .boton-secundario {
@@ -2785,7 +2740,7 @@ input[type="text"].celda-campo:focus {
   margin-top: 14px;
   padding: 11px 14px;
   border-radius: var(--radio-chico);
-  font-size: 0.9rem;
+  font-size: var(--t-lista);
 }
 
 .resultado-bien { background: var(--exito-fondo); color: var(--exito-texto); }
@@ -2801,7 +2756,7 @@ input[type="text"].celda-campo:focus {
 
 .avanzado > summary {
   cursor: pointer;
-  font-size: 0.88rem;
+  font-size: var(--t-lista);
   color: var(--texto-secundario);
   padding: 4px 0;
 }
@@ -2822,10 +2777,10 @@ input[type="text"].celda-campo:focus {
 }
 
 .lista-rutas dt {
-  font-size: 0.8rem;
+  font-size: var(--t-celda);
   text-transform: uppercase;
-  letter-spacing: 0.08em;
-  font-weight: 600;
+  letter-spacing: var(--sep-rotulo);
+  font-weight: var(--p-fuerte);
   color: var(--texto-tenue);
   margin-bottom: 4px;
 }
@@ -2836,7 +2791,7 @@ input[type="text"].celda-campo:focus {
   background: var(--fondo);
   border: 1px solid var(--borde);
   border-radius: var(--radio-chico);
-  font-size: 0.85rem;
+  font-size: var(--t-lista);
   /* Las rutas de Windows son largas: que corten donde toque en vez de
      empujar la tarjeta a lo ancho. */
   overflow-wrap: anywhere;
@@ -2900,7 +2855,7 @@ code {
 
 .perfil-posicion {
   color: var(--texto-tenue);
-  font-size: 13px;
+  font-size: var(--t-celda);
 }
 
 /* --- Las tres cifras --- */
@@ -2922,14 +2877,14 @@ code {
 }
 
 .perfil-valor {
-  font-size: 19px;
-  font-weight: 600;
+  font-size: var(--t-h2);
+  font-weight: var(--p-fuerte);
   color: var(--texto);
   line-height: 1.2;
 }
 
 .perfil-nota {
-  font-size: 13px;
+  font-size: var(--t-celda);
   color: var(--texto-tenue);
 }
 
@@ -2944,18 +2899,18 @@ code {
 
 .perfil-pendientes-titulo {
   margin: 0 0 8px;
-  font-size: 13px;
-  font-weight: 600;
+  font-size: var(--t-celda);
+  font-weight: var(--p-fuerte);
   color: var(--alerta-texto);
   text-transform: uppercase;
-  letter-spacing: .04em;
+  letter-spacing: var(--sep-rotulo);
 }
 
 .perfil-lista-faltantes {
   margin: 0;
   padding-left: 20px;
   color: var(--texto-secundario);
-  font-size: 14px;
+  font-size: var(--t-lista);
   line-height: 1.7;
 }
 
@@ -3006,8 +2961,8 @@ code {
   display: flex;
   align-items: center;
   gap: 9px;
-  font-size: 14px;
-  font-weight: 600;
+  font-size: var(--t-lista);
+  font-weight: var(--p-fuerte);
   color: var(--texto-secundario);
   cursor: pointer;
   /* Blanco de clic cómodo: en pantalla táctil una casilla sola es
@@ -3130,14 +3085,14 @@ code {
 .confirmar-frase {
   margin: 0 0 var(--e2);
   font-size: var(--t-texto);
-  font-weight: 620;
+  font-weight: var(--p-fuerte);
   color: var(--texto);
 }
 
 .confirmar-cliente {
   margin: 0 0 14px;
-  font-size: 14px;
-  font-weight: 600;
+  font-size: var(--t-lista);
+  font-weight: var(--p-fuerte);
   color: var(--error-texto);
 }
 
@@ -3148,7 +3103,7 @@ code {
   overflow-y: auto;
   background: var(--fondo);
   border-radius: var(--radio-chico);
-  font-size: 14px;
+  font-size: var(--t-lista);
   line-height: 1.7;
   color: var(--texto-secundario);
   overflow-wrap: anywhere;
@@ -3197,12 +3152,12 @@ code {
   border-left: 3px solid var(--borde);
   border-radius: 0 var(--radio-chico) var(--radio-chico) 0;
   background: var(--superficie);
-  font-size: 14px;
+  font-size: var(--t-lista);
 }
 
 .actividad-cuando {
   color: var(--texto-tenue);
-  font-size: 12.5px;
+  font-size: var(--t-meta);
   flex-shrink: 0;
 }
 
@@ -3234,11 +3189,7 @@ code {
 
 
 /* ==========================================================
-   Buscar, ordenar y filtrar clientes
-
-   En temporada la pregunta es siempre la misma: "¿a quién le falta algo
-   y vence pronto?". Estos controles existen para contestarla en un
-   gesto, en vez de bajar por la lista mirando los filos de color.
+   Cabecera de una sección con su cuenta
    ========================================================== */
 
 .clientes-cabeza {
@@ -3246,72 +3197,6 @@ code {
   align-items: baseline;
   gap: 10px;
 }
-
-.barra-clientes {
-  display: flex;
-  align-items: flex-end;
-  gap: 16px;
-  flex-wrap: wrap;
-  margin-bottom: 14px;
-}
-
-.campo-buscar { flex: 1 1 280px; }
-
-.filtros {
-  border: 0;
-  margin: 0;
-  padding: 0;
-  min-width: 0;
-}
-
-.filtros-botones {
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-
-.filtro {
-  min-height: var(--alto-control);
-  padding: 0 15px;
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--texto-secundario);
-  background: var(--superficie);
-  border: 1px solid var(--borde-fuerte);
-  border-radius: var(--radio-chico);
-  cursor: pointer;
-}
-
-.filtro:hover { border-color: var(--primary); color: var(--primary); }
-
-.filtro-activo,
-.filtro-activo:hover {
-  background: var(--primary);
-  border-color: var(--primary);
-  color: #fff;
-}
-
-/* El filtro de lo urgente lleva su propio color, el mismo del plazo que
-   se acerca, para que se reconozca sin leerlo. */
-.filtro-urgente { border-color: var(--alerta-texto); color: var(--alerta-texto); }
-.filtro-urgente:hover { border-color: var(--error); color: var(--error-texto); }
-.filtro-urgente.filtro-activo,
-.filtro-urgente.filtro-activo:hover {
-  background: var(--alerta-texto);
-  border-color: var(--alerta-texto);
-  color: #fff;
-}
-
-#resumen-filtro {
-  margin: 0 0 14px;
-  min-height: 20px;
-}
-
-@media (max-width: 640px) {
-  .barra-clientes { flex-direction: column; align-items: stretch; }
-  .filtros-botones .filtro { flex: 1 1 auto; }
-}
-
 
 /* Acciones sobre varios clientes de una vez. */
 .acciones-lote {
@@ -3366,23 +3251,26 @@ code {
 }
 
 .portada-marca {
+  font-family: var(--fuente-display);
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: var(--e4);
-  font-size: 2rem;
-  font-weight: 620;
-  letter-spacing: -0.035em;
+  gap: var(--e5);
+  font-size: var(--t-portada);
+  font-weight: var(--p-fuerte);
+  letter-spacing: var(--sep-titulo);
   color: var(--texto);
 }
 
 /* El logo entra después del texto, no al mismo tiempo: primero se
    escribe el nombre y el logo lo remata. */
+/* El logo crece con la marca en vez de quedarse en 52 px fijos: en una
+   portada a pantalla completa, 52 px se pierden. */
 .portada-logo {
-  width: 52px;
-  height: 52px;
+  width: clamp(64px, 9vw, 96px);
+  height: clamp(64px, 9vw, 96px);
   opacity: 0;
-  transform: translateY(3px);
+  transform: translateY(4px);
   transition: opacity 180ms ease, transform 180ms ease;
 }
 
@@ -3395,17 +3283,27 @@ code {
 .portada-texto {
   display: inline-flex;
   align-items: baseline;
-  /* El ancho se reserva desde el principio para que el logo no se
-     corra de lado mientras se escriben las letras. */
+  /* El ancho se reserva desde el principio para que nada brinque
+     mientras se escriben las letras... */
   min-width: 3.4em;
+  /* ...y el texto va centrado DENTRO de ese ancho reservado. Sin esto
+     las letras nacen pegadas a la izquierda de una caja de 3.4em y la
+     palabra se ve corrida hacia un lado en toda la animación. */
+  justify-content: center;
 }
 
-/* El cursor de la máquina de escribir: un bloque, no una rayita. */
+/* El cursor de la máquina de escribir: un bloque, no una rayita.
+
+   El margen derecho negativo cancela su propio ancho, así que el cursor
+   se dibuja pero no ocupa sitio al centrar. Sin esto, lo que queda
+   centrado es "Tax-i" MÁS el cursor, y la palabra —que es lo que se
+   mira— termina corrida media pulgada a la izquierda. */
 .portada-cursor {
   display: inline-block;
   width: 0.5em;
   height: 1em;
   margin-left: 0.06em;
+  margin-right: -0.56em;
   background: var(--primary);
 }
 
@@ -3415,7 +3313,7 @@ code {
 
 .portada-sub {
   margin: 0;
-  font-size: var(--t-celda);
+  font-size: var(--t-ui);
   color: var(--texto-tenue);
   opacity: 0;
   transition: opacity 200ms ease;
@@ -3495,12 +3393,13 @@ code {
 
 /* Dentro del riel el logo se pinta con los verdes de fondo oscuro. */
 .riel .marca-cara { fill: var(--riel-verde); }
-.riel .marca-pliegue { fill: #2E9E77; }
+.riel .marca-pliegue { fill: #1B7C5B; }
 
 .riel-nombre {
-  font-size: 1.35rem;
-  font-weight: 620;
-  letter-spacing: -0.035em;
+  font-family: var(--fuente-display);
+  font-size: var(--t-h1);
+  font-weight: var(--p-fuerte);
+  letter-spacing: var(--sep-titulo);
   white-space: nowrap;
 }
 
@@ -3520,14 +3419,14 @@ code {
   gap: var(--e2);
   margin: 0 var(--e3) var(--e3);
   padding: 0 var(--e3);
-  height: var(--alto-control);
+  height: 38px;
   background: var(--riel-alto);
   border: 1px solid var(--riel-borde);
   border-radius: var(--radio);
   color: var(--riel-texto);
   font: inherit;
-  font-size: var(--t-celda);
-  font-weight: 500;
+  font-size: var(--t-lista);
+  font-weight: var(--p-medio);
   text-decoration: none;
   cursor: pointer;
 }
@@ -3539,7 +3438,7 @@ code {
 
 .riel-agregar .mas {
   color: var(--riel-verde);
-  font-size: 1.05rem;
+  font-size: var(--t-h3);
   line-height: 1;
 }
 
@@ -3547,17 +3446,17 @@ code {
 
 .riel-buscar {
   margin: 0 var(--e3) var(--e3);
-  height: 30px;
+  height: 32px;
   padding: 0 var(--e2);
   background: transparent;
   border: 1px solid var(--riel-borde);
   border-radius: var(--radio-chico);
   color: var(--riel-texto);
   font: inherit;
-  font-size: var(--t-meta);
+  font-size: var(--t-celda);
 }
 
-.riel-buscar::placeholder { color: #8FA298; }
+.riel-buscar::placeholder { color: #8A918D; }
 
 .riel-buscar:focus-visible {
   outline: 2px solid var(--riel-verde);
@@ -3593,7 +3492,7 @@ code {
   font-family: var(--fuente-cifras);
   font-size: var(--t-rotulo);
   text-transform: uppercase;
-  letter-spacing: 0.09em;
+  letter-spacing: var(--sep-rotulo);
   color: var(--riel-tenue);
 }
 
@@ -3611,13 +3510,16 @@ code {
   align-items: center;
   gap: var(--e2);
   width: 100%;
-  padding: 7px var(--e4);
+  /* 14 px de letra y 9 px de aire arriba y abajo. Es la lista que el
+     contador mira todo el día: era lo más chiquito de la pantalla y no
+     tenía por qué serlo, el riel tiene sitio de sobra. */
+  padding: 9px var(--e4) 9px 14px;
   background: none;
   border: 0;
   border-left: 2px solid transparent;
   color: var(--riel-texto);
   font: inherit;
-  font-size: var(--t-celda);
+  font-size: var(--t-lista);
   text-align: left;
   text-decoration: none;
   cursor: pointer;
@@ -3631,7 +3533,7 @@ code {
   background: var(--riel-alto);
   border-left-color: var(--riel-verde);
   color: #FFFFFF;
-  font-weight: 600;
+  font-weight: var(--p-fuerte);
 }
 
 .riel-fila-nombre {
@@ -3649,18 +3551,18 @@ code {
   flex: 0 0 auto;
   font-family: var(--fuente-cifras);
   font-variant-numeric: tabular-nums;
-  font-size: var(--t-rotulo);
+  font-size: var(--t-celda);
   color: var(--riel-rojo);
 }
 
 .riel-fila-listo {
   flex: 0 0 auto;
   font-size: var(--t-rotulo);
-  color: #8CA095;
+  color: #8A918D;
 }
 
 .riel-grupo-aldia .riel-fila:not(.riel-fila-actual) {
-  color: #C3D2C9;
+  color: #C2C7C4;
 }
 
 .riel-vacio {
@@ -3671,25 +3573,44 @@ code {
 
 /* ----- El pie del riel: los ajustes ----- */
 
+/* ----- El pie del riel: Cuenta y ajustes -----
+   Es la tercera parada del programa, junto a "agregar" y "un cliente".
+   Estaba escrito como una nota al pie —11 px, gris, sin caja— y por eso
+   no parecía un sitio al que se pueda ir. Ahora pesa lo mismo que el
+   botón de arriba, que es lo que es. */
+
 .riel-pie {
   flex: 0 0 auto;
   border-top: 1px solid var(--riel-borde);
-  padding: var(--e2) var(--e3);
+  padding: var(--e3);
 }
 
 .riel-pie a {
-  display: block;
-  padding: var(--e1) var(--e2);
-  border-radius: var(--radio-chico);
-  color: var(--riel-tenue);
+  display: flex;
+  align-items: center;
+  gap: var(--e2);
+  height: 38px;
+  padding: 0 var(--e3);
+  border-radius: var(--radio);
+  color: var(--riel-texto);
   text-decoration: none;
-  font-size: var(--t-celda);
+  font-size: var(--t-lista);
+  font-weight: var(--p-medio);
 }
 
 .riel-pie a:hover {
   background: var(--riel-alto);
-  color: var(--riel-texto);
 }
+
+/* El engranaje, dibujado, no un emoji. */
+.riel-pie a svg {
+  width: 17px;
+  height: 17px;
+  flex: 0 0 auto;
+  fill: var(--riel-tenue);
+}
+
+.riel-pie a:hover svg { fill: var(--riel-verde); }
 
 .riel .marca-logo:focus-visible,
 .riel a:focus-visible,
@@ -3741,8 +3662,8 @@ code {
 .area-titulo {
   margin: 0;
   font-size: var(--t-h1);
-  font-weight: 620;
-  letter-spacing: -0.02em;
+  font-weight: var(--p-fuerte);
+  letter-spacing: var(--sep-titulo);
 }
 
 .area-cedula {
@@ -3779,7 +3700,7 @@ code {
   color: var(--texto-secundario);
   font: inherit;
   font-size: var(--t-ui);
-  font-weight: 500;
+  font-weight: var(--p-medio);
   cursor: pointer;
 }
 
@@ -3789,7 +3710,7 @@ code {
 
 .area-vista-actual {
   color: var(--texto);
-  font-weight: 620;
+  font-weight: var(--p-fuerte);
   border-bottom-color: var(--primary);
 }
 
@@ -3828,16 +3749,16 @@ code {
 .rentai-pastilla {
   display: flex;
   align-items: center;
-  gap: var(--e2);
-  max-width: min(340px, calc(100vw - 48px));
-  height: 38px;
-  padding: 0 var(--e3) 0 var(--e2);
+  gap: var(--e3);
+  max-width: min(380px, calc(100vw - 48px));
+  height: 46px;
+  padding: 0 var(--e4) 0 var(--e3);
   background: var(--riel-fondo);
   border: 1px solid var(--riel-borde);
   border-radius: var(--radio);
   box-shadow: var(--sombra-media);
   font-family: inherit;
-  font-size: var(--t-celda);
+  font-size: var(--t-lista);
   color: var(--riel-texto);
   cursor: pointer;
   text-align: left;
@@ -3855,19 +3776,19 @@ code {
 /* El logo dentro del botón: es RentAI la que habla, y es la misma cara
    de la marca. Cuando está apagada se pone gris. */
 .rentai-pastilla .marca-logo {
-  width: 22px;
-  height: 22px;
+  width: 26px;
+  height: 26px;
 }
 
 .rentai-pastilla .marca-cara { fill: var(--riel-verde); }
-.rentai-pastilla .marca-pliegue { fill: #2E9E77; }
+.rentai-pastilla .marca-pliegue { fill: #1B7C5B; }
 
-.rentai-apagada .rentai-pastilla .marca-cara { fill: #6E8078; }
-.rentai-apagada .rentai-pastilla .marca-pliegue { fill: #55655D; }
+.rentai-apagada .rentai-pastilla .marca-cara { fill: #767C79; }
+.rentai-apagada .rentai-pastilla .marca-pliegue { fill: #5A605D; }
 
 .rentai-pastilla .rentai-nombre {
   color: #FFFFFF;
-  font-weight: 600;
+  font-weight: var(--p-fuerte);
 }
 
 .rentai-pastilla .rentai-frase {
@@ -3956,7 +3877,7 @@ code {
 }
 
 .riel-nombre {
-  font-size: 1.5rem;
+  font-size: var(--t-h1);
 }
 
 /* La hoja del 210 se ensancha a propósito más allá de su columna: es una
@@ -4008,20 +3929,254 @@ code {
    arriba, un cliente de la lista, o los ajustes del pie. Sin esto, en la
    pantalla de agregar clientes nada del riel se ve seleccionado y no hay
    forma de saber dónde se está parado. */
+/* Verde lleno, y el texto en el propio fondo del riel: 6.8:1. Es el
+   único sitio del riel donde el verde aparece como relleno, y por eso se
+   lee como "usted está aquí" y no como decoración. */
 .riel-agregar-actual,
 .riel-agregar-actual:hover {
   background: var(--riel-verde);
   border-color: var(--riel-verde);
-  color: #12241C;
-  font-weight: 600;
+  color: var(--riel-fondo);
+  font-weight: var(--p-fuerte);
 }
 
 .riel-agregar-actual .mas {
-  color: #12241C;
+  color: var(--riel-fondo);
 }
 
-.riel-pie-actual {
-  background: var(--riel-alto);
-  color: var(--riel-texto) !important;
-  font-weight: 600;
+.riel-pie-actual,
+.riel-pie-actual:hover {
+  background: var(--riel-verde);
+  color: var(--riel-fondo);
+  font-weight: var(--p-fuerte);
+}
+
+.riel-pie-actual svg,
+.riel-pie-actual:hover svg {
+  fill: var(--riel-fondo);
+}
+
+/* ==========================================================
+   LA PANTALLA DE INICIO
+
+   Es la única pantalla del programa que no es densa, y a propósito: no
+   se trabaja aquí, se entra por aquí. Aun así sigue las mismas reglas
+   —nada flota, el margen izquierdo manda, la doble raya cierra— para
+   que no parezca el folleto de otro producto pegado al principio.
+
+   La doble raya debajo de la frase de arriba es la firma de la casa: en
+   contabilidad, dos rayas debajo de una cifra significan "este es el
+   total". Aquí cierra la definición de qué es el programa.
+   ========================================================== */
+
+.inicio {
+  padding-bottom: var(--e9);
+}
+
+.inicio-portada {
+  padding: var(--e9) 0 var(--e8);
+}
+
+/* El logo grande. Es el mismo SVG del riel, y marca.js lo hace parpadear
+   como al de la esquina: es la marca, no una ilustración. */
+.inicio-logo {
+  width: 72px;
+  height: 72px;
+  display: block;
+  margin-bottom: var(--e5);
+}
+
+.inicio-titulo {
+  font-family: var(--fuente-display);
+  font-size: var(--t-portada);
+  font-weight: var(--p-fuerte);
+  letter-spacing: var(--sep-titulo);
+  line-height: 1.05;
+  margin-bottom: var(--e4);
+}
+
+/* La "-i" en verde, igual que en el riel: es la misma marca escrita en
+   grande. */
+.inicio-titulo i {
+  font-style: normal;
+  color: var(--primary);
+}
+
+.inicio-frase {
+  margin: 0;
+  max-width: 54ch;
+  font-size: var(--t-h2);
+  line-height: 1.45;
+  color: var(--texto-secundario);
+}
+
+/* La doble raya: 1px, hueco, 1px. */
+.inicio-doble-raya {
+  max-width: 54ch;
+  margin: var(--e6) 0 var(--e6);
+  height: 3px;
+  border-top: 1px solid var(--regla-doble);
+  border-bottom: 1px solid var(--regla-doble);
+}
+
+.inicio-acciones {
+  display: flex;
+  align-items: center;
+  gap: var(--e4);
+  flex-wrap: wrap;
+}
+
+.inicio-cuenta {
+  margin: 0;
+  font-family: var(--fuente-cifras);
+  font-size: var(--t-celda);
+  font-variant-numeric: tabular-nums;
+  color: var(--texto-tenue);
+}
+
+/* ----- Cómo funciona -----
+   Numerados porque son un orden real: no se puede saber qué falta antes
+   de que lleguen los documentos. El número va en la monoespaciada y con
+   cero delante, como el número de renglón de un formulario. */
+
+.inicio-pasos {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border-top: 1px solid var(--raya);
+}
+
+.inicio-pasos li {
+  display: flex;
+  gap: var(--e5);
+  padding: var(--e5) 0;
+  border-bottom: 1px solid var(--raya);
+}
+
+.inicio-paso-numero {
+  flex: 0 0 auto;
+  width: 2.5em;
+  font-size: var(--t-celda);
+  color: var(--n5);
+  padding-top: 2px;
+}
+
+.inicio-pasos h3 {
+  font-size: var(--t-h3);
+  margin-bottom: var(--e2);
+}
+
+.inicio-pasos p {
+  margin: 0;
+  max-width: 62ch;
+  font-size: var(--t-ui);
+  line-height: 1.55;
+  color: var(--texto-secundario);
+}
+
+/* ----- Qué no hace -----
+   Sin rojo y sin signos de admiración. No es una advertencia: es la
+   definición del producto, y se lee como tal. La raya gruesa de la
+   izquierda es la misma que separa un total en el formulario. */
+
+.inicio-limite {
+  border-left: 3px solid var(--borde-fuerte);
+}
+
+.inicio-limite p,
+.inicio-nosotros {
+  margin: 0 0 var(--e3);
+  max-width: 68ch;
+  font-size: var(--t-ui);
+  line-height: 1.6;
+  color: var(--texto-secundario);
+}
+
+.inicio-limite p:last-child,
+.inicio-nosotros:last-child {
+  margin-bottom: 0;
+}
+
+.inicio-limite strong {
+  color: var(--texto);
+}
+
+/* En una pantalla angosta el aire de la portada sobra. */
+@media (max-width: 700px) {
+  .inicio-portada { padding: var(--e7) 0 var(--e6); }
+  .inicio-pasos li { flex-direction: column; gap: var(--e2); }
+  .inicio-paso-numero { padding-top: 0; }
+}
+
+
+/* ==========================================================
+   LA TABLA DE ADMINISTRAR CLIENTES
+
+   No es la lista para navegar —eso es el riel— sino las dos cosas que
+   el riel no puede hacer: corregir la fecha y eliminar. Por eso es una
+   tabla apretada y no unas tarjetas: se viene a buscar a una persona
+   concreta y a arreglarle un dato.
+   ========================================================== */
+
+.tabla-admin {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--t-lista);
+}
+
+.tabla-admin th {
+  text-align: left;
+  padding: var(--e2) var(--e3);
+  border-bottom: 1px solid var(--borde-fuerte);
+  font-family: var(--fuente-cifras);
+  font-size: var(--t-rotulo);
+  font-weight: var(--p-medio);
+  text-transform: uppercase;
+  letter-spacing: var(--sep-rotulo);
+  color: var(--texto-tenue);
+  white-space: nowrap;
+}
+
+.tabla-admin td {
+  padding: var(--e2) var(--e3);
+  border-bottom: 1px solid var(--raya);
+  vertical-align: middle;
+}
+
+.tabla-admin tr:hover td {
+  background: var(--n2);
+}
+
+.tabla-admin td.cifra {
+  font-variant-numeric: tabular-nums;
+  color: var(--texto-secundario);
+}
+
+.tabla-admin td.avance-neutro {
+  font-size: var(--t-celda);
+  color: var(--texto-tenue);
+}
+
+.tabla-admin a {
+  font-weight: var(--p-medio);
+}
+
+/* La fecha y su etiqueta van en la misma celda, una al lado de la otra:
+   el campo para corregirla y el plazo en palabras para saber si urge. */
+.tabla-admin td:nth-child(4) {
+  display: flex;
+  align-items: center;
+  gap: var(--e2);
+  white-space: nowrap;
+}
+
+.tabla-admin input[type="date"] {
+  height: 30px;
+  padding: 0 var(--e2);
+  font-size: var(--t-celda);
+}
+
+.tabla-admin .vacio {
+  padding: var(--e6) var(--e3);
+  text-align: left;
 }

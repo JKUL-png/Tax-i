@@ -30,16 +30,17 @@
   <div class="con-riel">
 
   <!-- ---------- El riel ----------
-       La lista de clientes, siempre a la vista, en las tres pantallas.
+       La lista de clientes, siempre a la vista, en todas las pantallas.
        Antes había una cabecera con menú arriba y la lista era una página
-       aparte: cambiar de cliente eran dos pantallas. Lo llena riel.js. -->
+       aparte: cambiar de cliente eran dos pantallas. Lo llena riel.js,
+       que también marca en cuál de las tres paradas se está. -->
   <aside class="riel" aria-label="Clientes">
     <a class="riel-marca" href="/">
       <svg class="marca-logo" viewBox="0 0 32 32" aria-hidden="true"><path class="marca-cara" d="M6 3h13.5L29 12.5V26a3 3 0 0 1-3 3H6a3 3 0 0 1-3-3V6a3 3 0 0 1 3-3Zm3.2 9.9v5.2h4.4v-5.2H9.2Zm8.4 2.7-1.9 1.9 3.8 3.8 6-6.7-1.9-1.7-4.1 4.6-1.9-1.9Z"/><path class="marca-pliegue" d="M19.5 3 29 12.5h-6.5a3 3 0 0 1-3-3V3Z"/></svg>
       <span class="riel-nombre">Tax<i>-i</i></span>
     </a>
 
-    <a class="riel-agregar riel-agregar-actual" href="/" aria-current="page">
+    <a class="riel-agregar" href="/clientes">
       <span class="mas" aria-hidden="true">+</span>
       Agregar o importar clientes
     </a>
@@ -51,182 +52,141 @@
     <div class="riel-lista" id="riel-lista"></div>
 
     <div class="riel-pie">
-      <a href="/cuenta">Cuenta y ajustes</a>
+      <a href="/cuenta">
+        <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 5.4a2.6 2.6 0 1 0 0 5.2 2.6 2.6 0 0 0 0-5.2Zm0 4a1.4 1.4 0 1 1 0-2.8 1.4 1.4 0 0 1 0 2.8Z"/><path d="m14.3 9.6-.9-.5a5.6 5.6 0 0 0 0-2.2l.9-.5a.7.7 0 0 0 .3-.9l-1-1.7a.7.7 0 0 0-.9-.3l-.9.5a5.6 5.6 0 0 0-1.9-1.1V1.9a.7.7 0 0 0-.7-.7H7a.7.7 0 0 0-.7.7v1a5.6 5.6 0 0 0-1.9 1.1l-.9-.5a.7.7 0 0 0-.9.3l-1 1.7a.7.7 0 0 0 .3.9l.9.5a5.6 5.6 0 0 0 0 2.2l-.9.5a.7.7 0 0 0-.3.9l1 1.7a.7.7 0 0 0 .9.3l.9-.5a5.6 5.6 0 0 0 1.9 1.1v1a.7.7 0 0 0 .7.7h2.2a.7.7 0 0 0 .7-.7v-1a5.6 5.6 0 0 0 1.9-1.1l.9.5a.7.7 0 0 0 .9-.3l1-1.7a.7.7 0 0 0-.3-.9ZM8 12.2A4.2 4.2 0 1 1 8 3.8a4.2 4.2 0 0 1 0 8.4Z"/></svg>
+        Cuenta y ajustes
+      </a>
     </div>
   </aside>
 
   <div class="area">
   <div class="contenedor">
 
-    <header class="area-cabecera area-cabecera-sola">
-      <div class="area-cabecera-arriba">
-        <h1 class="area-titulo">Agregar o importar clientes</h1>
-        <p class="area-cedula">Todos los clientes, con su plazo y su avance</p>
-      </div>
-    </header>
+  <main class="inicio">
 
-  <main>
+    <!-- ---------- Lo primero que se ve ----------
+         El logo grande, el nombre y una sola frase que dice qué es esto.
+         Debajo va la doble raya, que en contabilidad significa "este es
+         el total": aquí cierra la definición del programa. -->
+    <section class="inicio-portada">
+      <svg class="marca-logo inicio-logo" viewBox="0 0 32 32" aria-hidden="true"><path class="marca-cara" d="M6 3h13.5L29 12.5V26a3 3 0 0 1-3 3H6a3 3 0 0 1-3-3V6a3 3 0 0 1 3-3Zm3.2 9.9v5.2h4.4v-5.2H9.2Zm8.4 2.7-1.9 1.9 3.8 3.8 6-6.7-1.9-1.7-4.1 4.6-1.9-1.9Z"/><path class="marca-pliegue" d="M19.5 3 29 12.5h-6.5a3 3 0 0 1-3-3V3Z"/></svg>
 
-    <!-- ---------- Agregar cliente ---------- -->
-    <section class="seccion" id="agregar">
-      <h2>Agregar cliente</h2>
+      <h1 class="inicio-titulo">Tax<i>-i</i></h1>
 
-      <div class="tarjeta">
-        <div id="aviso" class="aviso oculto" role="alert"></div>
+      <p class="inicio-frase">
+        El archivador de la temporada de renta. Recibe los documentos como
+        lleguen —PDF, fotos, XML, un ZIP entero— los identifica, y dice qué
+        le falta a cada cliente.
+      </p>
 
-        <form id="formulario-cliente" novalidate>
-          <div class="fila">
-            <div class="campo">
-              <label for="nombre">Nombre del cliente</label>
-              <input type="text" id="nombre" name="nombre"
-                     autocomplete="off" placeholder="Ej: María Gómez">
-            </div>
+      <div class="inicio-doble-raya" aria-hidden="true"></div>
 
-            <div class="campo campo-corto">
-              <label for="digitos">Últimos 2 dígitos</label>
-              <input type="text" id="digitos" name="digitos"
-                     inputmode="numeric" maxlength="2"
-                     autocomplete="off" placeholder="07">
-            </div>
-
-            <div class="campo">
-              <label for="fecha">Fecha de vencimiento</label>
-              <input type="date" id="fecha" name="fecha">
-            </div>
-
-            <button type="submit" class="boton">Guardar cliente</button>
-          </div>
-
-          <p class="ayuda" style="margin-top:12px">
-            La fecha la escribe usted según el calendario oficial. El sistema
-            todavía no la calcula solo, y siempre se puede cambiar después.
-          </p>
-        </form>
+      <div class="inicio-acciones">
+        <a class="boton" href="/clientes">Agregar o importar clientes</a>
+        <p class="inicio-cuenta" id="inicio-cuenta"></p>
       </div>
     </section>
 
-    <!-- ---------- Importar desde Excel ---------- -->
+    <!-- ---------- Qué hace ----------
+         Van numerados porque son un orden real: no se puede saber qué
+         falta antes de que lleguen los documentos. No es decoración. -->
     <section class="seccion">
-      <h2>Importar clientes desde un archivo</h2>
+      <h2>Cómo funciona</h2>
 
-      <div class="tarjeta">
-        <p class="ayuda" style="margin-top:0">
-          Suba un Excel (.xlsx) o un CSV con la lista de clientes. El programa
-          lee las columnas, le muestra lo que entendió y usted corrige antes
-          de que se guarde nada.
-        </p>
-        <p class="ayuda">
-          Debe tener una fila de títulos con al menos <strong>Nombre</strong> y
-          <strong>Cédula</strong>. Si trae una columna de fecha de vencimiento,
-          también la lee. De la cédula solo se guardan los dos últimos dígitos:
-          el número completo nunca entra a la base de datos.
-        </p>
-
-        <button type="button" class="boton" id="boton-importar">
-          Elegir archivo
-        </button>
-        <input type="file" id="campo-importar"
-               accept=".xlsx,.csv" class="oculto">
-
-        <div id="aviso-importar" class="aviso oculto" role="alert"></div>
-      </div>
-
-      <!-- Lo que el programa entendió. Nada de esto está guardado todavía. -->
-      <div id="revision" class="revision oculto">
-        <div class="tarjeta">
-          <h3>Revise antes de crear</h3>
-          <p id="revision-resumen" class="ayuda"></p>
-          <div id="revision-columnas" class="ayuda"></div>
-
-          <div class="tabla-envoltura">
-            <table class="tabla-revision">
-              <thead>
-                <tr>
-                  <th class="columna-marca">Crear</th>
-                  <th>Nombre</th>
-                  <th class="columna-corta">Dígitos</th>
-                  <th class="columna-fecha">Vencimiento</th>
-                  <th>Revisar</th>
-                </tr>
-              </thead>
-              <tbody id="revision-filas"></tbody>
-            </table>
+      <ol class="inicio-pasos">
+        <li>
+          <span class="inicio-paso-numero cifra">01</span>
+          <div>
+            <h3>Llegan los documentos</h3>
+            <p>
+              Se sueltan en la pantalla del cliente como vengan: certificados
+              en PDF, fotos del celular, XML de la DIAN, o el ZIP completo que
+              mandó el cliente por correo. No hay que renombrar nada antes.
+            </p>
           </div>
-
-          <div class="revision-botones">
-            <button type="button" class="boton" id="boton-confirmar">
-              Crear los clientes marcados
-            </button>
-            <button type="button" class="boton-secundario" id="boton-cancelar">
-              Cancelar
-            </button>
+        </li>
+        <li>
+          <span class="inicio-paso-numero cifra">02</span>
+          <div>
+            <h3>El programa los identifica</h3>
+            <p>
+              Reconoce de qué es cada uno y saca los datos que trae. Todo lo
+              que leyó una máquina queda marcado como
+              <span class="marca-auto">auto</span> con el enlace al documento
+              original al lado, para que usted lo verifique.
+            </p>
           </div>
-        </div>
+        </li>
+        <li>
+          <span class="inicio-paso-numero cifra">03</span>
+          <div>
+            <h3>Se ve qué falta</h3>
+            <p>
+              Cada cliente tiene su lista, y la lista es suya: usted agrega lo
+              que ese cliente necesita y quita lo que no le aplica. En el riel
+              de la izquierda los clientes salen ordenados por lo que falta y
+              por la fecha, no por orden alfabético.
+            </p>
+          </div>
+        </li>
+        <li>
+          <span class="inicio-paso-numero cifra">04</span>
+          <div>
+            <h3>Sale el resumen</h3>
+            <p>
+              Un resumen imprimible de lo que llegó y lo que falta, y el
+              mensaje ya redactado para pedirle al cliente lo que hace falta.
+              Los dos se editan antes de usarlos.
+            </p>
+          </div>
+        </li>
+      </ol>
+    </section>
+
+    <!-- ---------- La línea legal ----------
+         Esta sección no es letra menuda: es la definición del producto.
+         Un archivador que dijera qué es deducible sería otro programa y
+         otra responsabilidad. Va en la página de inicio a propósito. -->
+    <section class="seccion">
+      <h2>Qué no hace, a propósito</h2>
+
+      <div class="tarjeta inicio-limite">
+        <p>
+          Tax-i <strong>no hace impuestos</strong>. No calcula el impuesto a
+          cargo ni el saldo a favor, no dice qué es deducible, no sugiere cómo
+          declarar y no afirma que un cliente esté o no obligado a declarar.
+        </p>
+        <p>
+          Organiza, muestra lo que dice cada documento marcándolo como lectura
+          automática, y exporta. Las decisiones tributarias las toma el
+          contador, que es quien responde por ellas. Las fechas de vencimiento
+          tampoco se calculan: salen del calendario oficial y se pueden
+          corregir a mano.
+        </p>
       </div>
     </section>
 
-    <!-- ---------- Lista de clientes ----------
-         Con buscador, orden y filtros. En temporada la pregunta es
-         siempre la misma —"¿a quién le falta algo y vence pronto?"— y
-         hasta ahora la única forma de contestarla era bajar mirando. -->
+    <!-- ---------- Quiénes somos ---------- -->
     <section class="seccion">
-      <div class="clientes-cabeza">
-        <h2>Clientes <span id="conteo-clientes" class="conteo"></span></h2>
-      </div>
+      <h2>Quiénes somos</h2>
 
-      <div class="tarjeta barra-clientes">
-        <div class="campo campo-buscar">
-          <label for="buscar-cliente">Buscar</label>
-          <input type="search" id="buscar-cliente" autocomplete="off"
-                 placeholder="Nombre o dos dígitos de la cédula">
-        </div>
-
-        <div class="campo campo-corto">
-          <label for="orden-clientes">Ordenar por</label>
-          <select id="orden-clientes">
-            <option value="vencimiento">Vencimiento</option>
-            <option value="nombre">Nombre</option>
-            <option value="faltantes">Documentos faltantes</option>
-          </select>
-        </div>
-
-        <fieldset class="filtros">
-          <legend class="solo-lectores">Filtrar por estado</legend>
-          <div class="filtros-botones" id="filtro-estado">
-            <button type="button" class="filtro filtro-activo" data-estado="todos">
-              Todos
-            </button>
-            <button type="button" class="filtro" data-estado="incompletos">
-              Incompletos
-            </button>
-            <button type="button" class="filtro" data-estado="completos">
-              Completos
-            </button>
-            <button type="button" class="filtro filtro-urgente" data-estado="pronto">
-              Vencen pronto
-            </button>
-          </div>
-        </fieldset>
-      </div>
-
-      <!-- Acciones sobre todos los clientes de una vez. Después de
-           importar un Excel de 150, dejarlos listos uno por uno son
-           150 visitas. -->
-      <div class="acciones-lote">
-        <button type="button" class="boton-secundario" id="boton-lista-base">
-          Poner la lista base a los que no tengan checklist
-        </button>
-        <button type="button" class="boton-secundario oculto"
-                id="boton-vencimientos">
-          Poner los vencimientos del calendario
-        </button>
-        <div id="aviso-lote" class="aviso oculto" role="alert"></div>
-      </div>
-
-      <p class="ayuda" id="resumen-filtro"></p>
-
-      <div id="lista-clientes" class="lista">
-        <div class="vacio">Cargando…</div>
+      <div class="tarjeta">
+        <p class="inicio-nosotros">
+          Tax-i lo hicimos para una oficina de contabilidad de verdad, mirando
+          cómo se trabaja en temporada: decenas de clientes a la vez, documentos
+          llegando por WhatsApp y por correo, y la misma pregunta todo el día
+          —<em>¿a quién le falta algo y vence pronto?</em>— que hasta ahora se
+          contestaba abriendo carpetas una por una.
+        </p>
+        <p class="inicio-nosotros">
+          Por eso el programa corre <strong>en este computador y en ningún
+          otro</strong>. Los documentos de sus clientes son información
+          confidencial de terceros: no se suben a ninguna nube, no hay cuenta
+          que crear y no hay servidor de nadie más en el medio. De fábrica
+          viene sin IA, y así funciona completo. Si usted enciende un servicio
+          de IA, la pantalla de Cuenta le dice exactamente qué sale del equipo
+          antes de que decida.
+        </p>
       </div>
     </section>
 
@@ -242,6 +202,6 @@
 
   <script src="/static/comun.js"></script>
   <script src="/static/riel.js"></script>
-  <script src="/static/app.js"></script>
+  <script src="/static/inicio-pagina.js"></script>
 </body>
 </html>

@@ -137,18 +137,48 @@ def main():
                 errores.append(m.text) if m.type == "error" else None
             ))
 
-            # ---------- La lista de clientes ----------
-            titulo("A. La lista de clientes")
+            # ---------- La pantalla de inicio ----------
+            titulo("A1. La pantalla de inicio")
             pagina.goto(DIRECCION + "/", wait_until="networkidle")
             revisar("abre sin errores de JavaScript", not errores, errores[:3])
-            revisar("muestra el cliente de prueba",
-                    pagina.locator("text=" + CLIENTE_DE_PRUEBA).count() > 0)
-            revisar("tiene el buscador",
-                    pagina.locator("#buscar-cliente").count() == 1)
-            revisar("tiene el selector de orden",
-                    pagina.locator("#orden-clientes").count() == 1)
-            revisar("tiene los filtros de estado",
-                    pagina.locator("#filtro-estado").count() == 1)
+            revisar("dice qué es el programa",
+                    "archivador" in pagina.locator(".inicio-frase")
+                                          .inner_text().lower())
+            # La línea legal no es letra menuda: es la definición del
+            # producto, y tiene que estar a la vista en la portada.
+            revisar("dice que NO hace impuestos",
+                    "no hace impuestos" in pagina.locator(".inicio-limite")
+                                                 .inner_text().lower())
+            revisar("dice cuántos clientes hay cargados",
+                    "cliente" in pagina.locator("#inicio-cuenta").inner_text())
+            # El riel es el programa entero: tiene que estar aquí también.
+            revisar("el riel muestra el cliente de prueba",
+                    pagina.locator("#riel-lista", ).get_by_text(CLIENTE_DE_PRUEBA)
+                          .count() > 0)
+            revisar("el botón de agregar lleva a su propia pantalla",
+                    pagina.locator(".riel-agregar")
+                          .get_attribute("href") == "/clientes")
+
+            errores.clear()
+
+            # ---------- Agregar e importar ----------
+            titulo("A2. Agregar, importar y administrar")
+            pagina.goto(DIRECCION + "/clientes", wait_until="networkidle")
+            revisar("abre sin errores de JavaScript", not errores, errores[:3])
+            revisar("tiene el formulario de agregar",
+                    pagina.locator("#formulario-cliente").count() == 1)
+            revisar("tiene el botón de importar",
+                    pagina.locator("#boton-importar").count() == 1)
+            revisar("la tabla de administrar trae el cliente de prueba",
+                    pagina.locator("#tabla-clientes")
+                          .get_by_text(CLIENTE_DE_PRUEBA).count() > 0)
+            # Eliminar un cliente solo se puede desde aquí: si esta
+            # columna se cae, la función se vuelve inalcanzable.
+            revisar("cada fila tiene su botón de eliminar",
+                    pagina.locator("#tabla-clientes .boton-texto-peligro")
+                          .count() > 0)
+            revisar("el riel marca que se está en esta pantalla",
+                    pagina.locator(".riel-agregar-actual").count() == 1)
 
             errores.clear()
 
@@ -180,6 +210,35 @@ def main():
                     "creó el cliente" in
                     pagina.locator("#lista-actividad").text_content())
 
+            errores.clear()
+
+            # ---------- Los botones del perfil ----------
+            # Estos dos estuvieron rotos y en silencio: al partir la
+            # pantalla en pestañas, la sección de Exportar quedó dentro
+            # de la pestaña de Historial, y los botones abrían un
+            # <details> que estaba adentro de un panel escondido. En
+            # pantalla no pasaba nada y el servidor no tenía cómo
+            # enterarse. Por eso se comprueba que lo que abren se VEA.
+            titulo("B2. Los botones del perfil llevan a alguna parte")
+
+            pagina.locator("#perfil-mensaje").click()
+            pagina.wait_for_timeout(400)
+            revisar("«Generar el mensaje» abre el mensaje y se ve",
+                    pagina.locator("#mensaje").is_visible())
+
+            # Se vuelve a Documentos para que el segundo botón tenga que
+            # cambiar de pestaña otra vez, como le pasa al contador.
+            pagina.locator("[data-vista=documentos]").click()
+            pagina.wait_for_timeout(200)
+            pagina.locator("#perfil-exportar").click()
+            pagina.wait_for_timeout(400)
+            revisar("«Exportar el resumen» abre el resumen y se ve",
+                    pagina.locator("#tarjeta-resumen").is_visible())
+
+            revisar("sin errores de JavaScript", not errores, errores[:3])
+
+            pagina.locator("[data-vista=documentos]").click()
+            pagina.wait_for_timeout(200)
             errores.clear()
 
             # ---------- La zona de revisión ----------

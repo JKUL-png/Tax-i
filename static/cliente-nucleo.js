@@ -367,20 +367,46 @@ function recordarPlegables() {
   });
 }
 
-/* Abre una sección y baja hasta ella. Lo usan los botones del perfil. */
-function irASeccion(idPlegable) {
+/* Lleva a una sección desde los botones del perfil.
+
+   Hay que hacer tres cosas y en este orden:
+
+     1. Cambiar a la pestaña donde vive la sección.
+     2. Abrir la sección, que puede estar plegada.
+     3. Bajar hasta ella.
+
+   El paso 1 es el que faltaba. Cuando la pantalla del cliente se partió
+   en tres pestañas, "Generar el mensaje para el cliente" y "Exportar el
+   resumen" se quedaron apuntando a una sección que quedó dentro de la
+   pestaña de Historial. El botón sí abría el <details>... adentro de un
+   panel con el atributo `hidden`, así que en pantalla no pasaba nada de
+   nada. Los dos botones llevaban rotos desde entonces.
+
+   `destino` es opcional: si se pasa, se baja hasta ese elemento en vez
+   de hasta el principio de la sección. Es lo que hace que "Exportar el
+   resumen" caiga en el resumen y no en el mensaje, estando los dos en
+   la misma sección. */
+function irASeccion(vista, idPlegable, idDestino) {
+  /* La pestaña la cambia riel.js, que es quien las maneja. Si por lo que
+     sea no está cargado, se sigue: abrir y bajar todavía sirve. */
+  if (window.RielTaxi && window.RielTaxi.mostrarVista) {
+    window.RielTaxi.mostrarVista(vista);
+  }
+
   const plegable = document.getElementById(idPlegable);
   if (!plegable) return;
   plegable.open = true;
-  plegable.scrollIntoView({ behavior: "smooth", block: "start" });
+
+  const destino = (idDestino && document.getElementById(idDestino)) || plegable;
+  destino.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
 document.getElementById("perfil-subir").addEventListener("click", function () {
-  irASeccion("plegable-subir");
+  irASeccion("documentos", "plegable-subir");
 });
 document.getElementById("perfil-mensaje").addEventListener("click", function () {
-  irASeccion("plegable-exportar");
+  irASeccion("historial", "plegable-exportar", "tarjeta-mensaje");
 });
 document.getElementById("perfil-exportar").addEventListener("click", function () {
-  irASeccion("plegable-exportar");
+  irASeccion("historial", "plegable-exportar", "tarjeta-resumen");
 });
