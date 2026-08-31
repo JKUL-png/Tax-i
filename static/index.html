@@ -5,13 +5,32 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Tax-i · Tu asistente contable favorito</title>
   <link rel="stylesheet" href="/static/estilos.css">
+  <link rel="icon" href="/static/marca/favicon.svg" type="image/svg+xml">
+  <!-- marca.js primero: inicio.js le pide los gestos del logo.
+       Sin defer a propósito: inicio.js tiene que marcar el <html> antes
+       del primer pintado o se alcanza a ver la aplicación antes de la
+       portada. -->
+  <script src="/static/marca/marca.js"></script>
+  <script src="/static/marca/inicio.js"></script>
 </head>
 <body>
+
+  <!-- La portada de inicio. Sale una sola vez por sesión, dura 1,5 s y se
+       corta con un clic o cualquier tecla. Queda oculta salvo que
+       inicio.js marque el <html>: si el JavaScript no corre, no aparece. -->
+  <div class="portada-inicio" aria-hidden="true">
+    <div class="portada-marca">
+      <svg class="portada-logo" viewBox="0 0 32 32" aria-hidden="true"><path class="marca-cara" d="M6 3h13.5L29 12.5V26a3 3 0 0 1-3 3H6a3 3 0 0 1-3-3V6a3 3 0 0 1 3-3Zm3.2 9.9v5.2h4.4v-5.2H9.2Zm8.4 2.7-1.9 1.9 3.8 3.8 6-6.7-1.9-1.7-4.1 4.6-1.9-1.9Z"/><path class="marca-pliegue" d="M19.5 3 29 12.5h-6.5a3 3 0 0 1-3-3V3Z"/></svg>
+      <span class="portada-texto"><span class="portada-escrito"></span><span class="portada-cursor"></span></span>
+    </div>
+    <p class="portada-sub">Archivador de documentos para renta</p>
+  </div>
+
 
   <header class="cabecera">
     <div class="contenedor">
       <h1 class="marca">
-        <a class="marca-enlace" href="/">Tax<span class="marca-i">-i</span></a>
+        <a class="marca-enlace" href="/"><svg class="marca-logo" viewBox="0 0 32 32" aria-hidden="true"><path class="marca-cara" d="M6 3h13.5L29 12.5V26a3 3 0 0 1-3 3H6a3 3 0 0 1-3-3V6a3 3 0 0 1 3-3Zm3.2 9.9v5.2h4.4v-5.2H9.2Zm8.4 2.7-1.9 1.9 3.8 3.8 6-6.7-1.9-1.7-4.1 4.6-1.9-1.9Z"/><path class="marca-pliegue" d="M19.5 3 29 12.5h-6.5a3 3 0 0 1-3-3V3Z"/></svg><span>Tax<span class="marca-i">-i</span></span></a>
       </h1>
       <p class="subtitulo">Tu asistente contable favorito</p>
       <span class="etiqueta-prototipo">prototipo</span>
@@ -25,7 +44,7 @@
   <main class="contenedor">
 
     <!-- ---------- Agregar cliente ---------- -->
-    <section class="seccion">
+    <section class="seccion" id="agregar">
       <h2>Agregar cliente</h2>
 
       <div class="tarjeta">
@@ -51,7 +70,7 @@
               <input type="date" id="fecha" name="fecha">
             </div>
 
-            <button type="submit" class="boton">Agregar</button>
+            <button type="submit" class="boton">Guardar cliente</button>
           </div>
 
           <p class="ayuda" style="margin-top:12px">

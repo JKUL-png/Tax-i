@@ -3,87 +3,171 @@
 
    De dónde sale lo que se ve
    --------------------------
-   Del papel de contabilidad. No es un adorno: es el objeto con el que
-   el contador lleva cuarenta años trabajando, y de ahí salen las tres
-   decisiones que dan el aspecto de todo el programa.
+   Del formulario tributario. No del papel como textura, sino del
+   formulario como estructura: renglones numerados, columnas, cifras
+   alineadas a la derecha, casillas, y rayas finas que separan de verdad.
+   De ahí salen las cuatro decisiones que dan el aspecto de todo el
+   programa.
 
-   1. La hoja. Fondo verde muy pálido —el del papel rayado de columnas—
-      en vez del blanco de pantalla. Las tarjetas sí son blancas, así que
-      cada bloque de trabajo se ve como una hoja puesta sobre el escritorio.
+   1. Nada flota. No hay tarjetas con sombra sobre un fondo de color:
+      hay bloques delimitados por una raya de 1px. Una sombra es una
+      forma difusa de separar; una raya es una forma honesta. La única
+      sombra que queda es la del visor de documentos, que sí está encima
+      de la página.
 
    2. La doble raya. En contabilidad, dos rayas debajo de una cifra
-      significan "este es el total". Aquí se usa UNA sola vez, debajo de
-      la cabecera, y no vuelve a aparecer en ninguna otra parte. Es la
-      firma de la casa.
+      significan "este es el total". Se usa debajo de la cabecera y
+      encima de un total, y en ningún otro lado. Es la firma de la casa.
 
-   3. Las cifras en ancho fijo. Todo lo que sea número —dígitos de la
-      cédula, fechas, plazos, valores, casillas como G115— va en letra de
-      ancho fijo y con tabular-nums, para que las columnas queden
-      cuadradas una debajo de otra. En una hoja de números, que el 1 mida
-      lo mismo que el 8 no es un detalle: es poder revisar de un vistazo.
+   3. Las cifras en ancho fijo. Todo lo que sea dato —dígitos de la
+      cédula, fechas, plazos, valores, casillas como G115, números de
+      renglón, encabezados de columna— va en la monoespaciada con
+      tabular-nums, para que las columnas queden cuadradas una debajo de
+      otra. En una hoja de números, que el 1 mida lo mismo que el 8 no es
+      un detalle: es poder revisar de un vistazo.
+
+   4. La tinta se gasta en lo que falta. Lo que ya llegó se apaga; lo que
+      falta se lleva una raya roja de 3px, el título en negrita y la
+      palabra a la derecha. Antes era al revés: lo recibido se pintaba de
+      verde y hacía ruido lo que ya estaba resuelto.
+
+   Un dato leído por la máquina no tiene color propio
+   --------------------------------------------------
+   Se marca con una raya punteada debajo —el espacio en blanco de un
+   formulario de papel—, el rótulo "auto" y el enlace al documento
+   original. Antes se marcaba en azul. Darle color de marca a lo que leyó
+   una máquina es afirmarlo, y este programa no afirma nada: muestra lo
+   que leyó para que el contador lo verifique. Es la línea legal del
+   producto dibujada en CSS.
 
    Principios que no cambian
    -------------------------
    - El contenido manda, la interfaz no estorba.
-   - Legible a cualquier edad: texto grande, mucho contraste, mucho aire.
+   - Densidad antes que aire: el contador maneja decenas de clientes en
+     una pantalla de 1366px y en temporada no le sobra ni una fila.
+   - Legible a cualquier edad: la densidad sale del relleno, nunca de
+     achicar la letra.
    - Nada escondido: sin menús que aparecen al pasar el mouse,
-     sin botones que son solo un icono.
+     sin botones que son solo un icono, sin emojis como iconos.
    - Sin tipografías de internet. Se usan las letras que ya trae el
      computador: así la pantalla se ve igual sin conexión y ningún
      servicio de afuera se entera de que el programa se está usando.
+   - Movimiento solo funcional: transiciones cortas, nada decorativo.
    ========================================================== */
 
 :root {
-  /* --- Tinta y papel --- */
-  --fondo: #ECF1EA;              /* la hoja: verde muy pálido */
-  --superficie: #FFFFFF;         /* tarjetas y campos */
-  --raya: #E1E9E1;               /* el rayado de la hoja */
-  --regla-doble: #A9C7B5;        /* la doble raya de la cabecera */
+  /* --- La rampa neutra ---
+     Nueve pasos, del papel a la tinta. Todos llevan una gota del verde de
+     la marca, así que ningún gris de la pantalla es un gris de catálogo.
+     Antes cada gris se había escogido por separado y no formaban serie. */
+  --n0: #FFFFFF;   /* superficie: tarjetas, campos, filas */
+  --n1: #F6F8F6;   /* fondo de la página */
+  --n2: #EEF2EF;   /* pasar el mouse, fila alterna */
+  --n3: #E2E8E3;   /* la raya fina que separa */
+  --n4: #C9D2CB;   /* raya fuerte, borde de campo, doble raya */
+  --n5: #94A29A;   /* número de renglón, marcas apagadas. NO para texto */
+  --n6: #63726A;   /* texto tenue — 4.9:1, pasa AA */
+  --n7: #48564F;   /* texto secundario — 7.5:1 */
+  --n8: #131A16;   /* tinta — 16:1 */
 
-  --texto: #14231D;              /* tinta negra, con fondo verde */
-  --texto-secundario: #46574E;   /* gris legible (8:1 de contraste) */
-  --texto-tenue: #6C7D73;        /* solo para etiquetas pequeñas */
-  --borde: #DEE6DE;
-  --borde-fuerte: #C4D0C6;
+  /* --- Nombres de siempre, apuntando a la rampa ---
+     Se conservan para que las 3000 líneas de abajo sigan funcionando. */
+  --fondo: var(--n1);
+  --superficie: var(--n0);
+  --raya: var(--n3);
+  --regla-doble: var(--n4);
 
-  --primary: #10805F;            /* verde oscuro: pasa contraste con texto blanco */
-  --primary-hover: #0C6549;
-  --primary-acento: #16A37A;     /* verde vivo: solo adornos, nunca texto */
-  --primary-tenue: #E9F5EF;
+  --texto: var(--n8);
+  --texto-secundario: var(--n7);
+  --texto-tenue: var(--n6);
+  --borde: var(--n3);
+  --borde-fuerte: var(--n4);
 
-  --info: #3B82F6;               /* azul: marca lo que viene de la IA */
-  --info-fondo: #EFF6FF;
-  --info-texto: #1D4ED8;
+  /* --- El verde de la marca ---
+     #10805F se queda: es la identidad. Pero el blanco encima da 4.3:1 y
+     no llega a AA, así que los botones llenos usan el más oscuro, que ya
+     existía aquí como --primary-hover. No es un color nuevo: es un ascenso. */
+  --primary: #10805F;            /* marca, foco, rayas de acento */
+  --primary-fuerte: #0C6A4B;     /* botón lleno y enlace — 6.6:1 */
+  --primary-hover: #0A5A40;
+  --primary-tenue: #E9F2ED;      /* la única superficie teñida que queda */
+  --primary-acento: var(--primary);  /* alias: antes era un segundo verde */
 
-  --exito-fondo: #E9F5EF;
-  --exito-texto: #14663F;
+  /* Se retiró el azul #3B82F6 que marcaba la lectura de la IA. Un dato
+     leído por una máquina no lleva color propio: se marca con la raya
+     punteada y el rótulo "auto". Darle color de marca es afirmarlo, y
+     aquí no afirmamos nada. Los nombres quedan apuntando a neutros por si
+     alguna regla vieja todavía los usa. */
+  --info: var(--n5);
+  --info-fondo: var(--n0);
+  --info-texto: var(--n6);
 
-  --alerta-fondo: #FBF3E3;
+  --exito-fondo: var(--n0);
+  --exito-texto: var(--primary-fuerte);
+
+  --alerta-fondo: var(--n0);
   --alerta-texto: #8A5A12;       /* ocre: el plazo que se está acercando */
 
-  /* Rojo de tinta, no rojo de pantalla. Es el color con el que se
-     anotaba a mano lo vencido, y aquí se reserva para eso mismo. */
+  /* Rojo de tinta, no rojo de pantalla. Es el color con el que se anotaba
+     a mano lo vencido, y aquí se reserva para lo que falta. */
   --error: #A6392D;
-  --error-fondo: #FBF0EE;
+  --error-fondo: var(--n0);
   --error-texto: #8E2F24;
 
-  /* --- Letras --- */
-  /* Las del sistema. En Mac sale San Francisco, en Windows Segoe UI:
-     las dos son buenas y no hay que descargar nada. */
+  /* --- Letras ---
+     Las del sistema. En Mac sale San Francisco, en Windows Segoe UI: las
+     dos son buenas, no hay que descargar nada, y ningún servicio de afuera
+     se entera de que el programa se abrió.
+
+     El carácter no lo pone una tipografía de display: lo pone cuánto
+     trabajo hace la monoespaciada. Aquí no es solo para cifras — también
+     lleva códigos de casilla, fechas, números de renglón y estados. */
   --fuente: -apple-system, BlinkMacSystemFont, "Segoe UI Variable Text",
             "Segoe UI", system-ui, Roboto, sans-serif;
 
-  /* La de las cifras. Ancho fijo, para que las columnas cuadren. */
   --fuente-cifras: ui-monospace, "SF Mono", SFMono-Regular, "Cascadia Mono",
                    "Segoe UI Mono", Menlo, Consolas, monospace;
 
-  /* --- Medidas --- */
-  --radio: 10px;
-  --radio-chico: 6px;
-  --sombra: 0 1px 2px rgba(20, 35, 29, 0.05);
-  --sombra-media: 0 4px 14px rgba(20, 35, 29, 0.08);
-  --ancho-maximo: 940px;
-  --alto-control: 46px;          /* alto mínimo de botones y campos */
+  /* --- Escala de tamaños ---
+     La base baja de 17 a 16 px y no más. La densidad se saca del relleno,
+     no del tamaño de la letra: quien tiene 55 años y lleva seis horas
+     mirando esto necesita el texto igual de grande y las filas más juntas. */
+  --t-rotulo: 0.6875rem;   /* 11px — encabezado de columna, versalitas */
+  --t-meta:   0.75rem;     /* 12px — ayuda, detalle de archivo */
+  --t-celda:  0.8125rem;   /* 13px — celda de tabla densa */
+  --t-ui:     0.9375rem;   /* 15px — el tamaño de trabajo */
+  --t-texto:  1rem;        /* 16px — texto corrido */
+  --t-h2:     1.1875rem;   /* 19px */
+  --t-h1:     1.5rem;      /* 24px — título de página y marca */
+
+  /* --- Espaciado, rejilla de 4 --- */
+  --e1: 4px;  --e2: 8px;  --e3: 12px; --e4: 16px; --e5: 20px;
+  --e6: 24px; --e7: 32px; --e8: 40px; --e9: 56px;
+
+  /* --- Medidas ---
+     Radio 10/6 -> 4/2 y las pastillas de 999 -> 2. Fuera las sombras: los
+     bloques se separan con una raya de 1px que separa de verdad, no con un
+     desenfoque. La única que queda es la del visor, que sí flota encima. */
+  /* --- El riel oscuro de la pantalla del cliente ---
+     No son grises ni negros: son el mismo verde de la marca llevado hasta
+     abajo de la rampa. Un riel gris al lado de un verde #10805F se ve como
+     dos programas pegados; así se ve como uno solo apagando la luz. */
+  --riel-fondo:  #0E1714;   /* el fondo del riel */
+  --riel-alto:   #17231E;   /* el cliente que se está viendo */
+  --riel-borde:  #223029;
+  --riel-texto:  #D7E2DC;   /* 14:1 sobre el fondo del riel */
+  --riel-tenue:  #8C9E95;   /* 6.3:1 — rótulos y cifras de apoyo */
+  --riel-verde:  #3FB88C;   /* el verde de la marca, subido para que se
+                               lea sobre oscuro: el #10805F no alcanza */
+  --riel-rojo:   #E08579;   /* lo mismo con el rojo de tinta */
+  --riel-ancho:  244px;
+
+  --radio: 4px;
+  --radio-chico: 2px;
+  --sombra: none;
+  --sombra-media: 0 12px 28px -12px rgba(19, 26, 22, 0.38);
+  --ancho-maximo: 1180px;        /* cabe más en 1366px sin desplazarse */
+  --alto-control: 34px;          /* alto de botones, campos y filas */
 }
 
 /* ==========================================================
@@ -99,8 +183,8 @@ body {
   background: var(--fondo);
   color: var(--texto);
   font-family: var(--fuente);
-  font-size: 17px;               /* base grande a propósito */
-  line-height: 1.6;
+  font-size: var(--t-texto);     /* 16px: la letra no se achica */
+  line-height: 1.5;
   letter-spacing: -0.004em;
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
@@ -161,9 +245,14 @@ h3 { font-size: 1.02rem; }
 .cabecera {
   background: var(--superficie);
   /* La doble raya de contabilidad. Va aquí y en ningún otro lado. */
-  border-bottom: 4px double var(--regla-doble);
-  padding: 14px 0;
-  margin-bottom: 34px;
+  /* Sin raya de abajo. La doble raya de contabilidad quedaba como un
+     borde suelto de color indefinido cruzando la pantalla. La cabecera
+     se separa por lo que es —superficie blanca sobre el fondo de la
+     página—, y solo cuando se baja aparece una raya de 1px, que es
+     cuando de verdad hace falta para que el contenido no se le pegue. */
+  padding: var(--e4) 0;
+  margin-bottom: var(--e6);
+  transition: box-shadow 120ms ease;
   position: sticky;
   top: 0;
   /* Por debajo del visor de documentos (50) y de Rentai (60), para que
@@ -171,19 +260,52 @@ h3 { font-size: 1.02rem; }
   z-index: 20;
 }
 
+/* Puesta por marca.js cuando la página está desplazada. */
+.cabecera-desplazada {
+  box-shadow: 0 1px 0 var(--raya);
+}
+
 .cabecera .contenedor {
   display: flex;
   align-items: center;
-  gap: 14px;
+  gap: var(--e3);
   flex-wrap: wrap;
+}
+
+/* El logo al lado del nombre. 26px: el mismo alto que la mayúscula de
+   "Tax", para que los dos se apoyen en la misma línea. */
+.marca-logo {
+  display: block;
+  width: 30px;
+  height: 30px;
+  flex: 0 0 auto;
+}
+
+/* Los colores del logo salen de los tokens y no de un hex escrito dentro
+   del SVG: si mañana cambia el verde de la marca, cambia aquí y ya. */
+.marca-cara {
+  fill: var(--primary);
+  fill-rule: evenodd;
+  /* El paso de un gesto a otro. Corto: es un parpadeo, no una
+     transformación. */
+  transition: d 90ms ease;
+}
+
+.marca-pliegue {
+  fill: var(--primary-hover);
+}
+
+.portada-logo .marca-cara,
+.portada-logo .marca-pliegue {
+  transition: d 110ms ease;
 }
 
 .subtitulo {
   margin: 0;
   color: var(--texto-tenue);
-  font-size: 0.88rem;
+  font-size: var(--t-meta);
   /* Una raya vertical lo separa de la marca, en vez de un punto. */
-  padding-left: 14px;
+  padding-left: var(--e3);
   border-left: 1px solid var(--borde);
 }
 
@@ -192,7 +314,10 @@ h3 { font-size: 1.02rem; }
    y se pierde el juego de palabras con "tax" (impuesto). */
 .marca {
   margin: 0;
-  font-size: 1.55rem;
+  display: flex;
+  align-items: center;
+  gap: var(--e2);
+  font-size: 1.6rem;
   font-weight: 700;
   letter-spacing: -0.035em;
   color: var(--texto);
@@ -210,21 +335,27 @@ h3 { font-size: 1.02rem; }
   border-radius: var(--radio-chico);
 }
 
+.marca-enlace {
+  display: flex;
+  align-items: center;
+  gap: var(--e2);
+}
+
 .marca-enlace:hover .marca-i {
-  color: var(--primary-acento);
+  color: var(--primary-fuerte);
 }
 
 /* Recordatorio honesto de que esto todavia no es un producto terminado. */
 .etiqueta-prototipo {
-  font-size: 0.68rem;
+  font-family: var(--fuente-cifras);
+  font-size: var(--t-rotulo);
   text-transform: uppercase;
-  letter-spacing: 0.09em;
+  letter-spacing: 0.07em;
   font-weight: 600;
   color: var(--texto-tenue);
-  background: var(--fondo);
   border: 1px solid var(--borde);
-  border-radius: 999px;
-  padding: 3px 9px;
+  border-radius: var(--radio-chico);
+  padding: 1px 5px;
 }
 
 /* ----- El menú -----
@@ -272,19 +403,18 @@ h3 { font-size: 1.02rem; }
   background: var(--superficie);
   border: 1px solid var(--borde);
   border-radius: var(--radio);
-  box-shadow: var(--sombra);
-  padding: 24px;
+  padding: var(--e4);
 }
 
 .seccion {
-  margin-bottom: 38px;
+  margin-bottom: var(--e7);
 }
 
-/* El título de cada sección va sobre una raya, como el encabezado de
-   una columna en el papel rayado. */
+/* El título de cada sección va sobre una raya, como el encabezado de una
+   columna del formulario. */
 .seccion > h2 {
-  margin-bottom: 16px;
-  padding-bottom: 9px;
+  margin-bottom: var(--e3);
+  padding-bottom: var(--e2);
   border-bottom: 1px solid var(--raya);
 }
 
@@ -295,7 +425,14 @@ h3 { font-size: 1.02rem; }
 .campo {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: var(--e1);
+}
+
+/* Un campo que viene detrás de un párrafo necesita aire, o la etiqueta se
+   lee como el último renglón del párrafo de arriba. */
+p + .campo,
+.ayuda + .campo {
+  margin-top: var(--e4);
 }
 
 label {
@@ -346,10 +483,17 @@ input::placeholder {
   opacity: 0.75;
 }
 
+/* El foco del teclado. El contador tabula todo el día: tiene que verse
+   igual de claro sobre blanco, sobre una fila señalada y sobre un renglón
+   con espina de color. Por eso van dos anillos: el verde y un halo. */
 input:focus-visible,
-button:focus-visible {
-  outline: 3px solid var(--primary-acento);
+button:focus-visible,
+a:focus-visible,
+summary:focus-visible,
+[tabindex]:focus-visible {
+  outline: 2px solid var(--primary);
   outline-offset: 2px;
+  box-shadow: 0 0 0 4px rgba(16, 128, 95, 0.16);
 }
 
 input[type="text"]:focus,
@@ -390,15 +534,14 @@ button {
 .boton {
   height: var(--alto-control);
   padding: 0 22px;
-  background: var(--primary);
+  /* El verde oscuro, no el de la marca: el blanco encima del #10805F da
+     4.3:1 y no llega a AA. Este da 6.6:1. */
+  background: var(--primary-fuerte);
   color: #FFFFFF;
-  border: 1px solid var(--primary-hover);
-  border-radius: var(--radio-chico);
-  font-weight: 600;
+  border: 1px solid var(--primary-fuerte);
+  border-radius: var(--radio);
+  font-weight: 560;
   letter-spacing: -0.006em;
-  /* Un brillo de un pixel arriba: le da volumen sin sombras grandes. */
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.16),
-              0 1px 2px rgba(20, 35, 29, 0.10);
 }
 
 .boton:hover {
@@ -425,15 +568,14 @@ button {
   background: var(--superficie);
   color: var(--texto);
   border: 1px solid var(--borde-fuerte);
-  border-radius: var(--radio-chico);
+  border-radius: var(--radio);
   font-weight: 500;
-  box-shadow: 0 1px 2px rgba(20, 35, 29, 0.04);
 }
 
 .boton-secundario:hover {
-  background: var(--fondo);
-  border-color: var(--primary);
-  color: var(--primary-hover);
+  background: var(--n2);
+  border-color: var(--borde-fuerte);
+  color: var(--texto);
 }
 
 /* Botón discreto, para acciones poco frecuentes como eliminar */
@@ -463,61 +605,105 @@ button {
    ========================================================== */
 
 .etiqueta {
+/* Sin fondo de color y sin pastilla redonda: el estado se lee por el
+   color del texto y una raya de 1px. Las pastillas teñidas verde/ámbar/rojo
+   son el aspecto de cualquier panel administrativo. */
   display: inline-block;
-  padding: 3px 10px;
-  border-radius: 999px;
-  font-size: 0.8rem;
+  padding: 1px 5px;
+  border-radius: var(--radio-chico);
+  font-family: var(--fuente-cifras);
+  font-size: var(--t-rotulo);
   font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
   white-space: nowrap;
-  border: 1px solid transparent;
+  background: none;
+  border: 1px solid var(--borde);
+  color: var(--texto-secundario);
 }
 
-.etiqueta-neutra { background: var(--fondo);        color: var(--texto-secundario); border-color: var(--borde); }
-.etiqueta-exito  { background: var(--exito-fondo);  color: var(--exito-texto);   border-color: #CBE5D8; }
-.etiqueta-alerta { background: var(--alerta-fondo); color: var(--alerta-texto);  border-color: #EDDCB8; }
-.etiqueta-error  { background: var(--error-fondo);  color: var(--error-texto);   border-color: #EBCFC9; }
+.etiqueta-neutra { color: var(--texto-tenue);    border-color: var(--n3); }
+.etiqueta-exito  { color: var(--primary-fuerte); border-color: rgba(16, 128, 95, 0.34); }
+.etiqueta-alerta { color: var(--alerta-texto);   border-color: rgba(138, 90, 18, 0.34); }
+.etiqueta-error  { color: var(--error-texto);    border-color: rgba(166, 57, 45, 0.38); }
 
 /* Reservada para datos leídos por IA. Todo lo que lleve esta etiqueta
-   debe decir "verificar" — es una obligación del proyecto, no un adorno. */
-.etiqueta-ia     { background: var(--info-fondo);   color: var(--info-texto); }
+   debe decir "verificar" — es una obligación del proyecto, no un adorno.
+   Va en gris a propósito: el color implicaría que el programa respalda el
+   dato, y no lo respalda. Lo que la distingue es la raya punteada del
+   valor (.valor-auto), no un color. */
+.etiqueta-ia     { color: var(--texto-tenue); border-color: var(--n4); }
 
 /* ==========================================================
    Lista de clientes
+
+   Un solo bloque rayado, no una pila de tarjetas separadas. Con el hueco
+   de 12px que había antes, cada cliente era una tarjeta flotando y en
+   1366px cabían ocho; pegadas y con la raya compartida caben catorce.
    ========================================================== */
 
 .lista {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  background: var(--superficie);
+  border: 1px solid var(--borde);
+  border-radius: var(--radio);
+  overflow: hidden;
 }
 
 .cliente {
   background: var(--superficie);
-  border: 1px solid var(--borde);
-  border-radius: var(--radio);
-  box-shadow: var(--sombra);
-  padding: 18px 22px;
+  border-bottom: 1px solid var(--raya);
+  padding: var(--e3) var(--e4);
   display: flex;
-  gap: 20px;
+  gap: var(--e4);
   align-items: center;
   flex-wrap: wrap;
-  /* La espina: una franja de color al filo izquierdo de la tarjeta.
-     No es adorno, dice cómo va el plazo de ese cliente y deja leer la
-     lista entera sin tener que ir tarjeta por tarjeta. */
-  border-left: 4px solid var(--borde-fuerte);
+  /* La espina: una franja de color al filo izquierdo del renglón. No es
+     adorno, dice cómo va el plazo de ese cliente y deja leer la lista
+     entera sin tener que ir renglón por renglón. */
+  border-left: 3px solid transparent;
 }
 
-/* Al pasar el mouse solo cambia la sombra. El color de la espina no se
-   toca: si aquí se escribiera border-color, le ganaría a las clases de
-   abajo y todas las tarjetas se verían del mismo color al señalarlas. */
-.cliente:hover {
-  box-shadow: var(--sombra-media);
+.cliente:last-child {
+  border-bottom: 0;
 }
+
+/* Al pasar el mouse solo cambia el fondo. El color de la espina no se
+   toca: si aquí se escribiera border-color, le ganaría a las clases de
+   abajo y todos los renglones se verían del mismo color al señalarlos. */
+.cliente:hover {
+  background: var(--n2);
+}
+
+/* La fila entera abre el cliente. */
+.cliente-enlazado {
+  cursor: pointer;
+  transition: background 90ms ease;
+}
+
+/* La flecha del borde derecho: dice que el renglón lleva a algún lado.
+   Está siempre puesta —no aparece al pasar el mouse— y solo se aviva un
+   poco cuando el renglón está señalado. */
+.cliente-flecha {
+  flex: 0 0 auto;
+  margin-left: var(--e1);
+  color: var(--n5);
+  font-size: 1rem;
+  line-height: 1;
+  transition: color 90ms ease, transform 90ms ease;
+}
+
+.cliente-enlazado:hover .cliente-flecha {
+  color: var(--primary);
+  transform: translateX(2px);
+}
+
 
 .espina-error  { border-left-color: var(--error); }
-.espina-alerta { border-left-color: #C58A22; }
-.espina-exito  { border-left-color: var(--primary-acento); }
-.espina-neutra { border-left-color: var(--borde-fuerte); }
+.espina-alerta { border-left-color: var(--alerta-texto); }
+.espina-exito  { border-left-color: transparent; }
+.espina-neutra { border-left-color: transparent; }
 
 .cliente-datos {
   flex: 1 1 220px;
@@ -527,22 +713,25 @@ button {
 .cliente-nombre {
   margin: 0;
   overflow-wrap: anywhere;
-  font-size: 1.06rem;
+  font-size: var(--t-ui);
+  font-weight: 600;
 }
 
 .cliente-cedula {
-  margin: 3px 0 0;
-  font-size: 0.85rem;
+  margin: 2px 0 0;
+  font-family: var(--fuente-cifras);
+  font-size: var(--t-meta);
   color: var(--texto-secundario);
 }
 
 .cliente-avance {
-  margin: 4px 0 0;
-  font-size: 0.85rem;
+  margin: 2px 0 0;
+  font-family: var(--fuente-cifras);
+  font-size: var(--t-meta);
   font-weight: 500;
 }
 
-.avance-completo  { color: var(--exito-texto); }
+.avance-completo  { color: var(--texto-tenue); font-weight: 400; }
 .avance-pendiente { color: var(--alerta-texto); }
 .avance-neutro    { color: var(--texto-tenue); font-weight: 400; }
 
@@ -550,12 +739,12 @@ button {
   flex: 0 0 auto;
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  min-width: 190px;
+  gap: var(--e1);
+  min-width: 176px;
 }
 
 .cliente-fecha input[type="date"] {
-  height: 40px;
+  height: var(--alto-control);
 }
 
 .cliente-acciones {
@@ -566,26 +755,73 @@ button {
    Estado vacío y avisos
    ========================================================== */
 
+/* Sin centrar, sin icono y sin caja punteada. El punteado se reserva
+   para la zona de arrastrar archivos, donde sí significa "ponga algo
+   aquí". Aquí lo que hace falta es decir cuál es el siguiente paso. */
 .vacio {
   background: var(--superficie);
-  border: 1px dashed var(--borde-fuerte);
+  border: 1px solid var(--borde);
   border-radius: var(--radio);
-  padding: 40px 24px;
-  text-align: center;
+  padding: var(--e5);
   color: var(--texto-secundario);
-  font-size: 0.95rem;
+  font-size: var(--t-ui);
 }
 
+.vacio-titulo {
+  margin: 0 0 var(--e1);
+  font-size: var(--t-ui);
+  font-weight: 620;
+  color: var(--texto);
+}
+
+.vacio p {
+  margin: 0 0 var(--e4);
+  max-width: 60ch;
+  font-size: var(--t-celda);
+}
+
+.vacio p:last-child {
+  margin-bottom: 0;
+}
+
+/* Los avisos no se pintan de fondo: llevan una raya de 3px a la
+   izquierda y el color en el texto. Un bloque relleno de color pastel es
+   el aspecto de cualquier panel administrativo, y en una pantalla con
+   veinte renglones compite con lo que de verdad urge. */
 .aviso {
-  border-radius: var(--radio-chico);
-  padding: 12px 16px;
-  font-size: 0.92rem;
-  margin-bottom: 18px;
+  border-radius: 0 var(--radio) var(--radio) 0;
+  border-left: 3px solid var(--borde-fuerte);
+  background: var(--superficie);
+  padding: var(--e2) var(--e4);
+  font-size: var(--t-celda);
+  margin-bottom: var(--e4);
 }
 
-.aviso-error { background: var(--error-fondo); color: var(--error-texto); }
-.aviso-fechas { background: var(--alerta-fondo); color: var(--alerta-texto); margin-top: 10px; }
-.aviso-exito { background: var(--exito-fondo); color: var(--exito-texto); }
+/* El rótulo que encabeza un error: "error" en versalitas monoespaciadas.
+   Dice qué pasó y el renglón siguiente dice cómo se arregla. */
+.aviso-rotulo {
+  display: block;
+  font-family: var(--fuente-cifras);
+  font-size: var(--t-rotulo);
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  font-weight: 600;
+  margin-bottom: 2px;
+}
+
+/* La segunda frase —cómo se arregla— va más apagada que la primera. */
+.aviso-arreglo {
+  display: block;
+  margin-top: 2px;
+  color: var(--texto-secundario);
+}
+
+.aviso-error  { border-left-color: var(--error); color: var(--texto); }
+.aviso-error .aviso-rotulo { color: var(--error-texto); }
+.aviso-fechas { border-left-color: var(--alerta-texto); color: var(--texto); margin-top: var(--e2); }
+.aviso-fechas .aviso-rotulo { color: var(--alerta-texto); }
+.aviso-exito  { border-left-color: var(--primary); color: var(--texto); }
+.aviso-exito .aviso-rotulo { color: var(--primary-fuerte); }
 
 /* Esconder algo tiene que ganarle SIEMPRE a cualquier otra regla.
 
@@ -600,12 +836,11 @@ button {
 
 /* Nota fija sobre el estado del prototipo */
 .nota-prototipo {
-  margin-top: 52px;
-  padding: 16px 0 40px;
-  /* La misma doble raya de la cabecera, cerrando la página: arriba abre
-     la hoja y abajo la cierra. */
-  border-top: 4px double var(--regla-doble);
-  font-size: 0.84rem;
+  margin-top: var(--e8);
+  padding: var(--e4) 0 var(--e8);
+  /* Sin raya de arriba, igual que la cabecera. La nota del pie se
+     distingue por ser gris y chica; no necesita un borde encima. */
+  font-size: var(--t-meta);
   color: var(--texto-tenue);
 }
 
@@ -637,8 +872,11 @@ a {
   text-decoration: none;
 }
 
-.cliente-nombre a:hover {
-  color: var(--primary);
+/* Señalar cualquier parte de la fila subraya el nombre: es la señal de
+   que el renglón entero abre el cliente. */
+.cliente-nombre a:hover,
+.cliente-enlazado:hover .cliente-nombre a {
+  color: var(--primary-fuerte);
   text-decoration: underline;
 }
 
@@ -910,25 +1148,56 @@ a {
 .lista-checklist {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  margin-bottom: 20px;
+  background: var(--superficie);
+  border: 1px solid var(--borde);
+  border-radius: var(--radio);
+  overflow: hidden;
+  margin-bottom: var(--e4);
+  /* La numeración de renglón sale de aquí, no del HTML: es el contador
+     del CSS. Así el JavaScript sigue pintando la lista igual que antes. */
+  counter-reset: renglon;
 }
 
 .renglon {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: var(--e3);
   background: var(--superficie);
-  border: 1px solid var(--borde);
-  border-radius: var(--radio);
-  box-shadow: var(--sombra);
-  padding: 10px 14px;
+  border-bottom: 1px solid var(--raya);
+  padding: var(--e1) var(--e4) var(--e1) var(--e3);
+  min-height: var(--alto-control);
+  /* La raya roja de lo que falta. Va en el renglón normal porque el
+     estado normal de un renglón del checklist es "todavía no ha
+     llegado": el que lleva clase aparte es el recibido. */
+  border-left: 3px solid var(--error);
 }
 
-/* Lo que ya llegó se atenúa, para que lo que falta salte a la vista. */
+.renglon:last-child {
+  border-bottom: 0;
+}
+
+/* El número de renglón, como en el formulario: 01, 02, 03… En ancho fijo
+   para que la columna quede cuadrada aunque pase de 9 a 10. */
+.renglon::before {
+  counter-increment: renglon;
+  content: counter(renglon, decimal-leading-zero);
+  flex: 0 0 auto;
+  font-family: var(--fuente-cifras);
+  font-variant-numeric: tabular-nums;
+  font-size: var(--t-meta);
+  color: var(--error-texto);
+  width: 20px;
+}
+
+/* Lo que ya llegó se apaga, para que lo que falta salte a la vista.
+   Antes esto se pintaba de verde y era al revés: hacía ruido lo que ya
+   estaba resuelto y se perdía lo que hay que ir a pedir. */
 .renglon-recibido {
-  background: var(--exito-fondo);
-  border-color: transparent;
+  border-left-color: transparent;
+}
+
+.renglon-recibido::before {
+  color: var(--n5);
 }
 
 .renglon-marca {
@@ -957,7 +1226,8 @@ input[type="text"].renglon-titulo {
   padding: 6px 8px;
   border-radius: var(--radio-chico);
   font-family: inherit;
-  font-size: 0.95rem;
+  font-size: var(--t-ui);
+  font-weight: 620;
   color: var(--texto);
 }
 
@@ -1271,8 +1541,10 @@ input[type="text"].renglon-titulo:focus {
    ========================================================== */
 
 .aviso-modo {
-  margin: -8px 0 24px;
-  padding: 10px 16px;
+  /* El margen de arriba era -8px, para pegarlo al selector de servicio.
+     Con el espaciado nuevo eso lo montaba encima del texto de ayuda. */
+  margin: var(--e3) 0 var(--e5);
+  padding: var(--e2) var(--e4);
   border-radius: var(--radio-chico);
   background: var(--fondo);
   border: 1px solid var(--borde);
@@ -1281,9 +1553,8 @@ input[type="text"].renglon-titulo:focus {
 }
 
 .aviso-modo-ia {
-  background: var(--info-fondo);
-  border-color: transparent;
-  color: var(--info-texto);
+  border-left: 3px solid var(--primary);
+  border-radius: 0 var(--radio) var(--radio) 0;
 }
 
 /* ==========================================================
@@ -1326,13 +1597,13 @@ input[type="text"].renglon-titulo:focus {
    confirmar, no como algo que el programa ya decidió. */
 .sugerencia {
   flex: 0 1 auto;
-  padding: 6px 12px;
-  border: 1px dashed var(--info);
-  border-radius: 999px;
-  background: var(--info-fondo);
-  color: var(--info-texto);
+  padding: 3px 9px;
+  border: 1px dashed var(--borde-fuerte);
+  border-radius: var(--radio-chico);
+  background: none;
+  color: var(--texto-secundario);
   font-family: inherit;
-  font-size: 0.82rem;
+  font-size: var(--t-meta);
   cursor: pointer;
   text-align: left;
 }
@@ -1457,28 +1728,34 @@ input[type="text"].renglon-titulo:focus {
 
 /* Los campos que el código sacó del XML. Se marcan como lectura exacta
    para distinguirlos de cualquier cosa que en el futuro lea una IA. */
+/* Un XML lo lee el código, campo por campo: es lectura exacta, no una
+   adivinanza de la IA. Por eso el valor va sobre una raya CONTINUA fina,
+   y no sobre la punteada de .valor-auto. Son dos grados distintos de
+   certeza y la pantalla tiene que distinguirlos. */
 .lectura-xml {
-  margin-bottom: 16px;
-  padding: 14px 16px;
-  border-radius: var(--radio-chico);
-  background: var(--exito-fondo);
+  margin-bottom: var(--e4);
+  padding: var(--e3) var(--e4);
+  border-left: 3px solid var(--primary);
+  border-radius: 0 var(--radio) var(--radio) 0;
+  background: var(--superficie);
 }
 
 .lectura-titulo {
-  margin: 0 0 8px;
-  font-size: 0.78rem;
+  margin: 0 0 var(--e2);
+  font-family: var(--fuente-cifras);
+  font-size: var(--t-rotulo);
   font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: var(--exito-texto);
+  letter-spacing: 0.07em;
+  color: var(--primary-fuerte);
 }
 
 .lectura-campos {
   display: grid;
   grid-template-columns: auto 1fr;
-  gap: 4px 16px;
+  gap: var(--e1) var(--e4);
   margin: 0;
-  font-size: 0.88rem;
+  font-size: var(--t-celda);
 }
 
 .lectura-campos dt {
@@ -1488,6 +1765,69 @@ input[type="text"].renglon-titulo:focus {
 .lectura-campos dd {
   margin: 0;
   overflow-wrap: anywhere;
+  font-family: var(--fuente-cifras);
+  font-variant-numeric: tabular-nums;
+  border-bottom: 1px solid var(--n4);
+  padding-bottom: 1px;
+}
+
+/* ==========================================================
+   Lectura automática
+
+   La línea legal del producto, dibujada.
+
+   Un dato que leyó una máquina NO lleva color propio. Va sobre una raya
+   punteada —el espacio en blanco de un formulario de papel—, con el
+   rótulo "auto" y el enlace para abrir el documento original al lado. Un
+   dato escrito por el contador es tinta plena, sin raya y sin rótulo.
+
+   Antes esto se marcaba en azul. Darle un color de marca a lo que leyó
+   una máquina es respaldarlo, y este programa no respalda nada: muestra
+   lo que leyó para que el contador lo verifique.
+   ========================================================== */
+
+.valor-auto {
+  display: inline-block;
+  font-family: var(--fuente-cifras);
+  font-variant-numeric: tabular-nums;
+  border-bottom: 1.5px dotted var(--n4);
+  padding-bottom: 1px;
+}
+
+/* El rótulo "auto". En gris, a propósito. */
+.marca-auto {
+  font-family: var(--fuente-cifras);
+  font-size: var(--t-rotulo);
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--texto-tenue);
+  border: 1px solid var(--borde-fuerte);
+  border-radius: var(--radio-chico);
+  padding: 0 4px;
+  margin-left: var(--e2);
+  white-space: nowrap;
+}
+
+/* El enlace al documento original. Va SIEMPRE junto a un dato leído
+   automáticamente: es lo que le permite al contador comprobarlo. */
+.ver-doc {
+  font-size: var(--t-meta);
+  color: var(--primary-fuerte);
+  text-decoration: none;
+  border-bottom: 1px solid rgba(12, 106, 75, 0.3);
+  margin-left: var(--e2);
+  white-space: nowrap;
+}
+
+.ver-doc:hover {
+  border-bottom-color: var(--primary-fuerte);
+}
+
+/* Lo contrario: un dato que escribió el contador. Tinta plena. */
+.valor-escrito {
+  font-family: var(--fuente-cifras);
+  font-variant-numeric: tabular-nums;
+  color: var(--texto);
 }
 
 /* ==========================================================
@@ -2083,13 +2423,15 @@ input[type="text"].celda-campo:focus {
   align-items: center;
   gap: 10px;
   max-width: min(420px, calc(100vw - 48px));
-  padding: 12px 18px;
+  padding: var(--e2) var(--e4);
   background: var(--superficie);
-  border: 1px solid var(--borde);
-  border-radius: 999px;
-  box-shadow: 0 4px 16px rgba(23, 23, 23, 0.10);
+  border: 1px solid var(--borde-fuerte);
+  border-radius: var(--radio);
+  /* Rentai sí flota encima de la página, así que sí lleva sombra. Es la
+     única del programa junto con la del visor. */
+  box-shadow: var(--sombra-media);
   font-family: inherit;
-  font-size: 0.9rem;
+  font-size: var(--t-celda);
   color: var(--texto-secundario);
   cursor: pointer;
   text-align: left;
@@ -2101,7 +2443,6 @@ input[type="text"].celda-campo:focus {
 
 .rentai-pastilla:hover {
   border-color: var(--primary);
-  box-shadow: 0 6px 20px rgba(23, 23, 23, 0.14);
 }
 
 .rentai-nombre {
@@ -2148,7 +2489,7 @@ input[type="text"].celda-campo:focus {
   background: var(--superficie);
   border: 1px solid var(--borde);
   border-radius: var(--radio);
-  box-shadow: 0 10px 40px rgba(23, 23, 23, 0.16);
+  box-shadow: var(--sombra-media);
   overflow: hidden;
 }
 
@@ -2258,13 +2599,16 @@ input[type="text"].celda-campo:focus {
 
 /* --- Las propuestas --- */
 
+/* Lo que propone Rentai. Sin color propio: una raya gris a la izquierda
+   y el valor sobre punteado. El azul que había aquí decía "confíe"; una
+   propuesta de una IA es justamente lo que hay que ir a verificar. */
 .propuesta {
-  margin-top: 12px;
-  padding: 12px;
+  margin-top: var(--e3);
+  padding: var(--e3);
   background: var(--superficie);
-  border: 1px solid var(--info-fondo);
-  border-left: 3px solid var(--info);
-  border-radius: var(--radio-chico);
+  border: 1px solid var(--borde);
+  border-left: 3px solid var(--borde-fuerte);
+  border-radius: 0 var(--radio) var(--radio) 0;
 }
 
 .propuesta-rastro {
@@ -2286,10 +2630,16 @@ input[type="text"].celda-campo:focus {
 }
 
 .propuesta-cifra {
-  margin: 0 0 4px;
-  font-size: 1.05rem;
+  margin: 0 0 var(--e1);
+  font-family: var(--fuente-cifras);
+  font-size: var(--t-texto);
   font-weight: 600;
   font-variant-numeric: tabular-nums;
+  /* La raya punteada: el espacio en blanco de un formulario de papel.
+     Es lo que dice "esto lo leyó la máquina, verifíquelo". */
+  display: inline-block;
+  border-bottom: 1.5px dotted var(--n4);
+  padding-bottom: 1px;
 }
 
 .propuesta-detalle {
@@ -2471,16 +2821,15 @@ input[type="text"].celda-campo:focus {
 
 .estado-ia {
   border: 1px solid var(--borde);
-  border-left: 4px solid var(--borde-fuerte);
-  border-radius: var(--radio-chico);
-  background: var(--fondo);
-  padding: 14px 16px;
-  margin-bottom: 22px;
+  border-left: 3px solid var(--borde-fuerte);
+  border-radius: 0 var(--radio) var(--radio) 0;
+  background: var(--superficie);
+  padding: var(--e3) var(--e4);
+  margin-bottom: var(--e5);
 }
 
 .estado-ia-encendida {
-  border-left-color: var(--primary-acento);
-  background: var(--primary-tenue);
+  border-left-color: var(--primary);
 }
 
 .estado-ia-linea {
@@ -2712,13 +3061,13 @@ code {
 
 /* --- Las tres cifras --- */
 
+/* El margen y la raya de arriba separaban estas cifras del nombre del
+   cliente, que ahora vive en la cabecera del panel. Sin eso encima,
+   sobraban y dejaban una franja vacía al abrir la tarjeta. */
 .perfil-cifras {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-  gap: 16px;
-  margin-top: 20px;
-  padding-top: 18px;
-  border-top: 1px solid var(--raya);
+  gap: var(--e4);
 }
 
 .perfil-cifra {
@@ -2863,8 +3212,8 @@ code {
 .revision-cabeza { margin-bottom: 14px; }
 
 .revision-titulo {
-  margin: 0 0 4px;
-  font-size: 17px;
+  margin: 0 0 var(--e1);
+  font-size: var(--t-h2);
 }
 
 .revision-ayuda { margin: 0; }
@@ -2935,9 +3284,9 @@ code {
 .confirmar-cuerpo { padding: 20px 22px; }
 
 .confirmar-frase {
-  margin: 0 0 6px;
-  font-size: 17px;
-  font-weight: 600;
+  margin: 0 0 var(--e2);
+  font-size: var(--t-texto);
+  font-weight: 620;
   color: var(--texto);
 }
 
@@ -3130,3 +3479,667 @@ code {
 }
 
 .acciones-lote .aviso { flex: 1 1 100%; margin: 4px 0 0; }
+
+/* ==========================================================
+   La portada de inicio
+
+   Sale una sola vez por sesión, dura 1,5 segundos y se corta con un clic
+   o cualquier tecla. Toda la lógica está en static/marca/inicio.js, que
+   se carga sin defer para poder marcar el <html> antes del primer
+   pintado: si no, se alcanza a ver la aplicación un instante antes de
+   que aparezca la portada.
+
+   Se muestra SOLO cuando .portada-corriendo está en el <html>. Si el
+   JavaScript no corre, la portada nunca aparece y el programa arranca
+   directo — que es la falla correcta para una pantalla decorativa.
+   ========================================================== */
+
+.portada-inicio {
+  display: none;
+}
+
+.portada-corriendo .portada-inicio {
+  display: flex;
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--e4);
+  background: var(--superficie);
+  opacity: 1;
+  transition: opacity 180ms ease;
+}
+
+.portada-corriendo body {
+  /* Nada se desplaza detrás de la portada mientras está puesta. */
+  overflow: hidden;
+}
+
+.portada-saliendo {
+  opacity: 0;
+}
+
+.portada-marca {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--e4);
+  font-size: 2rem;
+  font-weight: 620;
+  letter-spacing: -0.035em;
+  color: var(--texto);
+}
+
+/* El logo entra después del texto, no al mismo tiempo: primero se
+   escribe el nombre y el logo lo remata. */
+.portada-logo {
+  width: 52px;
+  height: 52px;
+  opacity: 0;
+  transform: translateY(3px);
+  transition: opacity 180ms ease, transform 180ms ease;
+}
+
+.portada-con-logo .portada-logo,
+.portada-quieta .portada-logo {
+  opacity: 1;
+  transform: none;
+}
+
+.portada-texto {
+  display: inline-flex;
+  align-items: baseline;
+  /* El ancho se reserva desde el principio para que el logo no se
+     corra de lado mientras se escriben las letras. */
+  min-width: 3.4em;
+}
+
+/* El cursor de la máquina de escribir: un bloque, no una rayita. */
+.portada-cursor {
+  display: inline-block;
+  width: 0.5em;
+  height: 1em;
+  margin-left: 0.06em;
+  background: var(--primary);
+}
+
+/* Sin parpadeo. La portada entera dura 1,2 segundos: un cursor que se
+   apaga la mitad del tiempo alcanza a estar apagado justo cuando alguien
+   mira, y entonces no parece un cursor sino un error de dibujo. */
+
+.portada-sub {
+  margin: 0;
+  font-size: var(--t-celda);
+  color: var(--texto-tenue);
+  opacity: 0;
+  transition: opacity 200ms ease;
+}
+
+.portada-con-sub .portada-sub,
+.portada-quieta .portada-sub {
+  opacity: 1;
+}
+
+/* Quien pide menos movimiento ve la portada quieta y completa: sin
+   escritura letra por letra, sin cursor parpadeando y sin entradas. */
+.portada-quieta .portada-cursor {
+  display: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .portada-inicio,
+  .portada-logo,
+  .portada-sub {
+    transition: none;
+  }
+  .portada-cursor {
+    animation: none;
+  }
+}
+
+/* ==========================================================
+   EL RIEL — la pantalla del cliente
+
+   En temporada el contador salta de un cliente a otro todo el día. Antes
+   cada salto eran dos pantallas: volver a la lista y entrar al siguiente.
+   Ahora la lista vive pegada a la izquierda y el salto es un clic.
+
+   El riel va oscuro por una razón de trabajo, no de gusto: el panel de la
+   derecha es donde se lee y se escribe, y tiene que ser lo más claro de
+   la pantalla. Un riel claro le pelearía la atención todo el día.
+
+   Los colores del riel salen del mismo verde de la marca llevado al fondo
+   de la rampa (--riel-*), no de una escala de grises aparte.
+   ========================================================== */
+
+.con-riel {
+  display: flex;
+  min-height: 100vh;
+  align-items: stretch;
+}
+
+/* ----- El riel ----- */
+
+.riel {
+  width: var(--riel-ancho);
+  flex: 0 0 auto;
+  background: var(--riel-fondo);
+  color: var(--riel-texto);
+  display: flex;
+  flex-direction: column;
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  overflow: hidden;
+}
+
+.riel-marca {
+  display: flex;
+  align-items: center;
+  gap: var(--e2);
+  padding: var(--e4) var(--e4) var(--e3);
+  text-decoration: none;
+  color: inherit;
+}
+
+.riel-marca .marca-logo {
+  width: 34px;
+  height: 34px;
+}
+
+/* Dentro del riel el logo se pinta con los verdes de fondo oscuro. */
+.riel .marca-cara { fill: var(--riel-verde); }
+.riel .marca-pliegue { fill: #2A8E6B; }
+
+.riel-nombre {
+  font-size: 1.35rem;
+  font-weight: 620;
+  letter-spacing: -0.035em;
+  white-space: nowrap;
+}
+
+.riel-nombre i {
+  font-style: normal;
+  color: var(--riel-verde);
+}
+
+/* ----- El botón de agregar e importar -----
+   Es la única acción del riel, y va arriba del todo: agregar un cliente
+   es lo primero que se hace y lo que más cuesta encontrar cuando la
+   lista se come la pantalla. */
+
+.riel-agregar {
+  display: flex;
+  align-items: center;
+  gap: var(--e2);
+  margin: 0 var(--e3) var(--e3);
+  padding: 0 var(--e3);
+  height: var(--alto-control);
+  background: var(--riel-alto);
+  border: 1px solid var(--riel-borde);
+  border-radius: var(--radio);
+  color: var(--riel-texto);
+  font: inherit;
+  font-size: var(--t-celda);
+  font-weight: 500;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.riel-agregar:hover {
+  border-color: var(--riel-verde);
+  color: #fff;
+}
+
+.riel-agregar .mas {
+  color: var(--riel-verde);
+  font-size: 1.05rem;
+  line-height: 1;
+}
+
+/* ----- El buscador ----- */
+
+.riel-buscar {
+  margin: 0 var(--e3) var(--e3);
+  height: 30px;
+  padding: 0 var(--e2);
+  background: transparent;
+  border: 1px solid var(--riel-borde);
+  border-radius: var(--radio-chico);
+  color: var(--riel-texto);
+  font: inherit;
+  font-size: var(--t-meta);
+}
+
+.riel-buscar::placeholder { color: #6E8078; }
+
+.riel-buscar:focus-visible {
+  outline: 2px solid var(--riel-verde);
+  outline-offset: 1px;
+  box-shadow: none;
+}
+
+/* ----- La lista, agrupada por urgencia -----
+   Tres grupos y en este orden, que es el orden en que importan: lo que
+   ya se pasó, lo que se viene, y lo que está resuelto. El grupo de "al
+   día" va apagado a propósito: está ahí para poder llegar, no para que
+   se lea. */
+
+.riel-lista {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  padding-bottom: var(--e3);
+  /* Barra de desplazamiento discreta: en el riel oscuro la de siempre
+     se ve como una franja blanca. */
+  scrollbar-width: thin;
+  scrollbar-color: var(--riel-borde) transparent;
+}
+
+.riel-grupo + .riel-grupo {
+  margin-top: var(--e3);
+}
+
+.riel-grupo-titulo {
+  display: flex;
+  align-items: baseline;
+  gap: var(--e2);
+  padding: var(--e2) var(--e4) var(--e1);
+  font-family: var(--fuente-cifras);
+  font-size: var(--t-rotulo);
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: var(--riel-tenue);
+}
+
+.riel-grupo-titulo .cuantos {
+  margin-left: auto;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Cada grupo lleva su color en el título, y solo ahí: los renglones se
+   quedan neutros para que la lista no se vuelva un semáforo. */
+.riel-grupo-vencidos .riel-grupo-titulo { color: var(--riel-rojo); }
+
+.riel-fila {
+  display: flex;
+  align-items: center;
+  gap: var(--e2);
+  width: 100%;
+  padding: 7px var(--e4);
+  background: none;
+  border: 0;
+  border-left: 2px solid transparent;
+  color: var(--riel-texto);
+  font: inherit;
+  font-size: var(--t-celda);
+  text-align: left;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.riel-fila:hover {
+  background: var(--riel-alto);
+}
+
+.riel-fila-actual {
+  background: var(--riel-alto);
+  border-left-color: var(--riel-verde);
+  color: #FFFFFF;
+  font-weight: 600;
+}
+
+.riel-fila-nombre {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Cuántos documentos le faltan. Es lo único que se repite en cada
+   renglón, así que va en ancho fijo y alineado a la derecha: se lee la
+   columna entera de un vistazo. */
+.riel-fila-faltan {
+  flex: 0 0 auto;
+  font-family: var(--fuente-cifras);
+  font-variant-numeric: tabular-nums;
+  font-size: var(--t-rotulo);
+  color: var(--riel-rojo);
+}
+
+.riel-fila-listo {
+  flex: 0 0 auto;
+  font-size: var(--t-rotulo);
+  color: #5E7168;
+}
+
+.riel-grupo-aldia .riel-fila:not(.riel-fila-actual) {
+  color: #A7B7AE;
+}
+
+.riel-vacio {
+  padding: var(--e3) var(--e4);
+  font-size: var(--t-meta);
+  color: var(--riel-tenue);
+}
+
+/* ----- El pie del riel: los ajustes ----- */
+
+.riel-pie {
+  flex: 0 0 auto;
+  border-top: 1px solid var(--riel-borde);
+  padding: var(--e2) var(--e3);
+}
+
+.riel-pie a {
+  display: block;
+  padding: var(--e1) var(--e2);
+  border-radius: var(--radio-chico);
+  color: var(--riel-tenue);
+  text-decoration: none;
+  font-size: var(--t-celda);
+}
+
+.riel-pie a:hover {
+  background: var(--riel-alto);
+  color: var(--riel-texto);
+}
+
+.riel .marca-logo:focus-visible,
+.riel a:focus-visible,
+.riel button:focus-visible {
+  outline: 2px solid var(--riel-verde);
+  outline-offset: -2px;
+  box-shadow: none;
+}
+
+/* ==========================================================
+   El panel de la derecha
+   ========================================================== */
+
+.area {
+  flex: 1 1 auto;
+  min-width: 0;
+  background: var(--fondo);
+}
+
+.area .contenedor {
+  max-width: 1080px;
+  padding: 0 var(--e6);
+}
+
+/* La cabecera del panel: el nombre del cliente y las tres vistas.
+   Se queda pegada arriba mientras se baja, como la cabecera vieja. */
+.area-cabecera {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  background: var(--superficie);
+  padding: var(--e4) 0 0;
+  margin-bottom: var(--e5);
+  transition: box-shadow 120ms ease;
+}
+
+.area-cabecera.cabecera-desplazada {
+  box-shadow: 0 1px 0 var(--raya);
+}
+
+.area-cabecera-arriba {
+  display: flex;
+  align-items: baseline;
+  gap: var(--e3);
+  flex-wrap: wrap;
+  margin-bottom: var(--e3);
+}
+
+.area-titulo {
+  margin: 0;
+  font-size: var(--t-h1);
+  font-weight: 620;
+  letter-spacing: -0.02em;
+}
+
+.area-cedula {
+  font-family: var(--fuente-cifras);
+  font-size: var(--t-meta);
+  color: var(--texto-tenue);
+}
+
+.area-acciones {
+  margin-left: auto;
+  display: flex;
+  gap: var(--e2);
+  align-items: center;
+}
+
+/* ----- Las tres vistas -----
+   Documentos, Formulario 210 e Historial. Antes eran siete secciones
+   plegables una debajo de otra en la misma página: había que bajar para
+   llegar al 210 y volver a subir para ver qué faltaba. */
+
+.area-vistas {
+  display: flex;
+  gap: var(--e1);
+  border-bottom: 1px solid var(--raya);
+}
+
+.area-vista-boton {
+  position: relative;
+  padding: var(--e2) var(--e3) var(--e3);
+  background: none;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  color: var(--texto-secundario);
+  font: inherit;
+  font-size: var(--t-ui);
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.area-vista-boton:hover {
+  color: var(--texto);
+}
+
+.area-vista-actual {
+  color: var(--texto);
+  font-weight: 620;
+  border-bottom-color: var(--primary);
+}
+
+/* La cuenta de cada pestaña, en ancho fijo para que no baile al cambiar
+   de 9 a 10. */
+.area-vista-boton .conteo {
+  font-family: var(--fuente-cifras);
+  font-variant-numeric: tabular-nums;
+  font-size: var(--t-meta);
+  color: var(--texto-tenue);
+  margin-left: 5px;
+}
+
+.area-vista-actual .conteo {
+  color: var(--error-texto);
+}
+
+.area-panel[hidden] {
+  display: none;
+}
+
+/* Dentro de una vista las secciones ya no necesitan tanto aire entre
+   ellas: la pestaña ya separó los asuntos. */
+.area-panel .seccion {
+  margin-bottom: var(--e5);
+}
+
+/* ==========================================================
+   El botón de RentAI
+
+   Antes era una pastilla flotante que aparecía y desaparecía. Ahora vive
+   fija abajo a la derecha siempre que se esté dentro de un cliente,
+   porque es donde tiene sentido: RentAI solo sabe hablar de un cliente.
+   ========================================================== */
+
+.rentai-pastilla {
+  display: flex;
+  align-items: center;
+  gap: var(--e2);
+  max-width: min(340px, calc(100vw - 48px));
+  height: 38px;
+  padding: 0 var(--e3) 0 var(--e2);
+  background: var(--riel-fondo);
+  border: 1px solid var(--riel-borde);
+  border-radius: var(--radio);
+  box-shadow: var(--sombra-media);
+  font-family: inherit;
+  font-size: var(--t-celda);
+  color: var(--riel-texto);
+  cursor: pointer;
+  text-align: left;
+}
+
+.rentai-pastilla:hover {
+  border-color: var(--riel-verde);
+}
+
+.rentai-pastilla:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+/* El logo dentro del botón: es RentAI la que habla, y es la misma cara
+   de la marca. Cuando está apagada se pone gris. */
+.rentai-pastilla .marca-logo {
+  width: 22px;
+  height: 22px;
+}
+
+.rentai-pastilla .marca-cara { fill: var(--riel-verde); }
+.rentai-pastilla .marca-pliegue { fill: #2A8E6B; }
+
+.rentai-apagada .rentai-pastilla .marca-cara { fill: #6E8078; }
+.rentai-apagada .rentai-pastilla .marca-pliegue { fill: #55655D; }
+
+.rentai-pastilla .rentai-nombre {
+  color: #FFFFFF;
+  font-weight: 600;
+}
+
+.rentai-pastilla .rentai-frase {
+  color: var(--riel-tenue);
+}
+
+/* El atajo de teclado, escrito. En este programa nada se adivina. */
+.rentai-tecla {
+  margin-left: auto;
+  flex: 0 0 auto;
+  font-family: var(--fuente-cifras);
+  font-size: var(--t-rotulo);
+  color: var(--riel-tenue);
+  border: 1px solid var(--riel-borde);
+  border-radius: var(--radio-chico);
+  padding: 0 4px;
+}
+
+/* ==========================================================
+   Pantallas angostas
+
+   Por debajo de 1000px el riel no cabe al lado del panel sin dejar el
+   texto en una columna de treinta caracteres. Se pone arriba, en
+   horizontal, y se desplaza de lado.
+   ========================================================== */
+
+@media (max-width: 1000px) {
+  .con-riel {
+    flex-direction: column;
+    min-height: 0;
+  }
+
+  .riel {
+    width: 100%;
+    height: auto;
+    position: static;
+    max-height: 46vh;
+  }
+
+  .riel-lista {
+    max-height: 30vh;
+  }
+
+  .panel .contenedor {
+    padding: 0 var(--e4);
+  }
+}
+
+/* El botón de RentAI desaparece mientras el panel está abierto: los dos
+   ocupan la misma esquina. La regla de arriba lo pone en display:flex
+   siempre, así que hace falta apagarlo aquí de forma explícita. */
+.rentai:not(.rentai-cerrada) .rentai-pastilla {
+  display: none;
+}
+
+/* La marca, más grande en las dos páginas que conservan cabecera. */
+.marca-logo {
+  width: 34px;
+  height: 34px;
+}
+
+.marca {
+  font-size: 1.75rem;
+}
+
+/* La columna del riel se pinta desde el contenedor, no desde el riel.
+   El riel va pegado arriba (position: sticky) y mide una pantalla de
+   alto; en una página más larga que eso quedaba una franja clara debajo.
+   Con el fondo aquí, la columna izquierda es oscura hasta el final. */
+.con-riel {
+  background: linear-gradient(
+    to right,
+    var(--riel-fondo) 0 var(--riel-ancho),
+    var(--fondo) var(--riel-ancho)
+  );
+}
+
+@media (max-width: 1000px) {
+  /* Apilados, el degradado de columnas no aplica. */
+  .con-riel { background: var(--fondo); }
+}
+
+/* Nota para el que venga: "Todavía falta" repite parte de la lista que
+   está justo debajo, y estuvo escondido un rato para ganar pantalla. Se
+   devolvió a propósito. No es una duplicación cualquiera: es la garantía
+   de que lo que falta salte a la vista antes de bajar a ninguna sección,
+   que es la función principal del programa, y pruebas/probar_pantallas.py
+   la comprueba ("destaca lo que falta"). El espacio se gana con las
+   pestañas, no quitando esto. */
+
+/* La marca del riel, un punto más grande: es lo primero que se ve al
+   abrir y el riel tiene sitio de sobra. */
+.riel-marca .marca-logo {
+  width: 38px;
+  height: 38px;
+}
+
+.riel-nombre {
+  font-size: 1.5rem;
+}
+
+/* La hoja del 210 se ensancha a propósito más allá de su columna: es una
+   tabla de cinco columnas y encerrada queda ilegible. Para eso usa 100vw.
+
+   Con el riel al lado, 100vw incluye los 244 px del riel, así que la
+   tabla se salía del panel y su cabecera pegajosa terminaba dibujada
+   encima de la lista de clientes. Aquí se le descuenta el riel. */
+.con-riel .hoja-envoltura {
+  width: min(1360px, calc(100vw - var(--riel-ancho) - 48px));
+  margin-left: calc((100% - min(1360px, 100vw - var(--riel-ancho) - 48px)) / 2);
+}
+
+@media (max-width: 1000px) {
+  /* Apilados, el riel ya no ocupa ancho: vuelve la cuenta original. */
+  .con-riel .hoja-envoltura {
+    width: min(1360px, calc(100vw - 48px));
+    margin-left: calc((100% - min(1360px, 100vw - 48px)) / 2);
+  }
+}

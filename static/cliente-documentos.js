@@ -169,7 +169,7 @@ function dibujarDocumento(documento) {
   const botonVer = document.createElement("button");
   botonVer.type = "button";
   botonVer.className = "boton-texto";
-  botonVer.textContent = "Ver";
+  botonVer.textContent = "Ver el documento";
   botonVer.addEventListener("click", function () {
     abrirVisor(documento);
   });
@@ -177,7 +177,7 @@ function dibujarDocumento(documento) {
   const botonEliminar = document.createElement("button");
   botonEliminar.type = "button";
   botonEliminar.className = "boton-texto boton-texto-peligro";
-  botonEliminar.textContent = "Eliminar";
+  botonEliminar.textContent = "Mover a la papelera";
   botonEliminar.addEventListener("click", function () {
     eliminarDocumentos([documento]);
   });
@@ -213,8 +213,8 @@ function refrescarSeleccionDocs() {
 
   botonEliminarDocs.disabled = cuantos === 0;
   botonEliminarDocs.textContent = cuantos === 0
-    ? "Eliminar los marcados"
-    : "Eliminar " + contar(cuantos, "documento", "documentos");
+    ? "Mover a la papelera los marcados"
+    : "Mover a la papelera " + contar(cuantos, "documento", "documentos");
 
   casillaTodosDocs.checked = total > 0 && cuantos === total;
   // "Algunos marcados": el cuadradito a medias, ni vacío ni con chulo.
@@ -266,13 +266,16 @@ async function eliminarDocumentos(elegidos) {
   const quien = clienteActual ? clienteActual.nombre : "este cliente";
 
   const seguro = await preguntar({
-    titulo: cuantos === 1 ? "Eliminar un documento" : "Eliminar documentos",
-    frase: "Se van a eliminar " + contar(cuantos, "archivo", "archivos") + ":",
+    titulo: cuantos === 1
+      ? "Mover un documento a la papelera"
+      : "Mover documentos a la papelera",
+    frase: "Se van a mover a la papelera " +
+           contar(cuantos, "archivo", "archivos") + ":",
     cliente: "Del expediente de " + quien,
     nombres: elegidos.map(function (d) { return d.nombre_original; }),
-    nota: "Los archivos salen del expediente y se van a la carpeta " +
+    nota: "Los archivos salen del expediente y quedan en la carpeta " +
           "datos/papelera de este computador, por si hubo un error. " +
-          "La eliminación queda anotada en el historial del cliente."
+          "El movimiento queda anotado en el historial del cliente."
   });
   if (!seguro) return;
 
@@ -293,8 +296,9 @@ async function eliminarDocumentos(elegidos) {
   const resultado = await respuesta.json();
   marcados = new Set();
 
-  let texto = "Se " + (resultado.borrados === 1 ? "eliminó " : "eliminaron ") +
-              contar(resultado.borrados, "documento", "documentos") + ".";
+  let texto = "Se movió a la papelera ";
+  if (resultado.borrados !== 1) texto = "Se movieron a la papelera ";
+  texto += contar(resultado.borrados, "documento", "documentos") + ".";
   if (resultado.ignorados > 0) {
     // Si esto pasa, la pantalla mandó ids que no eran de este cliente.
     // El servidor los rechazó, que es justamente para lo que está.

@@ -474,7 +474,7 @@ def probar(clave_proveedor, llave, base_url):
     Se pregunta por la lista de modelos, que es una petición de solo
     lectura: NO se manda ni un dato de ningún cliente. Sirve para que el
     contador sepa en el momento si quedó bien configurado, en vez de
-    descubrirlo cuando le escriba a Rentai.
+    descubrirlo cuando le escriba a RentAI.
     """
     proveedor = obtener(clave_proveedor)
 

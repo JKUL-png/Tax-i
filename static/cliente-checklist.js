@@ -37,11 +37,13 @@ function dibujarChecklist(renglones) {
   if (renglones.length === 0) {
     avance.textContent = "";
   } else if (faltan === 0) {
-    avance.textContent = "(completo: " + recibidos + " de " + renglones.length + ")";
+    avance.textContent = "no falta ninguno de " + renglones.length;
   } else {
+    /* Primero lo que falta: es la pregunta que el contador trae en la
+       cabeza cuando abre esta pantalla. */
     avance.textContent =
-      "(" + recibidos + " de " + renglones.length + " · falta" +
-      (faltan === 1 ? " 1" : "n " + faltan) + ")";
+      (faltan === 1 ? "falta 1" : "faltan " + faltan) +
+      " de " + renglones.length;
   }
 
   if (renglones.length === 0) {
@@ -110,10 +112,15 @@ function dibujarRenglon(renglon) {
   /* --- La etiqueta de estado --- */
   const etiqueta = document.createElement("span");
   if (renglon.estado === "recibido") {
-    etiqueta.className = "etiqueta etiqueta-exito";
+    /* Lo que ya llegó va en gris: la idea es que se apague. Antes iba en
+       verde y hacía ruido justo lo que ya estaba resuelto. */
+    etiqueta.className = "etiqueta etiqueta-neutra";
     etiqueta.textContent = "Recibido";
   } else {
-    etiqueta.className = "etiqueta etiqueta-alerta";
+    /* En rojo, igual que la raya del renglón. Estaba en ámbar y no
+       cuadraba: el renglón decía una cosa y la etiqueta otra. El ámbar
+       queda reservado para los plazos. */
+    etiqueta.className = "etiqueta etiqueta-error";
     etiqueta.textContent = "Falta";
   }
 

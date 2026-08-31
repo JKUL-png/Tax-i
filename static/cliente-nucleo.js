@@ -94,9 +94,11 @@ function pintarAvanceEnPerfil(renglones) {
   if (total === 0) {
     perfilFaltan.textContent = "sin checklist";
   } else if (faltantes.length === 0) {
-    perfilFaltan.textContent = "completo";
+    perfilFaltan.textContent = "no falta ninguno";
   } else {
-    perfilFaltan.textContent = contar(faltantes.length, "pendiente", "pendientes");
+    perfilFaltan.textContent = faltantes.length === 1
+      ? "falta 1 documento"
+      : "faltan " + faltantes.length + " documentos";
   }
 
   pintarFaltantes(faltantes);

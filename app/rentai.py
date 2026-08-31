@@ -1,26 +1,26 @@
 """
-Rentai: la asistente que conversa sobre un cliente y propone qué anotar.
+RentAI: la asistente que conversa sobre un cliente y propone qué anotar.
 
 Qué hace y qué NO hace
 ----------------------
-Rentai lee lo que ya está en el computador —los documentos del cliente, su
+RentAI lee lo que ya está en el computador —los documentos del cliente, su
 checklist, lo que ya se anotó en el formulario— y contesta preguntas sobre
 eso. Cuando encuentra una cifra en un documento, **propone** anotarla en
 una casilla de la plantilla. Propone: no escribe.
 
-Nada de lo que dice Rentai entra al archivo solo. El contador ve cada
+Nada de lo que dice RentAI entra al archivo solo. El contador ve cada
 propuesta con el documento de donde salió y decide si la anota. Es la
 regla del proyecto: todo dato que salga de una IA se muestra marcado como
 lectura automática y con un enlace al original.
 
-Rentai tampoco calcula impuestos, ni dice qué es deducible, ni sugiere
+RentAI tampoco calcula impuestos, ni dice qué es deducible, ni sugiere
 cómo declarar, ni afirma que alguien está obligado a declarar. Eso no es
 prudencia: es la línea legal del proyecto, y está escrita en las
 instrucciones que se le mandan al modelo y verificada aquí en el código.
 
 Qué sale de este computador
 ---------------------------
-Con IA_PROVEEDOR=ninguno (el valor por defecto) no sale nada y Rentai no
+Con IA_PROVEEDOR=ninguno (el valor por defecto) no sale nada y RentAI no
 funciona. Con la IA encendida, al servicio que el contador haya elegido
 le llega: el nombre del cliente, el texto de sus documentos, su checklist
 y la conversación. Los archivos NO se mandan: de un PDF se manda el texto
@@ -40,7 +40,7 @@ from app.configuracion import CONFIG
 from app.plantilla_210 import TIPO_CAPTURA
 
 # Cómo se llama. Está en una constante porque se ve en toda la pantalla.
-NOMBRE = "Rentai"
+NOMBRE = "RentAI"
 
 # Cuántos mensajes anteriores se le recuerdan. Más que esto no ayuda y
 # hace la conversación cara y lenta.
@@ -72,13 +72,13 @@ class RentaiFallo(Exception):
 # ---------------------------------------------------------------------------
 # Las instrucciones del modelo
 #
-# Esto es lo que Rentai "es". Se escribe en español porque en español
+# Esto es lo que RentAI "es". Se escribe en español porque en español
 # trabaja, y se le repiten las prohibiciones más de una vez a propósito:
 # es lo que más importa que no se le olvide.
 # ---------------------------------------------------------------------------
 
 INSTRUCCIONES = """\
-Eres Rentai, la asistente de un contador colombiano. Trabajas dentro de un
+Eres RentAI, la asistente de un contador colombiano. Trabajas dentro de un
 programa que vive en el computador de él y que organiza los documentos de
 sus clientes para la declaración de renta de personas naturales (Formulario
 210, año gravable 2025).
@@ -138,7 +138,7 @@ Si no hay nada que proponer, "propuestas" va vacío: [].
 
 
 # ---------------------------------------------------------------------------
-# Lo que Rentai sabe del cliente
+# Lo que RentAI sabe del cliente
 # ---------------------------------------------------------------------------
 
 # El texto de un documento no cambia, así que se recuerda en memoria y no
@@ -228,7 +228,7 @@ def catalogo_de_casillas():
 
 
 def contexto_del_cliente(cliente):
-    """Todo lo que Rentai necesita saber para contestar sobre este cliente."""
+    """Todo lo que RentAI necesita saber para contestar sobre este cliente."""
     cliente_id = cliente["id"]
 
     renglones = db.listar_checklist(cliente_id)
@@ -293,7 +293,7 @@ def probar_llave(llave, proveedor=None, base_url=None):
     Se pregunta por la lista de modelos, no por una conversación: es una
     petición de solo lectura que no manda ni un dato de ningún cliente.
     Sirve para que el contador pegue su llave nueva y sepa en el momento
-    si quedó bien, en vez de descubrirlo cuando le escriba a Rentai.
+    si quedó bien, en vez de descubrirlo cuando le escriba a RentAI.
     """
     return proveedores.probar(
         proveedor if proveedor is not None else CONFIG.proveedor,
@@ -372,9 +372,9 @@ def revisar_propuestas(crudas):
 
 
 def hablar(cliente, mensaje):
-    """Le manda un mensaje a Rentai y devuelve lo que contestó.
+    """Le manda un mensaje a RentAI y devuelve lo que contestó.
 
-    Guarda los dos mensajes (el del contador y el de Rentai) en el
+    Guarda los dos mensajes (el del contador y el de RentAI) en el
     historial de ese cliente, para que la conversación siga donde quedó.
     """
     if not CONFIG.ia_disponible:

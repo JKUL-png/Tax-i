@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" role="img" aria-label="Tax-i">
+  <!-- La misma marca en un solo color, para sellos, impresión y negativo.
+       currentColor: toma el color del texto donde se ponga. -->
+  <path fill="currentColor" fill-rule="evenodd" d="M6 3h13.5L29 12.5V26a3 3 0 0 1-3 3H6a3 3 0 0 1-3-3V6a3 3 0 0 1 3-3Zm3.2 9.9v5.2h4.4v-5.2H9.2Zm8.4 2.7-1.9 1.9 3.8 3.8 6-6.7-1.9-1.7-4.1 4.6-1.9-1.9Z"/>
+</svg>

@@ -5,6 +5,13 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Resumen del cliente · Tax-i</title>
   <link rel="stylesheet" href="/static/estilos.css">
+  <link rel="icon" href="/static/marca/favicon.svg" type="image/svg+xml">
+  <!-- marca.js primero: inicio.js le pide los gestos del logo.
+       Sin defer a propósito: inicio.js tiene que marcar el <html> antes
+       del primer pintado o se alcanza a ver la aplicación antes de la
+       portada. -->
+  <script src="/static/marca/marca.js"></script>
+  <script src="/static/marca/inicio.js"></script>
 </head>
 <body class="pagina-resumen">
 

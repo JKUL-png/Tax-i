@@ -179,7 +179,7 @@ def crear_tablas():
             " ON bitacora_210 (cliente_id)"
         )
 
-        # La conversación con Rentai, por cliente. Se guarda para que el
+        # La conversación con RentAI, por cliente. Se guarda para que el
         # contador pueda volver a leerla y para que la conversación siga
         # donde quedó cuando cierre y abra el programa.
         conexion.execute(
@@ -799,7 +799,7 @@ def guardar_ajuste(clave, valor):
 
 
 # ----------------------------------------------------------
-# La conversación con Rentai
+# La conversación con RentAI
 # ----------------------------------------------------------
 
 

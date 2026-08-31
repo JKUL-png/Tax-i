@@ -821,7 +821,7 @@ plegable.addEventListener("toggle", function () {
   }
 });
 
-/* Cuando Rentai anota una propuesta, la hoja y la lista se refrescan
+/* Cuando RentAI anota una propuesta, la hoja y la lista se refrescan
    solas: el contador no tiene por qué recargar la página. */
 document.addEventListener("valor-anotado", async function () {
   await cargarValores();

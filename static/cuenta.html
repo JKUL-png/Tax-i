@@ -5,13 +5,22 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Cuenta · Tax-i</title>
   <link rel="stylesheet" href="/static/estilos.css">
+  <link rel="icon" href="/static/marca/favicon.svg" type="image/svg+xml">
+  <!-- marca.js primero: inicio.js le pide los gestos del logo.
+       Sin defer a propósito: inicio.js tiene que marcar el <html> antes
+       del primer pintado o se alcanza a ver la aplicación antes de la
+       portada. -->
+  <script src="/static/marca/marca.js"></script>
+  <script src="/static/marca/inicio.js"></script>
 </head>
 <body>
+
+
 
   <header class="cabecera">
     <div class="contenedor">
       <h1 class="marca">
-        <a class="marca-enlace" href="/">Tax<span class="marca-i">-i</span></a>
+        <a class="marca-enlace" href="/"><svg class="marca-logo" viewBox="0 0 32 32" aria-hidden="true"><path class="marca-cara" d="M6 3h13.5L29 12.5V26a3 3 0 0 1-3 3H6a3 3 0 0 1-3-3V6a3 3 0 0 1 3-3Zm3.2 9.9v5.2h4.4v-5.2H9.2Zm8.4 2.7-1.9 1.9 3.8 3.8 6-6.7-1.9-1.7-4.1 4.6-1.9-1.9Z"/><path class="marca-pliegue" d="M19.5 3 29 12.5h-6.5a3 3 0 0 1-3-3V3Z"/></svg><span>Tax<span class="marca-i">-i</span></span></a>
       </h1>
       <p class="subtitulo">Cuenta y ajustes</p>
       <nav class="menu" aria-label="Secciones del programa">
@@ -66,7 +75,7 @@
               <input type="email" id="correo" autocomplete="off"
                      maxlength="120" placeholder="Ej: contacto@sudominio.com">
             </div>
-            <button type="submit" class="boton">Guardar</button>
+            <button type="submit" class="boton">Guardar los datos</button>
           </div>
           <p class="ayuda" style="margin-top:12px">
             Estos dos datos se quedan en este computador y hoy no se usan
@@ -80,7 +89,7 @@
 
     <!-- ---------- El servicio de IA ---------- -->
     <section class="seccion">
-      <h2>Rentai y el servicio de IA</h2>
+      <h2>RentAI y el servicio de IA</h2>
 
       <div class="tarjeta">
         <div id="aviso-ia" class="aviso oculto" role="alert"></div>
@@ -135,7 +144,7 @@
               <input type="password" id="llave" autocomplete="off"
                      spellcheck="false" placeholder="sk-…">
               <button type="button" class="boton-secundario" id="boton-ver">
-                Ver
+                Ver la llave
               </button>
             </div>
           </div>

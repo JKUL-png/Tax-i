@@ -1,11 +1,11 @@
 /* ==========================================================
-   Rentai: la barra de la asistente.
+   RentAI: la barra de la asistente.
 
    Cerrada es una pastilla con un texto que va cambiando solo. Al hacerle
    clic se abre la conversación, con el historial de lo que se ha hablado
    sobre este cliente. Se minimiza cuando estorbe.
 
-   Rentai propone; nunca anota sola. Cada propuesta sale con el documento
+   RentAI propone; nunca anota sola. Cada propuesta sale con el documento
    de donde salió y con dos botones: anotar o descartar.
 
    JavaScript plano, sin librerías.
@@ -297,7 +297,7 @@ function mostrarVacio() {
   globo.textContent = disponible
     ? "Pregúntele lo que quiera sobre este cliente: qué dice un documento,"
       + " qué falta, o dictele una cifra para que la anote."
-    : "Rentai está apagada. Todo lo demás del programa funciona igual.";
+    : "RentAI está apagada. Todo lo demás del programa funciona igual.";
   mensajes.appendChild(globo);
 }
 
@@ -312,7 +312,7 @@ async function enviar() {
 
   if (!disponible) {
     mostrarError(estado.textContent
-      || "Rentai está apagada en la configuración.");
+      || "RentAI está apagada en la configuración.");
     return;
   }
 
@@ -415,7 +415,7 @@ async function arrancar() {
   if (!disponible) {
     campoTexto.disabled = true;
     botonEnviar.disabled = true;
-    campoTexto.placeholder = "Rentai está apagada";
+    campoTexto.placeholder = "RentAI está apagada";
   }
 
   await cargarConversacion();
@@ -436,7 +436,7 @@ campoTexto.addEventListener("keydown", function (evento) {
 });
 botonLimpiar.addEventListener("click", async function () {
   const seguro = window.confirm(
-    "¿Borrar toda la charla con Rentai sobre este cliente?\n\n"
+    "¿Borrar toda la charla con RentAI sobre este cliente?\n\n"
     + "Los valores que ya anotó NO se borran."
   );
   if (!seguro) return;

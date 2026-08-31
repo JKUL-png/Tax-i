@@ -72,10 +72,10 @@ function pintar(datos) {
   const titulo = document.getElementById("estado-ia-titulo");
   const caja = document.getElementById("estado-ia");
   if (datos.ia_disponible) {
-    titulo.textContent = "Rentai está encendida";
+    titulo.textContent = "RentAI está encendida";
     caja.className = "estado-ia estado-ia-encendida";
   } else {
-    titulo.textContent = "Rentai está apagada";
+    titulo.textContent = "RentAI está apagada";
     caja.className = "estado-ia";
   }
   document.getElementById("estado-ia-motivo").textContent = datos.motivo;
@@ -331,7 +331,7 @@ document.getElementById("boton-guardar-ia")
 
 document.getElementById("boton-quitar")
   .addEventListener("click", async function () {
-    if (!confirm("¿Borrar la llave guardada? Rentai queda apagada hasta que "
+    if (!confirm("¿Borrar la llave guardada? RentAI queda apagada hasta que "
                  + "ponga otra.")) {
       return;
     }

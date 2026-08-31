@@ -224,11 +224,12 @@ function dibujarCliente(cliente) {
     avanceCliente.textContent = "Sin checklist";
     avanceCliente.classList.add("avance-neutro");
   } else if (recibidos === total) {
-    avanceCliente.textContent = "Completo: " + recibidos + " de " + total;
+    avanceCliente.textContent = "no falta ninguno de " + total;
     avanceCliente.classList.add("avance-completo");
   } else {
+    const faltan = total - recibidos;
     avanceCliente.textContent =
-      recibidos + " de " + total + " · faltan " + (total - recibidos);
+      (faltan === 1 ? "falta 1" : "faltan " + faltan) + " de " + total;
     avanceCliente.classList.add("avance-pendiente");
   }
 
@@ -276,25 +277,50 @@ function dibujarCliente(cliente) {
   const acciones = document.createElement("div");
   acciones.className = "cliente-acciones";
 
-  const enlaceDocumentos = document.createElement("a");
-  enlaceDocumentos.className = "boton-texto";
-  enlaceDocumentos.href = "/cliente?id=" + cliente.id;
-  enlaceDocumentos.textContent = "Documentos";
-  acciones.appendChild(enlaceDocumentos);
-
   const botonEliminar = document.createElement("button");
   botonEliminar.type = "button";
   botonEliminar.className = "boton-texto boton-texto-peligro";
-  botonEliminar.textContent = "Eliminar";
+  botonEliminar.textContent = "Eliminar el cliente";
   botonEliminar.addEventListener("click", function () {
     eliminarCliente(cliente);
   });
 
   acciones.appendChild(botonEliminar);
 
+  /* --- La fila entera abre el cliente ---
+
+     Antes había que apuntarle a un enlace que decía "Documentos", al
+     borde derecho de una fila de 1200px de ancho. Ahora se hace clic en
+     cualquier parte del renglón.
+
+     El nombre sigue siendo un enlace de verdad, y eso importa: es lo que
+     permite llegar con el tabulador, abrir en otra pestaña con el botón
+     de en medio y ver a dónde va antes de apretar. El clic en la fila es
+     la comodidad; el enlace es el camino de verdad.
+
+     La flecha del borde derecho está siempre puesta, no aparece al pasar
+     el mouse: en este programa nada se esconde. */
+  const flecha = document.createElement("span");
+  flecha.className = "cliente-flecha";
+  flecha.setAttribute("aria-hidden", "true");
+  flecha.textContent = "\u2192";
+
+  tarjeta.classList.add("cliente-enlazado");
+  tarjeta.addEventListener("click", function (evento) {
+    /* Si el clic cayó sobre algo que ya hace lo suyo —la fecha, el botón
+       de eliminar, el propio enlace del nombre— no se hace nada más. Sin
+       esto, cambiar una fecha abriría el cliente. */
+    if (evento.target.closest("a, button, input, select, textarea, label")) return;
+    /* Y si el contador está seleccionando texto para copiarlo, tampoco. */
+    const seleccion = window.getSelection();
+    if (seleccion && String(seleccion).length > 0) return;
+    window.location.href = "/cliente?id=" + cliente.id;
+  });
+
   tarjeta.appendChild(datos);
   tarjeta.appendChild(bloqueFecha);
   tarjeta.appendChild(acciones);
+  tarjeta.appendChild(flecha);
   return tarjeta;
 }
 
@@ -362,8 +388,8 @@ async function guardarFecha(idCliente, fecha) {
 async function eliminarCliente(cliente) {
   const seguro = confirm(
     "¿Eliminar a " + cliente.nombre + "?\n\n" +
-    "Se borran también todos sus documentos del computador. " +
-    "Esta acción no se puede deshacer."
+    "Se borran también todos sus documentos del computador, y estos NO " +
+    "van a la papelera. Esta acción no se puede deshacer."
   );
   if (!seguro) return;
 
