@@ -28,11 +28,68 @@
     <!-- Cómo está configurado el programa. Lo llena cliente.js. -->
     <div id="aviso-modo" class="aviso-modo oculto"></div>
 
-    <!-- ---------- Quién es el cliente ---------- -->
+    <!-- ---------- Quién es el cliente ----------
+         La foto de conjunto: quién es, cuándo vence, cuánto le falta y
+         qué se puede hacer, todo antes de bajar a ninguna sección. -->
     <section class="seccion">
-      <div class="tarjeta">
-        <h2 id="nombre-cliente">Cargando…</h2>
-        <p id="datos-cliente" class="cliente-cedula"></p>
+      <div class="tarjeta perfil">
+
+        <div class="perfil-arriba">
+          <div class="perfil-quien">
+            <h2 id="nombre-cliente">Cargando…</h2>
+            <p id="datos-cliente" class="cliente-cedula"></p>
+          </div>
+
+          <!-- Pasar al cliente anterior o al siguiente sin volver a la
+               lista. En temporada se revisan de corrido. -->
+          <nav class="perfil-vecinos" aria-label="Otros clientes">
+            <a class="boton-texto oculto" id="cliente-anterior" href="#"
+               title="Cliente anterior">← Anterior</a>
+            <span class="perfil-posicion cifra" id="perfil-posicion"></span>
+            <a class="boton-texto oculto" id="cliente-siguiente" href="#"
+               title="Cliente siguiente">Siguiente →</a>
+          </nav>
+        </div>
+
+        <!-- Las tres cifras que se miran de un vistazo -->
+        <div class="perfil-cifras">
+          <div class="perfil-cifra">
+            <span class="cuenta-rotulo">Vencimiento</span>
+            <span class="perfil-valor" id="perfil-fecha">—</span>
+            <span class="etiqueta etiqueta-neutra" id="perfil-plazo">Sin fecha</span>
+          </div>
+
+          <div class="perfil-cifra">
+            <span class="cuenta-rotulo">Checklist</span>
+            <span class="perfil-valor cifra" id="perfil-avance">—</span>
+            <span class="perfil-nota" id="perfil-faltan"></span>
+          </div>
+
+          <div class="perfil-cifra">
+            <span class="cuenta-rotulo">Documentos</span>
+            <span class="perfil-valor cifra" id="perfil-documentos">—</span>
+            <span class="perfil-nota">recibidos</span>
+          </div>
+        </div>
+
+        <!-- Lo que falta, destacado. Si no falta nada, no aparece. -->
+        <div id="perfil-pendientes" class="perfil-pendientes oculto">
+          <p class="perfil-pendientes-titulo">Todavía falta:</p>
+          <ul id="perfil-lista-faltantes" class="perfil-lista-faltantes"></ul>
+        </div>
+
+        <!-- Las acciones directas, sin buscarlas por la pantalla -->
+        <div class="perfil-acciones">
+          <button type="button" class="boton" id="perfil-subir">
+            Subir documentos
+          </button>
+          <button type="button" class="boton-secundario" id="perfil-mensaje">
+            Mensaje de lo que falta
+          </button>
+          <button type="button" class="boton-secundario" id="perfil-exportar">
+            Exportar el resumen
+          </button>
+        </div>
       </div>
     </section>
 
@@ -100,6 +157,50 @@
                multiple class="oculto">
       </div>
 
+      <!-- ---------- Zona de revisión ----------
+           Los archivos que se arrastran caen AQUÍ, no en el expediente.
+           Nada se sube hasta que el contador le dé a "Confirmar carga".
+           Mientras tanto puede quitar lo que no quería mandar. -->
+      <div id="revision-carga" class="revision-carga oculto">
+        <div class="revision-cabeza">
+          <h3 class="revision-titulo">
+            Por revisar <span id="revision-conteo" class="conteo"></span>
+          </h3>
+          <p class="ayuda revision-ayuda">
+            Todavía no se ha subido nada. Revise la lista y quite lo que no
+            va antes de confirmar.
+          </p>
+        </div>
+
+        <div class="revision-barra">
+          <label class="marca-todos">
+            <input type="checkbox" id="revision-todos">
+            <span id="revision-seleccion">Marcar todos</span>
+          </label>
+          <div class="revision-barra-botones">
+            <button type="button" class="boton-texto boton-texto-peligro"
+                    id="revision-quitar-marcados" disabled>
+              Quitar los marcados
+            </button>
+            <button type="button" class="boton-texto boton-texto-peligro"
+                    id="revision-quitar-todos">
+              Quitar todos
+            </button>
+          </div>
+        </div>
+
+        <ul id="revision-lista" class="revision-lista"></ul>
+
+        <div id="revision-descartados" class="revision-descartados oculto"></div>
+
+        <div class="revision-confirmar">
+          <button type="button" class="boton" id="revision-confirmar">
+            Confirmar carga
+          </button>
+          <p class="ayuda" id="revision-resumen-peso"></p>
+        </div>
+      </div>
+
       <div id="progreso" class="progreso oculto">
         <p id="progreso-texto">Subiendo…</p>
       </div>
@@ -113,7 +214,25 @@
     <section class="seccion">
       <details class="plegable" id="plegable-documentos">
         <summary class="plegable-titulo"><h2>Documentos recibidos <span id="conteo" class="conteo"></span></h2></summary>
-        <div class="plegable-cuerpo">      <div id="lista-documentos" class="lista">
+        <div class="plegable-cuerpo">
+
+      <div id="aviso-documentos" class="aviso oculto" role="alert"></div>
+
+      <!-- Selección múltiple. Solo aparece cuando hay documentos. -->
+      <div id="barra-documentos" class="revision-barra oculto">
+        <label class="marca-todos">
+          <input type="checkbox" id="documentos-todos">
+          <span id="documentos-seleccion">Marcar todos</span>
+        </label>
+        <div class="revision-barra-botones">
+          <button type="button" class="boton-texto boton-texto-peligro"
+                  id="documentos-eliminar" disabled>
+            Eliminar los marcados
+          </button>
+        </div>
+      </div>
+
+      <div id="lista-documentos" class="lista">
         <div class="vacio">Cargando…</div>
       </div>
 </div>
@@ -283,6 +402,26 @@
       </details>
     </section>
 
+    <!-- ---------- Historial de actividad ----------
+         Qué se subió, qué se marcó y qué se borró, con su fecha. Es lo
+         que contesta cuando algo no cuadra en plena temporada. -->
+    <section class="seccion">
+      <details class="plegable" id="plegable-historial">
+        <summary class="plegable-titulo">
+          <h2>Historial de actividad <span id="conteo-historial" class="conteo"></span></h2>
+        </summary>
+        <div class="plegable-cuerpo">
+          <p class="ayuda" style="margin-top:0">
+            Todo queda anotado en este computador. El historial se borra
+            junto con el cliente y nunca sale de aquí.
+          </p>
+          <ol id="lista-actividad" class="lista-actividad">
+            <li class="vacio">Cargando…</li>
+          </ol>
+        </div>
+      </details>
+    </section>
+
     <!-- ---------- Exportar ---------- -->
     <section class="seccion">
       <details class="plegable" id="plegable-exportar">
@@ -338,6 +477,36 @@
 
   <!-- ---------- Visor de documentos ----------
        Se abre encima de la pantalla al hacer clic en "Ver". -->
+  <!-- ---------- Confirmar un borrado ----------
+       No es el confirm() del navegador a propósito: aquí hay que poder
+       decir CUÁNTOS archivos y DE QUÉ CLIENTE, con los nombres a la
+       vista. Borrar los soportes de un cliente en temporada es un daño
+       real, y la pantalla tiene que dejarlo clarísimo antes de hacerlo. -->
+  <div id="confirmar" class="visor oculto" role="dialog" aria-modal="true"
+       aria-labelledby="confirmar-titulo">
+    <div class="visor-caja confirmar-caja">
+      <div class="visor-barra">
+        <p id="confirmar-titulo" class="visor-titulo">Confirmar</p>
+      </div>
+
+      <div class="confirmar-cuerpo">
+        <p id="confirmar-frase" class="confirmar-frase"></p>
+        <p id="confirmar-cliente" class="confirmar-cliente"></p>
+        <ul id="confirmar-lista" class="confirmar-lista"></ul>
+        <p class="ayuda" id="confirmar-nota"></p>
+      </div>
+
+      <div class="confirmar-botones">
+        <button type="button" class="boton-secundario" id="confirmar-no">
+          Cancelar
+        </button>
+        <button type="button" class="boton boton-peligro" id="confirmar-si">
+          Sí, eliminar
+        </button>
+      </div>
+    </div>
+  </div>
+
   <div id="visor" class="visor oculto" role="dialog" aria-modal="true"
        aria-labelledby="visor-titulo">
     <div class="visor-caja">
@@ -403,8 +572,18 @@
     </div>
   </div>
 
-  <script src="/static/cliente.js"></script>
+  <!-- El orden importa: comun.js define lo que usan todos, y el núcleo
+       define el id del cliente y los avisos que necesitan los demás.
+       Antes esto era un solo archivo de 1.100 líneas con ocho pantallas
+       adentro; se partió por asunto en agosto de 2026. -->
+  <script src="/static/comun.js"></script>
+  <script src="/static/cliente-nucleo.js"></script>
+  <script src="/static/cliente-checklist.js"></script>
+  <script src="/static/cliente-documentos.js"></script>
+  <script src="/static/cliente-subir.js"></script>
+  <script src="/static/cliente-exportar.js"></script>
   <script src="/static/formulario.js"></script>
   <script src="/static/rentai.js"></script>
+  <script src="/static/cliente-arranque.js"></script>
 </body>
 </html>

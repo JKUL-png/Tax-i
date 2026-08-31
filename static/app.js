@@ -17,72 +17,148 @@ const aviso = document.getElementById("aviso");
    Avisos arriba del formulario
    ---------------------------------------------------------- */
 
-let temporizadorAviso = null;
-
-function mostrarAviso(texto, tipo) {
-  aviso.textContent = texto;
-  aviso.className = "aviso aviso-" + tipo;
-  clearTimeout(temporizadorAviso);
-  // Los mensajes de éxito se van solos; los de error se quedan.
-  if (tipo === "exito") {
-    temporizadorAviso = setTimeout(ocultarAviso, 4000);
-  }
-}
-
-function ocultarAviso() {
-  aviso.className = "aviso oculto";
-  aviso.textContent = "";
-}
+/* El cómo está en comun.js. Aquí solo se dice en cuál caja. */
+function mostrarAviso(texto, tipo) { avisarEn(aviso, texto, tipo); }
+function ocultarAviso() { ocultarAvisoEn(aviso); }
 
 
 /* ----------------------------------------------------------
-   Fechas
+   Buscar, ordenar y filtrar
+
+   La lista completa llega en una sola petición, así que todo esto se
+   hace aquí en el navegador: es inmediato y no molesta al servidor.
    ---------------------------------------------------------- */
 
-/* Convierte "2026-10-14" en "14 de octubre de 2026". */
-const MESES = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio",
-               "agosto", "septiembre", "octubre", "noviembre", "diciembre"];
+const campoBuscar = document.getElementById("buscar-cliente");
+const selectorOrden = document.getElementById("orden-clientes");
+const cajaFiltros = document.getElementById("filtro-estado");
+const resumenFiltro = document.getElementById("resumen-filtro");
+const conteoClientes = document.getElementById("conteo-clientes");
 
-function fechaEnPalabras(texto) {
-  const [anio, mes, dia] = texto.split("-").map(Number);
-  return dia + " de " + MESES[mes - 1] + " de " + anio;
+/* Cuántos días adelante cuentan como "vence pronto". Quince es el mismo
+   número con el que la etiqueta de plazo se pone ámbar, para que el
+   filtro y el color digan lo mismo. */
+const DIAS_QUE_SON_PRONTO = 15;
+
+/* Todos los clientes tal como llegaron, sin filtrar. */
+let todosLosClientes = [];
+let estadoElegido = "todos";
+
+/* Quita tildes y mayúsculas para poder buscar "Maria" y encontrar
+   "María". En una lista de nombres colombianos esto no es un lujo. */
+function parejo(texto) {
+  return (texto || "")
+    .toString()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .trim();
 }
 
-/* Cuántos días faltan. Compara solo fechas, sin horas. */
-function diasQueFaltan(texto) {
-  const [anio, mes, dia] = texto.split("-").map(Number);
-  const vencimiento = new Date(anio, mes - 1, dia);
-  const hoy = new Date();
-  hoy.setHours(0, 0, 0, 0);
-  return Math.round((vencimiento - hoy) / 86400000);
+function cuantoFalta(cliente) {
+  const total = cliente.checklist_total || 0;
+  const recibidos = cliente.checklist_recibidos || 0;
+  return total - recibidos;
 }
 
-/* Devuelve el texto y el color de la etiqueta de plazo. */
-function etiquetaDePlazo(fecha) {
-  if (!fecha) {
-    return { texto: "Sin fecha", clase: "etiqueta-neutra" };
-  }
-
-  const dias = diasQueFaltan(fecha);
-
-  if (dias < 0) {
-    const pasados = Math.abs(dias);
-    return {
-      texto: "Venció hace " + pasados + (pasados === 1 ? " día" : " días"),
-      clase: "etiqueta-error"
-    };
-  }
-  if (dias === 0) {
-    return { texto: "Vence hoy", clase: "etiqueta-error" };
-  }
-  if (dias <= 15) {
-    return {
-      texto: "Faltan " + dias + (dias === 1 ? " día" : " días"),
-      clase: "etiqueta-alerta"
-    };
-  }
-  return { texto: "Faltan " + dias + " días", clase: "etiqueta-exito" };
+function estaCompleto(cliente) {
+  const total = cliente.checklist_total || 0;
+  return total > 0 && cuantoFalta(cliente) === 0;
 }
+
+function vencePronto(cliente) {
+  if (!cliente.fecha_vencimiento) return false;
+  // Los vencidos también entran: son los más urgentes de todos.
+  return diasQueFaltan(cliente.fecha_vencimiento) <= DIAS_QUE_SON_PRONTO;
+}
+
+function filtrarYOrdenar() {
+  const busqueda = parejo(campoBuscar.value);
+
+  let lista = todosLosClientes.filter(function (cliente) {
+    if (busqueda) {
+      const nombre = parejo(cliente.nombre);
+      const digitos = cliente.dos_digitos || "";
+      if (nombre.indexOf(busqueda) === -1 && digitos.indexOf(busqueda) === -1) {
+        return false;
+      }
+    }
+    if (estadoElegido === "completos") return estaCompleto(cliente);
+    if (estadoElegido === "incompletos") return !estaCompleto(cliente);
+    if (estadoElegido === "pronto") return vencePronto(cliente);
+    return true;
+  });
+
+  lista = lista.slice().sort(comparadores[selectorOrden.value] || comparadores.vencimiento);
+
+  dibujarLista(lista);
+  contarLoQueSeVe(lista.length);
+}
+
+/* Compara nombres como los ordenaría una persona: sin importar tildes
+   ni mayúsculas, y con la ñ en su sitio. */
+function porNombre(a, b) {
+  return a.nombre.localeCompare(b.nombre, "es", { sensitivity: "base" });
+}
+
+const comparadores = {
+  vencimiento: function (a, b) {
+    // Los que no tienen fecha van al final: lo urgente primero.
+    if (!a.fecha_vencimiento && !b.fecha_vencimiento) return porNombre(a, b);
+    if (!a.fecha_vencimiento) return 1;
+    if (!b.fecha_vencimiento) return -1;
+    if (a.fecha_vencimiento !== b.fecha_vencimiento) {
+      return a.fecha_vencimiento < b.fecha_vencimiento ? -1 : 1;
+    }
+    return porNombre(a, b);
+  },
+
+  nombre: porNombre,
+
+  faltantes: function (a, b) {
+    // Más faltantes primero: son los que hay que perseguir.
+    const diferencia = cuantoFalta(b) - cuantoFalta(a);
+    return diferencia !== 0 ? diferencia : porNombre(a, b);
+  }
+};
+
+function contarLoQueSeVe(cuantos) {
+  const total = todosLosClientes.length;
+  conteoClientes.textContent = total > 0 ? "(" + total + ")" : "";
+
+  if (total === 0) { resumenFiltro.textContent = ""; return; }
+
+  if (cuantos === total) {
+    // Sin filtro puesto no hace falta decir nada, salvo lo que importa:
+    // cuántos tienen algo pendiente y vencen pronto.
+    const urgentes = todosLosClientes.filter(function (c) {
+      return vencePronto(c) && !estaCompleto(c);
+    }).length;
+    resumenFiltro.textContent = urgentes === 0
+      ? ""
+      : "Atención: " + contar(urgentes, "cliente tiene", "clientes tienen") +
+        " documentos pendientes y vencimiento a menos de " +
+        DIAS_QUE_SON_PRONTO + " días.";
+    return;
+  }
+
+  resumenFiltro.textContent =
+    "Mostrando " + cuantos + " de " + contar(total, "cliente", "clientes") + ".";
+}
+
+campoBuscar.addEventListener("input", filtrarYOrdenar);
+selectorOrden.addEventListener("change", filtrarYOrdenar);
+
+cajaFiltros.addEventListener("click", function (evento) {
+  const boton = evento.target.closest(".filtro");
+  if (!boton) return;
+
+  estadoElegido = boton.dataset.estado;
+  cajaFiltros.querySelectorAll(".filtro").forEach(function (uno) {
+    uno.classList.toggle("filtro-activo", uno === boton);
+  });
+  filtrarYOrdenar();
+});
 
 
 /* ----------------------------------------------------------
@@ -95,7 +171,9 @@ function dibujarLista(clientes) {
   if (clientes.length === 0) {
     const vacio = document.createElement("div");
     vacio.className = "vacio";
-    vacio.textContent = "Todavía no hay clientes. Agregue el primero arriba.";
+    vacio.textContent = todosLosClientes.length === 0
+      ? "Todavía no hay clientes. Agregue el primero arriba."
+      : "Ningún cliente coincide con lo que buscó.";
     contenedorLista.appendChild(vacio);
     return;
   }
@@ -225,28 +303,14 @@ function dibujarCliente(cliente) {
    Conversación con el servidor
    ---------------------------------------------------------- */
 
-/* Saca el mensaje de error que manda el servidor, en lenguaje entendible. */
-async function textoDelError(respuesta) {
-  try {
-    const cuerpo = await respuesta.json();
-    if (typeof cuerpo.detail === "string") {
-      return cuerpo.detail;
-    }
-    // Errores de validación: FastAPI los manda como lista.
-    if (Array.isArray(cuerpo.detail) && cuerpo.detail.length > 0) {
-      return cuerpo.detail[0].msg.replace("Value error, ", "");
-    }
-  } catch (e) {
-    // Si la respuesta no era JSON, se usa el mensaje genérico de abajo.
-  }
-  return "No se pudo completar la operación.";
-}
-
 async function cargarClientes() {
   try {
     const respuesta = await fetch("/api/clientes");
     if (!respuesta.ok) throw new Error();
-    dibujarLista(await respuesta.json());
+    todosLosClientes = await respuesta.json();
+    // Se dibuja pasando por el filtro para no perder lo que el contador
+    // tuviera buscando o filtrado cuando cambió algo de la lista.
+    filtrarYOrdenar();
   } catch (e) {
     contenedorLista.innerHTML =
       '<div class="vacio">No se pudo conectar con el servidor. ' +
@@ -352,15 +416,8 @@ const NOMBRES_DE_CAMPO = {
 };
 
 
-function mostrarAvisoImportar(texto, tipo) {
-  avisoImportar.textContent = texto;
-  avisoImportar.className = "aviso aviso-" + tipo;
-}
-
-function ocultarAvisoImportar() {
-  avisoImportar.className = "aviso oculto";
-  avisoImportar.textContent = "";
-}
+function mostrarAvisoImportar(texto, tipo) { avisarEn(avisoImportar, texto, tipo); }
+function ocultarAvisoImportar() { ocultarAvisoEn(avisoImportar); }
 
 function cerrarRevision() {
   revision.className = "revision oculto";
@@ -567,3 +624,122 @@ botonCancelar.addEventListener("click", function () {
   cerrarRevision();
   ocultarAvisoImportar();
 });
+
+
+/* ----------------------------------------------------------
+   Acciones sobre todos los clientes de una vez
+
+   Después de importar 150 clientes de un Excel, dejarlos en el punto de
+   partida uno por uno son 150 visitas. Estos dos botones lo hacen de un
+   golpe, y los dos respetan lo que el contador ya haya puesto a mano.
+   ---------------------------------------------------------- */
+
+const avisoLote = document.getElementById("aviso-lote");
+const botonListaBase = document.getElementById("boton-lista-base");
+const botonVencimientos = document.getElementById("boton-vencimientos");
+
+botonListaBase.addEventListener("click", async function () {
+  const sinChecklist = todosLosClientes.filter(function (c) {
+    return (c.checklist_total || 0) === 0;
+  }).length;
+
+  if (sinChecklist === 0) {
+    avisarEn(avisoLote, "Todos los clientes ya tienen checklist.", "exito");
+    return;
+  }
+
+  const seguro = confirm(
+    "Se le va a poner la lista base del checklist a " +
+    contar(sinChecklist, "cliente", "clientes") + ".\n\n" +
+    "A los que ya tienen checklist no se les toca nada."
+  );
+  if (!seguro) return;
+
+  this.disabled = true;
+  try {
+    const respuesta = await fetch("/api/clientes/lote/checklist-base", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({})
+    });
+    if (!respuesta.ok) {
+      avisarEn(avisoLote, await textoDelError(respuesta), "error");
+      return;
+    }
+    const r = await respuesta.json();
+    avisarEn(avisoLote,
+      "Listo: " + contar(r.puestos, "cliente quedó", "clientes quedaron") +
+      " con la lista base de " + r.renglones + " renglones." +
+      (r.saltados > 0
+        ? " " + contar(r.saltados, "ya tenía", "ya tenían") + " checklist y no se tocaron."
+        : ""),
+      "exito");
+    cargarClientes();
+  } catch (e) {
+    avisarEn(avisoLote, "No se pudo conectar con el servidor.", "error");
+  } finally {
+    this.disabled = false;
+  }
+});
+
+botonVencimientos.addEventListener("click", async function () {
+  const sinFecha = todosLosClientes.filter(function (c) {
+    return !c.fecha_vencimiento;
+  }).length;
+
+  const seguro = confirm(
+    "Se le va a poner la fecha del calendario oficial a " +
+    contar(sinFecha, "cliente", "clientes") + " que no tiene fecha.\n\n" +
+    "La fecha sale de la tabla del calendario que está cargada en el " +
+    "programa, según los dos últimos dígitos de la cédula.\n\n" +
+    "A los que ya tienen fecha no se les toca: esa la puso usted."
+  );
+  if (!seguro) return;
+
+  this.disabled = true;
+  try {
+    const respuesta = await fetch("/api/clientes/lote/vencimientos", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({})
+    });
+    if (!respuesta.ok) {
+      avisarEn(avisoLote, await textoDelError(respuesta), "error");
+      return;
+    }
+    const r = await respuesta.json();
+    let texto = "Listo: " + contar(r.puestas, "fecha puesta", "fechas puestas") +
+                " del calendario del año gravable " + r.anio + ".";
+    if (r.respetadas > 0) {
+      texto += " " + contar(r.respetadas, "cliente ya tenía", "clientes ya tenían") +
+               " su fecha y no se tocaron.";
+    }
+    if (r.sin_fecha > 0) {
+      texto += " " + contar(r.sin_fecha, "cliente no está", "clientes no están") +
+               " en la tabla.";
+    }
+    avisarEn(avisoLote, texto, "exito");
+    cargarClientes();
+  } catch (e) {
+    avisarEn(avisoLote, "No se pudo conectar con el servidor.", "error");
+  } finally {
+    this.disabled = false;
+  }
+});
+
+/* El botón de vencimientos solo aparece si hay tabla cargada. Sin ella
+   no haría nada, y un botón que no hace nada es peor que no tenerlo. */
+(async function mirarSiHayTabla() {
+  try {
+    const respuesta = await fetch("/api/vencimientos");
+    if (!respuesta.ok) return;
+    const datos = await respuesta.json();
+    if (datos.hay_tabla) {
+      botonVencimientos.classList.remove("oculto");
+      botonVencimientos.textContent =
+        "Poner los vencimientos del calendario " + datos.anio;
+    }
+  } catch (e) {
+    // Sin respuesta, el botón se queda escondido. No es crítico.
+  }
+})();

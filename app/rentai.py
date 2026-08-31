@@ -20,36 +20,27 @@ instrucciones que se le mandan al modelo y verificada aquí en el código.
 
 Qué sale de este computador
 ---------------------------
-Con SIN_IA=true (el valor por defecto) no sale nada y Rentai no funciona.
-Con la IA encendida, a Groq le llega: el nombre del cliente, el texto de
-sus documentos, su checklist y la conversación. Los archivos NO se mandan:
-de un PDF se manda el texto que se extrajo aquí, nunca el archivo.
+Con IA_PROVEEDOR=ninguno (el valor por defecto) no sale nada y Rentai no
+funciona. Con la IA encendida, al servicio que el contador haya elegido
+le llega: el nombre del cliente, el texto de sus documentos, su checklist
+y la conversación. Los archivos NO se mandan: de un PDF se manda el texto
+que se extrajo aquí, nunca el archivo.
 
-Se eligió Groq porque su capa gratis no cobra ni pide tarjeta y porque se
-compromete a no entrenar modelos con lo que uno le manda ni a guardarlo.
-Se descartó la capa gratis de Gemini justamente por lo contrario.
+Con cuál servicio se habla lo decide el contador en la pantalla de
+Cuenta, y con eso decide también a quién le está confiando esos textos.
+Si elige Ollama, el modelo corre en este mismo computador y no sale
+nada tampoco. Lo que cambia de un servicio a otro está en
+app/proveedores.py; aquí no se sabe con cuál se está hablando.
 """
 
 import json
-import urllib.error
-import urllib.request
 
-from app import db, documentos, formulario, lectura
-from app.configuracion import CONFIG, SERVICIO
+from app import db, documentos, formulario, lectura, proveedores
+from app.configuracion import CONFIG
 from app.plantilla_210 import TIPO_CAPTURA
 
 # Cómo se llama. Está en una constante porque se ve en toda la pantalla.
 NOMBRE = "Rentai"
-
-# Cómo se presenta el programa ante el servicio.
-IDENTIFICACION = "asistente-renta/1.0"
-
-# La lista de modelos del servicio. Se usa solo para probar una llave: es
-# una consulta de solo lectura, sin ningún dato de ningún cliente adentro.
-SERVICIO_MODELOS = SERVICIO.replace("/chat/completions", "/models")
-
-# Cuánto se espera a que conteste antes de darse por vencido.
-SEGUNDOS_DE_ESPERA = 60
 
 # Cuántos mensajes anteriores se le recuerdan. Más que esto no ayuda y
 # hace la conversación cara y lenta.
@@ -57,11 +48,12 @@ MENSAJES_QUE_RECUERDA = 8
 
 # Cuántos documentos del cliente se le mandan, y cuánto texto de cada uno.
 #
-# Estos números no son al azar: la capa gratis de Groq deja pasar 8.000
-# tokens por minuto, que son unas 32.000 letras contando ida y vuelta. En
-# ese presupuesto tienen que caber las instrucciones, el catálogo de
-# casillas, los documentos y la conversación. Si se agranda esto, empieza
-# a rebotar con "servicio ocupado".
+# Estos números no son al azar: las capas gratis de estos servicios
+# suelen dejar pasar unos 8.000 tokens por minuto, que son unas 32.000
+# letras contando ida y vuelta. En ese presupuesto tienen que caber las
+# instrucciones, el catálogo de casillas, los documentos y la
+# conversación. Si se agranda esto, empieza a rebotar con "servicio
+# ocupado" en el servicio más apretado.
 DOCUMENTOS_QUE_SE_MANDAN = 6
 LETRAS_POR_DOCUMENTO = 1000
 
@@ -282,112 +274,32 @@ Solo puedes proponer casillas de esta lista, con el código exacto.
 # ---------------------------------------------------------------------------
 
 
-def _llamar_al_servicio(mensajes, modelo, llave):
-    """Le manda la conversación al servicio y devuelve el texto que contestó.
+def _llamar_al_servicio(mensajes, config=CONFIG):
+    """Le manda la conversación al servicio elegido y devuelve su texto.
 
-    Se usa urllib, que viene con Python: una dependencia menos que se
-    puede romper al instalar en el computador del contador.
+    De con CUÁL servicio se habla, y de cómo se le habla, se encarga
+    app/proveedores.py. Aquí solo se traducen sus errores al error que
+    la pantalla ya sabe mostrar.
     """
-    cuerpo = json.dumps({
-        "model": modelo,
-        "messages": mensajes,
-        # Que conteste JSON y no un párrafo con el JSON adentro.
-        "response_format": {"type": "json_object"},
-        # Temperatura baja: aquí no se quiere creatividad, se quiere que
-        # copie bien una cifra de un papel.
-        "temperature": 0.1,
-    }).encode("utf-8")
-
-    peticion = urllib.request.Request(
-        SERVICIO,
-        data=cuerpo,
-        headers={
-            "Content-Type": "application/json",
-            "Authorization": f"Bearer {llave}",
-            # Sin esto no funciona: Python se presenta como
-            # "Python-urllib/3.x" y el servicio lo rechaza con un 403 de
-            # Cloudflare (error 1010) creyendo que es un robot. Basta con
-            # que el programa diga cómo se llama.
-            "User-Agent": IDENTIFICACION,
-        },
-        method="POST",
-    )
-
     try:
-        with urllib.request.urlopen(peticion, timeout=SEGUNDOS_DE_ESPERA) as r:
-            respuesta = json.loads(r.read().decode("utf-8"))
-    except urllib.error.HTTPError as error:
-        if error.code == 401:
-            raise RentaiFallo(
-                "La llave de la IA no sirve. Cámbiela en la pantalla de"
-                " Cuenta."
-            )
-        if error.code == 429:
-            raise RentaiFallo(
-                "El servicio gratis está ocupado en este momento. Espere un"
-                " minuto y vuelva a intentar."
-            )
-        raise RentaiFallo(
-            f"El servicio de IA contestó con un error ({error.code})."
-        )
-    except urllib.error.URLError:
-        raise RentaiFallo(
-            "No hay conexión a internet, o el servicio no responde. Todo lo"
-            " demás del programa funciona igual sin IA."
-        )
-    except TimeoutError:
-        raise RentaiFallo(
-            f"La IA se demoró más de {SEGUNDOS_DE_ESPERA} segundos y se"
-            f" canceló."
-        )
-
-    try:
-        return respuesta["choices"][0]["message"]["content"]
-    except (KeyError, IndexError):
-        raise RentaiFallo("El servicio de IA contestó algo que no se entendió.")
+        return proveedores.conversar(config, mensajes)
+    except proveedores.ErrorDeProveedor as error:
+        raise RentaiFallo(str(error))
 
 
-def probar_llave(llave):
-    """Le pregunta al servicio si una llave sirve, y devuelve (sirve, motivo).
+def probar_llave(llave, proveedor=None, base_url=None):
+    """Pregunta si la configuración de la IA sirve. Devuelve (sirve, motivo).
 
     Se pregunta por la lista de modelos, no por una conversación: es una
     petición de solo lectura que no manda ni un dato de ningún cliente.
     Sirve para que el contador pegue su llave nueva y sepa en el momento
     si quedó bien, en vez de descubrirlo cuando le escriba a Rentai.
     """
-    llave = (llave or "").strip()
-    if not llave:
-        return False, "Falta la llave."
-
-    peticion = urllib.request.Request(
-        SERVICIO_MODELOS,
-        headers={
-            "Authorization": f"Bearer {llave}",
-            # Igual que en la conversación: sin identificarse, Cloudflare
-            # lo rechaza con un 403 creyendo que es un robot.
-            "User-Agent": IDENTIFICACION,
-        },
-        method="GET",
+    return proveedores.probar(
+        proveedor if proveedor is not None else CONFIG.proveedor,
+        llave,
+        base_url if base_url is not None else CONFIG.base_url,
     )
-
-    try:
-        with urllib.request.urlopen(peticion, timeout=20) as r:
-            datos = json.loads(r.read().decode("utf-8"))
-    except urllib.error.HTTPError as error:
-        if error.code == 401:
-            return False, "La llave no sirve. Revise que la copió completa."
-        if error.code == 429:
-            return False, "El servicio está ocupado. Intente en un minuto."
-        return False, f"El servicio contestó con un error ({error.code})."
-    except urllib.error.URLError:
-        return False, "No hay conexión a internet, o el servicio no responde."
-    except TimeoutError:
-        return False, "El servicio se demoró más de 20 segundos."
-    except (ValueError, KeyError):
-        return False, "El servicio contestó algo que no se entendió."
-
-    cuantos = len(datos.get("data") or [])
-    return True, f"La llave sirve. El servicio ofrece {cuantos} modelos."
 
 
 def _entender_respuesta(texto):
@@ -488,7 +400,7 @@ def hablar(cliente, mensaje):
             "content": anterior["texto"],
         })
 
-    contenido = _llamar_al_servicio(conversacion, CONFIG.modelo, CONFIG.llave)
+    contenido = _llamar_al_servicio(conversacion)
     respuesta, crudas = _entender_respuesta(contenido)
     propuestas = revisar_propuestas(crudas)
 

@@ -15,11 +15,23 @@ import hashlib
 import io
 import re
 import zipfile
+from datetime import datetime
 from pathlib import Path
 
 # Rutas relativas a la raíz del proyecto (este archivo vive en app/).
 RAIZ = Path(__file__).resolve().parent.parent
 CARPETA_ARCHIVOS = RAIZ / "datos" / "archivos"
+
+# La papelera. Nada se borra del disco de una: primero pasa por aquí.
+#
+# Por qué existe: borrar por accidente los soportes de un cliente en
+# plena temporada es un daño real y no tiene vuelta atrás. Moviendo el
+# archivo en vez de destruirlo, un mal clic pasa de ser una pérdida a ser
+# un susto. Recuperar es ir a la carpeta y volver a subir el archivo.
+#
+# La papelera NO se vacía sola. Vaciarla es una decisión del contador,
+# que la hace borrando la carpeta a mano cuando esté tranquilo.
+CARPETA_PAPELERA = RAIZ / "datos" / "papelera"
 
 
 # ----------------------------------------------------------
@@ -221,19 +233,55 @@ def ruta_del_documento(id_cliente, nombre_guardado):
     return destino
 
 
-def eliminar_carpeta_cliente(id_cliente):
-    """Borra la carpeta con todos los archivos de un cliente.
+def mandar_a_papelera(id_cliente, nombre_guardado):
+    """Mueve un documento a la papelera en vez de destruirlo.
 
-    Se usa cuando se elimina el cliente, para no dejar documentos
-    confidenciales sueltos en el disco.
+    Devuelve la ruta donde quedó, o None si el archivo ya no estaba.
+
+    Al nombre se le pone delante la fecha y la hora, por dos razones: se
+    puede borrar el mismo nombre dos veces sin que el segundo pise al
+    primero, y de un vistazo se ve cuándo se botó cada cosa.
+    """
+    origen = ruta_del_documento(id_cliente, nombre_guardado)
+    if origen is None or not origen.is_file():
+        return None
+
+    destino_carpeta = CARPETA_PAPELERA / str(int(id_cliente))
+    destino_carpeta.mkdir(parents=True, exist_ok=True)
+
+    marca = datetime.now().strftime("%Y-%m-%d_%H%M%S")
+    destino = nombre_libre(destino_carpeta, marca + "_" + nombre_guardado)
+
+    # replace y no rename: replace funciona igual en Windows aunque el
+    # destino ya exista, y rename allí levanta un error.
+    origen.replace(destino_carpeta / destino)
+    return destino_carpeta / destino
+
+
+def eliminar_carpeta_cliente(id_cliente):
+    """Saca de circulación todos los archivos de un cliente que se elimina.
+
+    Los manda a la papelera, igual que un borrado suelto. Borrar un
+    cliente es la acción más destructiva del programa: se lleva sus
+    documentos, su checklist y su historial de una vez. Que se pueda
+    deshacer importa más aquí que en ninguna otra parte.
+
+    Los archivos siguen dentro de datos/, que nunca sale de este
+    computador y nunca se sube a git. Para que desaparezcan de verdad,
+    el contador borra datos/papelera/ cuando esté seguro.
     """
     carpeta = CARPETA_ARCHIVOS / str(int(id_cliente))
     if not carpeta.exists():
         return
     for archivo in carpeta.iterdir():
         if archivo.is_file():
-            archivo.unlink()
-    carpeta.rmdir()
+            mandar_a_papelera(id_cliente, archivo.name)
+    # Lo que quede (subcarpetas raras, por ejemplo) no se toca: se deja
+    # la carpeta si no está vacía en vez de arriesgar un borrado a ciegas.
+    try:
+        carpeta.rmdir()
+    except OSError:
+        pass
 
 
 # ----------------------------------------------------------

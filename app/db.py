@@ -34,7 +34,11 @@ def conectar():
     deshace los cambios en vez de dejar la base a medias.
     """
     CARPETA_DATOS.mkdir(parents=True, exist_ok=True)
-    conexion = sqlite3.connect(ARCHIVO_BD)
+    # timeout: el servidor atiende varias peticiones a la vez (hilos) y
+    # generar el Formulario 210 puede tener la base ocupada un rato. Sin
+    # esta espera, una subida que caiga en ese momento revienta con
+    # "database is locked" en vez de esperar su turno.
+    conexion = sqlite3.connect(ARCHIVO_BD, timeout=30)
     # row_factory hace que los resultados se puedan leer por nombre de columna
     # (fila["nombre"]) en vez de por posición (fila[1]), que es ilegible.
     conexion.row_factory = sqlite3.Row
@@ -197,6 +201,41 @@ def crear_tablas():
         conexion.execute(
             "CREATE INDEX IF NOT EXISTS idx_chat_cliente"
             " ON chat_mensajes (cliente_id)"
+        )
+
+        # La bitácora general: qué pasó, cuándo y con qué cliente.
+        #
+        # Ojo: la de arriba (bitacora_210) es SOLO de los valores del
+        # Formulario 210. Esta es de todo lo demás: subir, borrar, marcar
+        # un renglón, generar un archivo. Se separan porque la del 210
+        # guarda cifras (valor anterior y nuevo) y esta no guarda ninguna.
+        #
+        # Esto NO es el log del programa. El log no lleva ni nombres de
+        # clientes ni nombres de archivos; esta tabla sí, y por eso vive
+        # dentro de datos/base.db, que es la carpeta protegida donde ya
+        # están los documentos. Al borrar un cliente se borra con él.
+        conexion.execute(
+            """
+            CREATE TABLE IF NOT EXISTS bitacora (
+                id         INTEGER PRIMARY KEY AUTOINCREMENT,
+                cliente_id INTEGER NOT NULL,
+                -- Qué pasó, en clave: 'documentos_subidos',
+                -- 'documentos_borrados'... La lista está en app/bitacora.py.
+                accion     TEXT NOT NULL,
+                -- El nombre del archivo o del renglón al que le pasó.
+                detalle    TEXT NOT NULL DEFAULT '',
+                -- Cuántas cosas: 5 documentos borrados de un golpe es UNA
+                -- anotación con cantidad 5, no cinco anotaciones.
+                cantidad   INTEGER NOT NULL DEFAULT 1,
+                fecha_hora TEXT NOT NULL,
+                FOREIGN KEY (cliente_id) REFERENCES clientes(id)
+                    ON DELETE CASCADE
+            )
+            """
+        )
+        conexion.execute(
+            "CREATE INDEX IF NOT EXISTS idx_bitacora_cliente"
+            " ON bitacora (cliente_id, id)"
         )
 
         # Ajustes del programa que el contador puede cambiar desde la
@@ -825,3 +864,94 @@ def borrar_mensajes(cliente_id):
         conexion.execute(
             "DELETE FROM chat_mensajes WHERE cliente_id = ?", (cliente_id,)
         )
+
+
+# ----------------------------------------------------------
+# La bitácora general
+#
+# Qué pasó con los documentos y el checklist de cada cliente. La del
+# Formulario 210 es aparte (bitacora_210), porque esa sí guarda cifras.
+# ----------------------------------------------------------
+
+
+def anotar_en_bitacora(cliente_id, accion, detalle="", cantidad=1):
+    """Deja constancia de algo que pasó. Nunca falla hacia afuera.
+
+    Se llama después de que la cosa ya pasó. Si anotar fallara y eso
+    tumbara la petición, el contador vería un error rojo por un borrado
+    que sí se hizo. Prefiero una anotación perdida a un susto.
+    """
+    try:
+        with conectar() as conexion:
+            conexion.execute(
+                "INSERT INTO bitacora"
+                " (cliente_id, accion, detalle, cantidad, fecha_hora)"
+                " VALUES (?, ?, ?, ?, ?)",
+                (
+                    cliente_id,
+                    accion,
+                    detalle or "",
+                    int(cantidad),
+                    datetime.now().isoformat(timespec="seconds"),
+                ),
+            )
+    except sqlite3.Error:
+        pass
+
+
+def listar_bitacora(cliente_id, limite=100):
+    """Lo último que pasó con este cliente, lo más reciente primero."""
+    with conectar() as conexion:
+        filas = conexion.execute(
+            "SELECT id, accion, detalle, cantidad, fecha_hora"
+            " FROM bitacora WHERE cliente_id = ?"
+            " ORDER BY id DESC LIMIT ?",
+            (cliente_id, limite),
+        ).fetchall()
+    return [dict(fila) for fila in filas]
+
+
+# ----------------------------------------------------------
+# Documentos en lote
+# ----------------------------------------------------------
+
+
+def documentos_de(cliente_id, ids):
+    """Devuelve los documentos de esa lista que SÍ son de ese cliente.
+
+    Es la comprobación que hace que un borrado en lote no pueda tocar los
+    archivos de otro cliente aunque le manden ids de otro. Se hace aquí,
+    en el servidor, y no en la pantalla: la pantalla se puede engañar.
+    """
+    ids = [int(uno) for uno in ids]
+    if not ids:
+        return []
+    huecos = ",".join("?" for _ in ids)
+    with conectar() as conexion:
+        filas = conexion.execute(
+            "SELECT id, cliente_id, nombre_original, nombre_guardado,"
+            " extension, tamano, hash, renglon_id, venia_en_zip, subido_en"
+            " FROM documentos"
+            " WHERE cliente_id = ? AND id IN (%s)" % huecos,
+            [cliente_id] + ids,
+        ).fetchall()
+    return [dict(fila) for fila in filas]
+
+
+def eliminar_documentos(cliente_id, ids):
+    """Borra de la base varios documentos de un cliente. Devuelve cuántos.
+
+    Solo borra los que son de ese cliente: el cliente_id va en el WHERE,
+    no se da por supuesto. Los archivos del disco los mueve a la papelera
+    quien llama, antes de esto.
+    """
+    ids = [int(uno) for uno in ids]
+    if not ids:
+        return 0
+    huecos = ",".join("?" for _ in ids)
+    with conectar() as conexion:
+        cursor = conexion.execute(
+            "DELETE FROM documentos WHERE cliente_id = ? AND id IN (%s)" % huecos,
+            [cliente_id] + ids,
+        )
+    return cursor.rowcount

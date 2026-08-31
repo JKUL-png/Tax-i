@@ -40,6 +40,8 @@ from pathlib import Path
 RAIZ = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(RAIZ))
 
+from app import configuracion  # noqa: E402
+
 resultados = []
 direccion = ""
 
@@ -596,16 +598,34 @@ def probar_cuenta():
     titulo("I. La cuenta")
 
     archivo_env = RAIZ / ".env"
-    antes = archivo_env.read_bytes() if archivo_env.exists() else None
+    original = archivo_env.read_bytes() if archivo_env.exists() else None
 
     codigo, cuenta, _ = pedir("GET", "/api/cuenta")
     comprobar("entrega los datos de la cuenta",
               codigo == 200 and "version" in cuenta and "clientes" in cuenta,
               "código %s" % codigo)
-    comprobar("NUNCA manda la llave completa",
-              "llave" not in json.dumps(cuenta).replace("pista_llave", "")
-              .replace("tiene_llave", ""),
-              str(cuenta)[:140])
+
+    # La prueba de verdad: la llave que está en el .env NO puede aparecer
+    # en lo que se manda a la pantalla, ni entera ni en pedazos grandes.
+    valores = configuracion.leer_env()
+    llave_real = (valores.get("IA_API_KEY") or valores.get("GROQ_API_KEY") or "").strip()
+    texto_respuesta = json.dumps(cuenta)
+    if llave_real and len(llave_real) > 12:
+        # Se busca también un trozo del medio: así no pasa una respuesta
+        # que "solo" mandara media llave.
+        medio = llave_real[6:-4]
+        escapada = llave_real not in texto_respuesta and medio not in texto_respuesta
+    else:
+        escapada = True
+    comprobar("NUNCA manda la llave completa", escapada,
+              "la llave apareció en la respuesta")
+
+    # Y ningún campo puede llamarse como para llevarla por descuido.
+    campos_permitidos = {"pista_llave", "tiene_llave", "necesita_llave"}
+    sospechosos = [c for c in cuenta
+                   if "llave" in c and c not in campos_permitidos]
+    comprobar("ningún campo nuevo lleva la llave sin querer",
+              not sospechosos, str(sospechosos))
 
     nombre_antes = cuenta.get("nombre", "")
     correo_antes = cuenta.get("correo", "")
@@ -621,28 +641,65 @@ def probar_cuenta():
     pedir("PUT", "/api/cuenta", {"nombre": nombre_antes, "correo": correo_antes})
 
     codigo, cuerpo, _ = pedir("PUT", "/api/cuenta/ia",
-                              {"sin_ia": False, "llave": "con espacios adentro x"})
+                              {"proveedor": "anthropic",
+                               "llave": "con espacios adentro x"})
     comprobar("rechaza una llave con espacios", codigo in (400, 422),
               "código %s: %s" % (codigo, cuerpo))
 
     codigo, cuerpo, _ = pedir("PUT", "/api/cuenta/ia",
-                              {"sin_ia": False, "llave": "corta"})
+                              {"proveedor": "anthropic", "llave": "corta"})
     comprobar("rechaza una llave demasiado corta", codigo in (400, 422),
               "código %s: %s" % (codigo, cuerpo))
 
-    # Se vuelve a escribir la MISMA configuración: el archivo tiene que
-    # quedar idéntico. Es la prueba de que escribir el .env no lo daña.
-    codigo, vuelto, _ = pedir("PUT", "/api/cuenta/ia", {
-        "sin_ia": cuenta["sin_ia"],
+    codigo, cuerpo, _ = pedir("PUT", "/api/cuenta/ia",
+                              {"proveedor": "un-servicio-inventado"})
+    comprobar("rechaza un proveedor que no existe", codigo == 400,
+              "código %s: %s" % (codigo, cuerpo))
+
+    codigo, cuerpo, _ = pedir("PUT", "/api/cuenta/ia",
+                              {"proveedor": "openai_compatible",
+                               "base_url": "api.openai.com/v1"})
+    comprobar("exige que la dirección lleve http:// o https://",
+              codigo == 400, "código %s: %s" % (codigo, cuerpo))
+
+    codigo, cuerpo, _ = pedir("PUT", "/api/cuenta/ia",
+                              {"proveedor": "openai_compatible", "base_url": ""})
+    comprobar("exige la dirección cuando el servicio la necesita",
+              codigo == 400, "código %s: %s" % (codigo, cuerpo))
+
+    # --- Escribir el .env dos veces con lo mismo lo deja idéntico ---
+    #
+    # La primera escritura SÍ puede cambiar el archivo, y con razón: es la
+    # que traduce una configuración vieja (SIN_IA + GROQ_API_KEY) a los
+    # nombres nuevos. Lo que no puede pasar es que cada guardado siga
+    # cambiando el archivo: eso sería que lo está dañando de a poquitos.
+    peticion = {
+        "proveedor": cuenta["proveedor"],
+        "base_url": cuenta["base_url"],
         "modelo": cuenta["modelo_configurado"],
-    })
+    }
+    codigo, vuelto, _ = pedir("PUT", "/api/cuenta/ia", peticion)
     comprobar("guarda la configuración de la IA", codigo == 200,
               "código %s: %s" % (codigo, str(vuelto)[:120]))
+    primera = archivo_env.read_bytes() if archivo_env.exists() else None
 
-    despues = archivo_env.read_bytes() if archivo_env.exists() else None
-    comprobar("el archivo .env quedó exactamente igual que antes",
-              antes == despues,
-              "cambió de %s a %s bytes" % (len(antes or b""), len(despues or b"")))
+    pedir("PUT", "/api/cuenta/ia", peticion)
+    segunda = archivo_env.read_bytes() if archivo_env.exists() else None
+
+    comprobar("guardar dos veces lo mismo deja el .env idéntico",
+              primera == segunda,
+              "cambió de %s a %s bytes" % (len(primera or b""), len(segunda or b"")))
+
+    comprobar("la llave sobrevivió a la migración del .env",
+              (configuracion.leer_env().get("IA_API_KEY") or "").strip()
+              == llave_real,
+              "la llave cambió al reescribir el archivo")
+
+    # Se devuelve el archivo tal como estaba: una prueba no debe dejarle
+    # el .env cambiado a quien la corre.
+    if original is not None:
+        archivo_env.write_bytes(original)
+        pedir("GET", "/api/cuenta")   # que el servidor no quede con lo viejo
 
 
 def limpiar(identificador):

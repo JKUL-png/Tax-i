@@ -4,8 +4,8 @@
    Dos cosas hace esta pantalla:
      1. Guardar el nombre de quien usa el programa (el sitio donde
         vivirá la cuenta el día que haya entrada con contraseña).
-     2. Cambiar la llave de la IA sin tener que abrir el archivo .env
-        con el bloc de notas.
+     2. Elegir con cuál servicio de IA se habla, y probar la conexión,
+        sin tener que abrir el archivo .env con el bloc de notas.
 
    JavaScript plano, sin librerías, igual que el resto del programa.
    ========================================================== */
@@ -18,8 +18,14 @@ const campoCorreo = document.getElementById("correo");
 const campoLlave = document.getElementById("llave");
 const campoModelo = document.getElementById("modelo");
 
-const modoSinIA = document.getElementById("modo-sin-ia");
-const modoConIA = document.getElementById("modo-con-ia");
+const selectorProveedor = document.getElementById("ia-proveedor");
+const campoBaseUrl = document.getElementById("base-url");
+const cajaBaseUrl = document.getElementById("campo-base-url");
+const cajaLlave = document.getElementById("bloque-llave");
+const cajaModelo = document.getElementById("campo-modelo");
+const explicacion = document.getElementById("ia-explicacion");
+const queSale = document.getElementById("ia-que-sale");
+const ayudaModelo = document.getElementById("ayuda-modelo");
 
 const resultadoPrueba = document.getElementById("resultado-prueba");
 
@@ -32,39 +38,14 @@ let cuenta = null;
    Avisos
    ---------------------------------------------------------- */
 
-let temporizador = null;
+/* El cómo está en comun.js. */
+function mostrarAviso(caja, texto, tipo) { avisarEn(caja, texto, tipo); }
 
-function mostrarAviso(caja, texto, tipo) {
-  caja.textContent = texto;
-  caja.className = "aviso aviso-" + tipo;
-  clearTimeout(temporizador);
-  // Los mensajes de éxito se van solos; los de error se quedan hasta
-  // que el contador haga algo al respecto.
-  if (tipo === "exito") {
-    temporizador = setTimeout(function () {
-      caja.className = "aviso oculto";
-    }, 5000);
-  }
-}
-
-/* Saca el texto del error que mandó el servidor.
-
-   FastAPI contesta de dos formas: cuando algo no pasó la revisión manda
-   una lista de problemas, y cuando fue un error nuestro manda una frase.
-   Aquí se atienden las dos para no mostrarle "[object Object]" a nadie. */
+/* Saca el texto del error que mandó el servidor. Está en comun.js;
+   aquí se deja el nombre viejo para no tocar los treinta sitios que lo
+   llaman. */
 async function textoDeError(respuesta, porDefecto) {
-  try {
-    const datos = await respuesta.json();
-    if (typeof datos.detail === "string") {
-      return datos.detail;
-    }
-    if (Array.isArray(datos.detail) && datos.detail.length > 0) {
-      return datos.detail[0].msg.replace("Value error, ", "");
-    }
-  } catch (error) {
-    // El servidor no contestó JSON. Se usa el mensaje de siempre.
-  }
-  return porDefecto;
+  return textoDelError(respuesta, porDefecto);
 }
 
 
@@ -99,12 +80,87 @@ function pintar(datos) {
   }
   document.getElementById("estado-ia-motivo").textContent = datos.motivo;
 
-  modoSinIA.checked = datos.sin_ia;
-  modoConIA.checked = !datos.sin_ia;
+  // El selector de servicio se arma con lo que dice el servidor, así
+  // que agregar un proveedor nuevo no obliga a tocar esta pantalla.
+  if (selectorProveedor.options.length === 0) {
+    (datos.proveedores || []).forEach(function (uno) {
+      const opcion = document.createElement("option");
+      opcion.value = uno.clave;
+      opcion.textContent = uno.nombre;
+      selectorProveedor.appendChild(opcion);
+    });
+  }
+  selectorProveedor.value = datos.proveedor;
+
+  campoBaseUrl.value = datos.base_url || "";
+  campoModelo.value = datos.modelo_configurado || "";
 
   document.getElementById("llave-pista").textContent =
     datos.tiene_llave ? datos.pista_llave : "ninguna";
+
+  ajustarCampos();
 }
+
+/* Muestra u oculta la dirección y la llave según lo que pida el servicio
+   elegido. Pedirle una llave a Ollama, que corre aquí mismo y no usa
+   ninguna, solo confunde. */
+function ajustarCampos() {
+  const ficha = fichaDelProveedor(selectorProveedor.value);
+  if (!ficha) return;
+
+  cajaBaseUrl.className = ficha.necesita_base_url ? "campo" : "campo oculto";
+  cajaLlave.className = ficha.necesita_llave ? "bloque-llave" : "bloque-llave oculto";
+  cajaModelo.className = ficha.clave === "ninguno" ? "campo oculto" : "campo";
+
+  queSale.textContent = "Lo que sale de este computador: " + ficha.que_sale;
+  queSale.className = ficha.clave === "ninguno" || ficha.clave === "ollama"
+    ? "aviso-modo"
+    : "aviso-modo aviso-modo-ia";
+
+  if (ficha.clave === "ninguno") {
+    explicacion.textContent =
+      "El programa funciona completo. Usted clasifica los documentos a mano.";
+  } else if (ficha.clave === "ollama") {
+    explicacion.textContent =
+      "Necesita Ollama instalado y corriendo en este computador. No pide llave.";
+  } else if (ficha.clave === "openai_compatible") {
+    explicacion.textContent =
+      "Sirve para OpenAI, Groq, OpenRouter, Together, DeepSeek, LM Studio " +
+      "y casi cualquier otro: todos hablan el mismo idioma.";
+  } else {
+    explicacion.textContent = "Los modelos Claude, de Anthropic.";
+  }
+
+  if (ficha.modelo_sugerido) {
+    campoModelo.placeholder = ficha.modelo_sugerido;
+    ayudaModelo.textContent =
+      "El nombre exacto tal como lo llama su proveedor. Para este servicio, " +
+      "por ejemplo: " + ficha.modelo_sugerido + ".";
+  }
+
+  // La dirección de fábrica se propone, no se impone: si el campo está
+  // vacío se rellena, y si el contador escribió algo no se le toca.
+  if (ficha.necesita_base_url && !campoBaseUrl.value && ficha.base_url_por_defecto) {
+    campoBaseUrl.value = ficha.base_url_por_defecto;
+  }
+}
+
+function fichaDelProveedor(clave) {
+  if (!cuenta || !cuenta.proveedores) return null;
+  return cuenta.proveedores.find(function (uno) { return uno.clave === clave; });
+}
+
+selectorProveedor.addEventListener("change", function () {
+  const ficha = fichaDelProveedor(selectorProveedor.value);
+  // Al cambiar de servicio, la dirección y el modelo del anterior ya no
+  // valen: se ponen los del nuevo en vez de dejar los viejos, que
+  // fallarían con un error confuso.
+  if (ficha) {
+    campoBaseUrl.value = ficha.base_url_por_defecto || "";
+    campoModelo.value = ficha.modelo_sugerido || "";
+  }
+  ajustarCampos();
+});
 
 async function cargar() {
   try {
@@ -182,12 +238,18 @@ document.getElementById("boton-probar")
       const respuesta = await fetch("/api/cuenta/ia/probar", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ llave: campoLlave.value.trim() })
+        // Se prueba lo que está ESCRITO en la pantalla, no lo guardado:
+        // así el contador comprueba antes de cambiar nada.
+        body: JSON.stringify({
+          proveedor: selectorProveedor.value,
+          base_url: campoBaseUrl.value.trim(),
+          llave: campoLlave.value.trim()
+        })
       });
 
       if (!respuesta.ok) {
         mostrarResultado(
-          await textoDeError(respuesta, "No se pudo probar la llave."), false);
+          await textoDeError(respuesta, "No se pudo probar la conexión."), false);
         return;
       }
 
@@ -203,7 +265,8 @@ document.getElementById("boton-probar")
 /* Guardar el modo, la llave y el modelo, todo de una. */
 async function guardarIA(cambios) {
   const cuerpo = {
-    sin_ia: modoSinIA.checked,
+    proveedor: (cambios && cambios.proveedor) || selectorProveedor.value,
+    base_url: campoBaseUrl.value.trim(),
     modelo: campoModelo.value.trim()
   };
 
@@ -211,9 +274,6 @@ async function guardarIA(cambios) {
   // decir: una llave nueva, o el vacío que significa "bórrela".
   if (cambios && Object.prototype.hasOwnProperty.call(cambios, "llave")) {
     cuerpo.llave = cambios.llave;
-  }
-  if (cambios && Object.prototype.hasOwnProperty.call(cambios, "sin_ia")) {
-    cuerpo.sin_ia = cambios.sin_ia;
   }
 
   try {
@@ -243,12 +303,21 @@ async function guardarIA(cambios) {
 document.getElementById("boton-guardar-ia")
   .addEventListener("click", async function () {
     const escrita = campoLlave.value.trim();
+    const ficha = fichaDelProveedor(selectorProveedor.value);
 
-    // Encender la IA sin llave no sirve de nada: se avisa antes de
-    // escribir el archivo, para no dejarlo en un estado a medias.
-    if (modoConIA.checked && !escrita && !(cuenta && cuenta.tiene_llave)) {
+    // Elegir un servicio que pide llave sin ponerla no sirve de nada: se
+    // avisa antes de escribir el archivo, para no dejarlo a medias.
+    if (ficha && ficha.necesita_llave && !escrita &&
+        !(cuenta && cuenta.tiene_llave)) {
       mostrarAviso(avisoIA,
-        "Para encender a Rentai hace falta una llave. Péguela arriba.",
+        "\"" + ficha.nombre + "\" necesita una llave. Péguela arriba.",
+        "error");
+      return;
+    }
+
+    if (ficha && ficha.necesita_base_url && !campoBaseUrl.value.trim()) {
+      mostrarAviso(avisoIA,
+        "\"" + ficha.nombre + "\" necesita la dirección del servicio.",
         "error");
       return;
     }
@@ -266,9 +335,9 @@ document.getElementById("boton-quitar")
                  + "ponga otra.")) {
       return;
     }
-    // Borrar la llave y apagar la IA van juntos: dejar el modo encendido
-    // sin llave solo produce errores más adelante.
-    if (await guardarIA({ llave: "", sin_ia: true })) {
+    // Borrar la llave y apagar la IA van juntos: dejar un servicio
+    // elegido sin su llave solo produce errores más adelante.
+    if (await guardarIA({ llave: "", proveedor: "ninguno" })) {
       resultadoPrueba.className = "resultado-prueba oculto";
       mostrarAviso(avisoIA, "La llave se borró del archivo .env.", "exito");
     }

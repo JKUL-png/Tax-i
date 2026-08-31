@@ -83,7 +83,8 @@ def main():
     print(f"Cliente de prueba: {cliente['id']}")
 
     # Se guarda cómo estaba la configuración para dejarla igual al final.
-    sin_ia_antes, llave_antes = CONFIG.sin_ia, CONFIG.llave
+    # Ojo: sin_ia ya no se guarda, se deduce del proveedor elegido.
+    config_antes = (CONFIG.proveedor, CONFIG.base_url, CONFIG.llave)
     hablar_de_verdad = rentai._llamar_al_servicio
 
     try:
@@ -148,7 +149,7 @@ def main():
         # --------------------------------------------------------------
         llamadas = []
 
-        def servicio_falso(mensajes, modelo, llave):
+        def servicio_falso(mensajes, config=None):
             llamadas.append(mensajes)
             return json.dumps({
                 "respuesta": "Los salarios son 45 millones.",
@@ -159,15 +160,17 @@ def main():
 
         rentai._llamar_al_servicio = servicio_falso
 
-        CONFIG.sin_ia, CONFIG.llave = True, "llave-de-prueba"
+        CONFIG.proveedor, CONFIG.llave = "ninguno", "llave-de-prueba"
         try:
             rentai.hablar(cliente, "hola")
-            comprobar("con SIN_IA=true no contesta", False, "contestó igual")
+            comprobar("con IA_PROVEEDOR=ninguno no contesta", False,
+                      "contestó igual")
         except rentai.RentaiApagada:
-            comprobar("con SIN_IA=true no contesta", True)
+            comprobar("con IA_PROVEEDOR=ninguno no contesta", True)
         comprobar("y no se llamó al servicio", llamadas == [])
 
-        CONFIG.sin_ia, CONFIG.llave = False, ""
+        # Un proveedor elegido pero sin llave: tampoco se habla con nadie.
+        CONFIG.proveedor, CONFIG.llave = "anthropic", ""
         try:
             rentai.hablar(cliente, "hola")
             comprobar("sin llave tampoco contesta", False, "contestó igual")
@@ -175,10 +178,16 @@ def main():
             comprobar("sin llave tampoco contesta", True)
         comprobar("y tampoco se llamó al servicio", llamadas == [])
 
+        # Ollama no pide llave, pero "ninguno" manda sobre todo.
+        CONFIG.proveedor, CONFIG.llave = "ollama", ""
+        comprobar("ollama sí queda disponible sin llave", CONFIG.ia_disponible)
+        CONFIG.proveedor = "ninguno"
+        comprobar("y ninguno nunca queda disponible", not CONFIG.ia_disponible)
+
         # --------------------------------------------------------------
         print("\nE. Una conversación completa")
         # --------------------------------------------------------------
-        CONFIG.sin_ia, CONFIG.llave = False, "llave-de-prueba"
+        CONFIG.proveedor, CONFIG.llave = "anthropic", "llave-de-prueba"
         salida = rentai.hablar(cliente, "¿cuánto ganó de salarios?")
 
         comprobar("contesta", salida["respuesta"].startswith("Los salarios"))
@@ -231,7 +240,7 @@ def main():
 
     finally:
         rentai._llamar_al_servicio = hablar_de_verdad
-        CONFIG.sin_ia, CONFIG.llave = sin_ia_antes, llave_antes
+        CONFIG.proveedor, CONFIG.base_url, CONFIG.llave = config_antes
         db.eliminar_cliente(cliente["id"])
         formulario.eliminar_carpeta_cliente(cliente["id"])
         print("\nCliente de prueba eliminado.")

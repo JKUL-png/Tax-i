@@ -18,9 +18,15 @@ los identifica, dice cuáles faltan por cliente y genera un resumen. **No hace i
   arrancaba en el computador de destino.
 - **Base de datos:** SQLite (archivo local)
 - **Frontend:** HTML + CSS + JavaScript plano. **Sin framework, sin build, sin npm.**
-- **IA:** API de Groq (capa gratis), solo para documentos no estructurados.
-  Se eligió sobre Gemini porque la capa gratis de Gemini usa lo que uno le manda
-  para entrenar y revisores humanos pueden verlo. Groq no entrena ni retiene.
+- **IA:** cualquier proveedor, elegido en el `.env` y en la pantalla de Cuenta.
+  La capa que traduce de uno a otro está en `app/proveedores.py`. Cuatro opciones:
+  `ninguno` (de fábrica), `anthropic`, `openai_compatible` (OpenAI, Groq,
+  OpenRouter, Together, LM Studio…) y `ollama` (en el propio computador).
+  **`ninguno` tiene que seguir funcionando completo**: la IA acelera, no habilita.
+  Antes estaba atado solo a Groq; se abrió en agosto de 2026.
+  Al elegir un servicio se elige a quién se le confían los textos: hay capas
+  gratis que entrenan con lo que uno les manda y donde revisores humanos pueden
+  leerlo. Eso pesa más que el precio.
 - **Corre en:** `http://localhost:8000`
 
 Antes de agregar una dependencia nueva, preguntar. Cada librería es una cosa más que puede
@@ -49,15 +55,20 @@ asistente-renta/
 │   ├── escribir_210.py   # escritura quirúrgica sobre el .xlsx
 │   ├── recalcular.py     # totales con LibreOffice
 │   ├── formulario.py     # el Formulario 210 de cada cliente
-│   └── rentai.py         # la asistente que conversa y propone
+│   ├── rentai.py         # la asistente que conversa y propone
+│   ├── proveedores.py    # con cuál servicio de IA se habla
+│   ├── bitacora.py       # qué pasó con cada cliente y cuándo
+│   ├── vencimientos.py   # la tabla del calendario oficial (viene vacía)
+│   └── api/              # las direcciones, un archivo por asunto
 ├── static/               # HTML, CSS, JS
 ├── plantillas/           # las plantillas de Excel del contador (NUNCA a git)
 ├── pruebas/              # programas que comprueban que todo siga funcionando
 ├── datos/                # NUNCA se sube a git
 │   ├── archivos/         # documentos subidos, por cliente
+│   ├── papelera/         # lo borrado, por si fue un error. No se vacía sola
 │   ├── formularios/      # el Excel generado de cada cliente
 │   └── base.db
-├── .env                  # GROQ_API_KEY — NUNCA se sube a git
+├── .env                  # configuración de la IA — NUNCA se sube a git
 ├── requirements.txt
 ├── iniciar.sh            # Mac
 └── iniciar.bat           # Windows
@@ -132,6 +143,11 @@ como lectura automática, organiza y exporta.
 - **Todo dato extraído por IA se muestra marcado como "lectura automática — verificar"**,
   junto a un enlace para abrir el documento original.
 - **El checklist es editable por el contador.** Él decide qué necesita cada cliente.
+- **Borrar documentos pide confirmación que diga cuántos y de qué cliente**, y el
+  archivo va a `datos/papelera/`, no al vacío. Borrar los soportes de un cliente
+  en plena temporada es un daño real.
+- **Todo cambio queda en la bitácora** (`app/bitacora.py`): subir, borrar, marcar
+  un renglón, generar el formulario. Es lo que contesta cuando algo no cuadra.
 - Las fechas de vencimiento se muestran como referencia verificable y son editables.
   No se inventan fechas: la tabla sale del calendario oficial.
 
@@ -142,9 +158,15 @@ consentimiento al desarrollador.
 
 - Los archivos **nunca salen del computador**, salvo la página específica que se manda a la
   API para lectura.
-- **Modo sin IA** (`SIN_IA=true` en `.env`): nada sale del equipo. Debe funcionar completo.
+- **Modo sin IA** (`IA_PROVEEDOR=ninguno` en `.env`, el de fábrica): nada sale del
+  equipo. Debe funcionar completo. Con `ollama` tampoco sale nada: el modelo corre aquí.
 - Con la IA encendida sale: nombre del cliente, TEXTO de sus documentos, checklist y
   conversación. Los archivos nunca se mandan: de un PDF se manda el texto extraído aquí.
+- **La llave nunca aparece entera**: ni en pantalla, ni en los logs, ni en la base de
+  datos, ni en ninguna respuesta de la API. Solo vive en el `.env`, y en pantalla se
+  muestra un pedacito (`pista_llave`).
+- La bitácora SÍ guarda nombres de archivo, y por eso vive en `datos/base.db`, no en
+  los logs. Los logs siguen sin llevar ni un nombre de cliente.
 - **No registrar contenido de documentos en logs.** Ni nombres de clientes, ni cifras, ni texto
   extraído. Solo eventos y errores técnicos.
 - `datos/` y `.env` nunca se suben a git.
@@ -163,5 +185,23 @@ consentimiento al desarrollador.
   nube, login, pagos, recordatorios automáticos.
   (El chat con IA —Rentai— entró al alcance por decisión del dueño del proyecto
   en agosto de 2026. El brief original lo tenía afuera.)
+- **Las fechas de vencimiento no se calculan: se buscan.** La tabla está en
+  `app/vencimientos.py` y **viene vacía a propósito**. Sin tabla, la fecha se
+  escribe a mano, como siempre. Nunca rellenar esa tabla de memoria: las fechas
+  salen del calendario tributario oficial. Se comprueba con
+  `pruebas/probar_vencimientos.py`.
 - Explicar cada paso en lenguaje claro, sin jerga.
 - Reportar los resultados como son: si algo no se probó, decirlo.
+
+---
+
+## Pruebas
+
+    .venv/bin/python pruebas/probar_api.py          # el servidor, por HTTP real
+    .venv/bin/python pruebas/probar_pantallas.py    # el navegador, con Playwright
+    .venv/bin/python pruebas/revisar_windows.py     # el entorno
+    .venv/bin/python pruebas/probar_vencimientos.py # la tabla de fechas
+
+`probar_pantallas.py` abre Chromium de verdad y falla si el JavaScript revienta.
+Hace falta porque un error de JavaScript no se ve desde el servidor: la página
+carga con código 200 y el botón simplemente no hace nada.

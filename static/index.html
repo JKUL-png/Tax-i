@@ -122,9 +122,66 @@
       </div>
     </section>
 
-    <!-- ---------- Lista de clientes ---------- -->
+    <!-- ---------- Lista de clientes ----------
+         Con buscador, orden y filtros. En temporada la pregunta es
+         siempre la misma —"¿a quién le falta algo y vence pronto?"— y
+         hasta ahora la única forma de contestarla era bajar mirando. -->
     <section class="seccion">
-      <h2>Clientes</h2>
+      <div class="clientes-cabeza">
+        <h2>Clientes <span id="conteo-clientes" class="conteo"></span></h2>
+      </div>
+
+      <div class="tarjeta barra-clientes">
+        <div class="campo campo-buscar">
+          <label for="buscar-cliente">Buscar</label>
+          <input type="search" id="buscar-cliente" autocomplete="off"
+                 placeholder="Nombre o dos dígitos de la cédula">
+        </div>
+
+        <div class="campo campo-corto">
+          <label for="orden-clientes">Ordenar por</label>
+          <select id="orden-clientes">
+            <option value="vencimiento">Vencimiento</option>
+            <option value="nombre">Nombre</option>
+            <option value="faltantes">Documentos faltantes</option>
+          </select>
+        </div>
+
+        <fieldset class="filtros">
+          <legend class="solo-lectores">Filtrar por estado</legend>
+          <div class="filtros-botones" id="filtro-estado">
+            <button type="button" class="filtro filtro-activo" data-estado="todos">
+              Todos
+            </button>
+            <button type="button" class="filtro" data-estado="incompletos">
+              Incompletos
+            </button>
+            <button type="button" class="filtro" data-estado="completos">
+              Completos
+            </button>
+            <button type="button" class="filtro filtro-urgente" data-estado="pronto">
+              Vencen pronto
+            </button>
+          </div>
+        </fieldset>
+      </div>
+
+      <!-- Acciones sobre todos los clientes de una vez. Después de
+           importar un Excel de 150, dejarlos listos uno por uno son
+           150 visitas. -->
+      <div class="acciones-lote">
+        <button type="button" class="boton-secundario" id="boton-lista-base">
+          Poner la lista base a los que no tengan checklist
+        </button>
+        <button type="button" class="boton-secundario oculto"
+                id="boton-vencimientos">
+          Poner los vencimientos del calendario
+        </button>
+        <div id="aviso-lote" class="aviso oculto" role="alert"></div>
+      </div>
+
+      <p class="ayuda" id="resumen-filtro"></p>
+
       <div id="lista-clientes" class="lista">
         <div class="vacio">Cargando…</div>
       </div>
@@ -137,6 +194,7 @@
 
   </main>
 
+  <script src="/static/comun.js"></script>
   <script src="/static/app.js"></script>
 </body>
 </html>

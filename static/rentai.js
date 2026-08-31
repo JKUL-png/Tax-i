@@ -127,17 +127,17 @@ function estabaAbierta() {
    Pedirle cosas al servidor
    ---------------------------------------------------------- */
 
-async function textoDelError(respuesta) {
-  try {
-    const datos = await respuesta.json();
-    if (datos && datos.detail) return datos.detail;
-  } catch (error) { /* no era JSON */ }
-  return "No se pudo completar la operación (" + respuesta.status + ").";
-}
-
 async function pedir(direccion, opciones) {
   const respuesta = await fetch(direccion, opciones);
-  if (!respuesta.ok) throw new Error(await textoDelError(respuesta));
+  if (!respuesta.ok) {
+    // textoDelError vive en comun.js. El texto de reserva lleva el
+    // número del error, que es lo único útil cuando el servidor no
+    // alcanzó ni a contestar en JSON.
+    throw new Error(await textoDelError(
+      respuesta,
+      "No se pudo completar la operación (" + respuesta.status + ")."
+    ));
+  }
   if (respuesta.status === 204) return null;
   return respuesta.json();
 }

@@ -78,9 +78,9 @@
       </div>
     </section>
 
-    <!-- ---------- La llave de la IA ---------- -->
+    <!-- ---------- El servicio de IA ---------- -->
     <section class="seccion">
-      <h2>Rentai y la llave de la IA</h2>
+      <h2>Rentai y el servicio de IA</h2>
 
       <div class="tarjeta">
         <div id="aviso-ia" class="aviso oculto" role="alert"></div>
@@ -91,39 +91,39 @@
           <p class="ayuda" id="estado-ia-motivo"></p>
         </div>
 
-        <!-- Encendida o apagada. Dos opciones escritas con todas sus
-             letras, no un interruptor que hay que adivinar. -->
-        <fieldset class="opciones-modo">
-          <legend class="solo-lectores">Modo de la inteligencia artificial</legend>
+        <p class="ayuda">
+          El programa no está casado con ninguna empresa: usted elige con
+          cuál servicio hablar. <strong>Sin IA funciona completo</strong> —
+          recibe documentos, arma el checklist, llena el Formulario 210 y
+          exporta. La IA solo acelera la lectura de los documentos.
+        </p>
 
-          <label class="opcion-modo">
-            <input type="radio" name="modo" value="sin-ia" id="modo-sin-ia">
-            <span class="opcion-cuerpo">
-              <span class="opcion-titulo">Sin IA</span>
-              <span class="opcion-detalle">
-                Rentai queda apagada y <strong>ningún dato sale de este
-                computador</strong>. Todo lo demás funciona igual: recibir
-                documentos, el checklist, el Formulario 210 y exportar.
-              </span>
-            </span>
-          </label>
+        <!-- Cuál servicio -->
+        <div class="campo">
+          <label for="ia-proveedor">Servicio de IA</label>
+          <select id="ia-proveedor" class="selector-plantilla"></select>
+          <p class="ayuda" id="ia-explicacion"></p>
+        </div>
 
-          <label class="opcion-modo">
-            <input type="radio" name="modo" value="con-ia" id="modo-con-ia">
-            <span class="opcion-cuerpo">
-              <span class="opcion-titulo">Con Rentai encendida</span>
-              <span class="opcion-detalle">
-                Al servicio de Groq le llega el nombre del cliente, el texto
-                de sus documentos, su checklist y la conversación.
-                <strong>Los archivos nunca se mandan</strong>: de un PDF sale
-                el texto que se leyó aquí, nunca el archivo.
-              </span>
-            </span>
-          </label>
-        </fieldset>
+        <!-- Lo que sale de este computador con este servicio -->
+        <div class="aviso-modo" id="ia-que-sale"></div>
 
-        <!-- La llave -->
-        <div class="bloque-llave">
+        <!-- La dirección. Solo se ve cuando hace falta. -->
+        <div class="campo oculto" id="campo-base-url">
+          <label for="base-url">Dirección del servicio</label>
+          <input type="url" id="base-url" autocomplete="off"
+                 spellcheck="false" placeholder="https://api.openai.com/v1">
+          <p class="ayuda">
+            La que le dé su proveedor. Ejemplos:
+            <span class="cifra">https://api.openai.com/v1</span>,
+            <span class="cifra">https://api.groq.com/openai/v1</span>,
+            <span class="cifra">https://openrouter.ai/api/v1</span>,
+            <span class="cifra">http://localhost:1234/v1</span> (LM Studio).
+          </p>
+        </div>
+
+        <!-- La llave. Solo se ve cuando el servicio la pide. -->
+        <div class="bloque-llave" id="bloque-llave">
           <div class="llave-actual" id="llave-actual">
             <span class="cuenta-rotulo">Llave guardada</span>
             <span class="cifra" id="llave-pista">ninguna</span>
@@ -133,7 +133,7 @@
             <label for="llave">Llave nueva</label>
             <div class="fila-llave">
               <input type="password" id="llave" autocomplete="off"
-                     spellcheck="false" placeholder="gsk_…">
+                     spellcheck="false" placeholder="sk-…">
               <button type="button" class="boton-secundario" id="boton-ver">
                 Ver
               </button>
@@ -141,49 +141,38 @@
           </div>
 
           <p class="ayuda">
-            La llave es gratis y se saca en
-            <a href="https://console.groq.com" target="_blank" rel="noopener">console.groq.com</a>
-            → API Keys, sin tarjeta de crédito. Groq solo la enseña una vez:
-            cópiela completa apenas la cree. Aquí se guarda en el archivo
-            <code>.env</code> de este computador y no se muestra nunca más
-            entera, solo el principio y el final.
+            La llave se guarda en el archivo <code>.env</code> de este
+            computador. <strong>No se muestra nunca más entera</strong> —solo
+            el principio y el final—, no queda en la base de datos, no sale
+            en los registros y no se manda a ningún sitio que no sea el
+            servicio que usted eligió.
           </p>
-
-          <div class="fila-botones">
-            <button type="button" class="boton" id="boton-guardar-ia">
-              Guardar los cambios
-            </button>
-            <button type="button" class="boton-secundario" id="boton-probar">
-              Probar la llave
-            </button>
-            <button type="button" class="boton-texto boton-texto-peligro"
-                    id="boton-quitar">
-              Quitar la llave guardada
-            </button>
-          </div>
-
-          <div id="resultado-prueba" class="resultado-prueba oculto"></div>
         </div>
 
-        <!-- Lo que casi nunca hay que tocar -->
-        <details class="avanzado">
-          <summary>Cambiar el modelo (solo si se acabó el cupo del día)</summary>
-          <div class="avanzado-cuerpo">
-            <div class="campo">
-              <label for="modelo">Modelo</label>
-              <input type="text" id="modelo" autocomplete="off"
-                     spellcheck="false" placeholder="openai/gpt-oss-120b">
-            </div>
-            <p class="ayuda">
-              El de fábrica es <span class="cifra">openai/gpt-oss-120b</span>,
-              que fue el que mejor encontró las cifras en los documentos de
-              prueba. Su cupo son 200.000 tokens al día, más o menos 40
-              preguntas. Si se acaba antes de terminar el día, ponga
-              <span class="cifra">qwen/qwen3.8-27b</span>: tiene dos millones
-              diarios, aunque busca peor.
-            </p>
-          </div>
-        </details>
+        <!-- El modelo -->
+        <div class="campo" id="campo-modelo">
+          <label for="modelo">Modelo</label>
+          <input type="text" id="modelo" autocomplete="off"
+                 spellcheck="false" placeholder="claude-opus-5">
+          <p class="ayuda" id="ayuda-modelo">
+            El nombre exacto tal como lo llama su proveedor.
+          </p>
+        </div>
+
+        <div class="fila-botones">
+          <button type="button" class="boton" id="boton-guardar-ia">
+            Guardar los cambios
+          </button>
+          <button type="button" class="boton-secundario" id="boton-probar">
+            Probar la conexión
+          </button>
+          <button type="button" class="boton-texto boton-texto-peligro"
+                  id="boton-quitar">
+            Quitar la llave guardada
+          </button>
+        </div>
+
+        <div id="resultado-prueba" class="resultado-prueba oculto"></div>
       </div>
     </section>
 
@@ -220,6 +209,7 @@
 
   </main>
 
+  <script src="/static/comun.js"></script>
   <script src="/static/cuenta.js"></script>
 </body>
 </html>

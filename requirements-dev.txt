@@ -7,3 +7,8 @@
 
 # Abre un navegador de verdad para revisar que las pantallas funcionen.
 playwright
+
+# Revisa que no haya nombres sin definir ni imports olvidados. Se volvió
+# útil cuando la API se partió en varios archivos: un import que falta no
+# revienta al arrancar, revienta cuando alguien entra a esa pantalla.
+pyflakes

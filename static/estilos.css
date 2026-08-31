@@ -2670,3 +2670,463 @@ code {
     align-items: flex-start;
   }
 }
+
+
+/* ==========================================================
+   El perfil del cliente
+
+   La foto de conjunto que se ve al entrar: quién es, cuándo vence,
+   cuánto le falta y qué se puede hacer. Antes esto eran dos renglones
+   de texto y había que abrir secciones para enterarse de algo.
+   ========================================================== */
+
+.perfil-arriba {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+  flex-wrap: wrap;
+}
+
+.perfil-quien h2 { margin: 0 0 4px; }
+
+.perfil-vecinos {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.perfil-vecinos .boton-texto {
+  /* Los nombres largos no pueden empujar la cabecera de lado. */
+  max-width: 190px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.perfil-posicion {
+  color: var(--texto-tenue);
+  font-size: 13px;
+}
+
+/* --- Las tres cifras --- */
+
+.perfil-cifras {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 16px;
+  margin-top: 20px;
+  padding-top: 18px;
+  border-top: 1px solid var(--raya);
+}
+
+.perfil-cifra {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 5px;
+}
+
+.perfil-valor {
+  font-size: 19px;
+  font-weight: 600;
+  color: var(--texto);
+  line-height: 1.2;
+}
+
+.perfil-nota {
+  font-size: 13px;
+  color: var(--texto-tenue);
+}
+
+/* --- Lo que falta, destacado --- */
+
+.perfil-pendientes {
+  margin-top: 18px;
+  padding: 14px 16px;
+  background: var(--alerta-fondo);
+  border-radius: var(--radio-chico);
+}
+
+.perfil-pendientes-titulo {
+  margin: 0 0 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--alerta-texto);
+  text-transform: uppercase;
+  letter-spacing: .04em;
+}
+
+.perfil-lista-faltantes {
+  margin: 0;
+  padding-left: 20px;
+  color: var(--texto-secundario);
+  font-size: 14px;
+  line-height: 1.7;
+}
+
+.perfil-mas {
+  color: var(--texto-tenue);
+  font-style: italic;
+  list-style: none;
+  margin-left: -20px;
+}
+
+.perfil-acciones {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 20px;
+  padding-top: 18px;
+  border-top: 1px solid var(--raya);
+}
+
+
+/* ==========================================================
+   Marcar varios: la zona de revisión y la lista de documentos
+
+   Las dos barras se ven igual a propósito. Marcar en la zona de
+   revisión y marcar en los documentos ya subidos son el mismo gesto;
+   lo único distinto es que uno de los dos pregunta antes de borrar.
+   ========================================================== */
+
+.revision-barra {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  flex-wrap: wrap;
+  padding: 10px 14px;
+  margin-bottom: 12px;
+  background: var(--primary-tenue);
+  border-radius: var(--radio-chico);
+}
+
+.revision-barra-botones {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.marca-todos {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--texto-secundario);
+  cursor: pointer;
+  /* Blanco de clic cómodo: en pantalla táctil una casilla sola es
+     demasiado pequeña para acertarle. */
+  min-height: 28px;
+}
+
+.documento-casilla {
+  width: 19px;
+  height: 19px;
+  flex-shrink: 0;
+  accent-color: var(--primary);
+  cursor: pointer;
+}
+
+.marca-todos input {
+  width: 19px;
+  height: 19px;
+  accent-color: var(--primary);
+  cursor: pointer;
+}
+
+/* Lo marcado se ve marcado sin tener que mirar la casilla. */
+.documento-marcado {
+  background: var(--primary-tenue);
+  border-color: var(--borde-fuerte);
+}
+
+
+/* ==========================================================
+   Zona de revisión: lo que está por subir
+
+   Nada de esto ha salido del navegador todavía. Se pinta distinto de
+   los documentos ya recibidos justamente por eso: para que no haya
+   forma de confundir "lo que voy a mandar" con "lo que ya está".
+   ========================================================== */
+
+.revision-carga {
+  margin-top: 18px;
+  padding: 18px;
+  background: var(--superficie);
+  border: 2px dashed var(--borde-fuerte);
+  border-radius: var(--radio);
+}
+
+.revision-cabeza { margin-bottom: 14px; }
+
+.revision-titulo {
+  margin: 0 0 4px;
+  font-size: 17px;
+}
+
+.revision-ayuda { margin: 0; }
+
+.revision-lista {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  /* Si se sueltan cien archivos, la lista no puede empujar el botón de
+     confirmar fuera de la pantalla. */
+  max-height: 420px;
+  overflow-y: auto;
+}
+
+.revision-renglon {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 10px 12px;
+  background: var(--fondo);
+  border: 1px solid var(--borde);
+  border-radius: var(--radio-chico);
+}
+
+.revision-datos {
+  flex: 1;
+  min-width: 0;   /* deja que el nombre largo se corte en vez de estirar */
+}
+
+.revision-datos .documento-nombre {
+  overflow-wrap: anywhere;
+}
+
+.revision-descartados {
+  margin-top: 14px;
+  padding: 12px 14px;
+  background: var(--alerta-fondo);
+  border-radius: var(--radio-chico);
+}
+
+.revision-descartados .informe-titulo { color: var(--alerta-texto); }
+
+.revision-confirmar {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--raya);
+}
+
+.revision-confirmar .ayuda { margin: 0; }
+
+
+/* ==========================================================
+   Preguntar antes de borrar
+
+   No es el confirm() del navegador: aquí hay que decir CUÁNTOS
+   archivos y DE QUÉ CLIENTE, con los nombres a la vista.
+   ========================================================== */
+
+.confirmar-caja { max-width: 520px; }
+
+.confirmar-cuerpo { padding: 20px 22px; }
+
+.confirmar-frase {
+  margin: 0 0 6px;
+  font-size: 17px;
+  font-weight: 600;
+  color: var(--texto);
+}
+
+.confirmar-cliente {
+  margin: 0 0 14px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--error-texto);
+}
+
+.confirmar-lista {
+  margin: 0 0 14px;
+  padding: 12px 14px 12px 32px;
+  max-height: 220px;
+  overflow-y: auto;
+  background: var(--fondo);
+  border-radius: var(--radio-chico);
+  font-size: 14px;
+  line-height: 1.7;
+  color: var(--texto-secundario);
+  overflow-wrap: anywhere;
+}
+
+.confirmar-botones {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  padding: 0 22px 20px;
+}
+
+.boton-peligro {
+  background: var(--error);
+  border-color: var(--error);
+}
+
+.boton-peligro:hover { background: var(--error-texto); }
+
+
+/* ==========================================================
+   Historial de actividad
+
+   Qué se subió, qué se marcó y qué se borró. El color del filo
+   izquierdo dice de qué tipo fue, para poder buscar un borrado sin
+   leerse la lista entera.
+   ========================================================== */
+
+.lista-actividad {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 480px;
+  overflow-y: auto;
+}
+
+.actividad {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 9px 12px;
+  border-left: 3px solid var(--borde);
+  border-radius: 0 var(--radio-chico) var(--radio-chico) 0;
+  background: var(--superficie);
+  font-size: 14px;
+}
+
+.actividad-cuando {
+  color: var(--texto-tenue);
+  font-size: 12.5px;
+  flex-shrink: 0;
+}
+
+.actividad-que { color: var(--texto); }
+
+.actividad-detalle {
+  color: var(--texto-secundario);
+  overflow-wrap: anywhere;
+}
+
+.actividad-peligro { border-left-color: var(--error); }
+.actividad-entrada { border-left-color: var(--primary-acento); }
+.actividad-logro   { border-left-color: var(--primary); }
+
+
+@media (max-width: 640px) {
+  .perfil-arriba { flex-direction: column; }
+  .perfil-vecinos .boton-texto { max-width: 130px; }
+
+  .revision-barra {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .confirmar-botones { flex-direction: column-reverse; }
+  .confirmar-botones .boton,
+  .confirmar-botones .boton-secundario { width: 100%; }
+}
+
+
+/* ==========================================================
+   Buscar, ordenar y filtrar clientes
+
+   En temporada la pregunta es siempre la misma: "¿a quién le falta algo
+   y vence pronto?". Estos controles existen para contestarla en un
+   gesto, en vez de bajar por la lista mirando los filos de color.
+   ========================================================== */
+
+.clientes-cabeza {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+
+.barra-clientes {
+  display: flex;
+  align-items: flex-end;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-bottom: 14px;
+}
+
+.campo-buscar { flex: 1 1 280px; }
+
+.filtros {
+  border: 0;
+  margin: 0;
+  padding: 0;
+  min-width: 0;
+}
+
+.filtros-botones {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.filtro {
+  min-height: var(--alto-control);
+  padding: 0 15px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--texto-secundario);
+  background: var(--superficie);
+  border: 1px solid var(--borde-fuerte);
+  border-radius: var(--radio-chico);
+  cursor: pointer;
+}
+
+.filtro:hover { border-color: var(--primary); color: var(--primary); }
+
+.filtro-activo,
+.filtro-activo:hover {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: #fff;
+}
+
+/* El filtro de lo urgente lleva su propio color, el mismo del plazo que
+   se acerca, para que se reconozca sin leerlo. */
+.filtro-urgente { border-color: var(--alerta-texto); color: var(--alerta-texto); }
+.filtro-urgente:hover { border-color: var(--error); color: var(--error-texto); }
+.filtro-urgente.filtro-activo,
+.filtro-urgente.filtro-activo:hover {
+  background: var(--alerta-texto);
+  border-color: var(--alerta-texto);
+  color: #fff;
+}
+
+#resumen-filtro {
+  margin: 0 0 14px;
+  min-height: 20px;
+}
+
+@media (max-width: 640px) {
+  .barra-clientes { flex-direction: column; align-items: stretch; }
+  .filtros-botones .filtro { flex: 1 1 auto; }
+}
+
+
+/* Acciones sobre varios clientes de una vez. */
+.acciones-lote {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  align-items: center;
+  margin-bottom: 14px;
+}
+
+.acciones-lote .aviso { flex: 1 1 100%; margin: 4px 0 0; }
