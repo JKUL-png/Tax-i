@@ -22,7 +22,7 @@ a organizar los documentos que le mandan sus clientes para la declaración de re
 
 ## 2. Contexto real
 
-- **Usuario:** un contador público en Colombia, amigo del desarrollador. Trabaja con
+- **Usuario:** un contador público en Colombia. Trabaja con
   **personas naturales** (declaración de renta, Formulario 210).
 - **Temporada activa:** los vencimientos de renta AG 2025 corren del **12 de agosto al 26 de octubre de 2026**,
   escalonados por los dos últimos dígitos del NIT/cédula. Hay plazos especiales para
@@ -34,11 +34,10 @@ a organizar los documentos que le mandan sus clientes para la declaración de re
   No es un producto comercial todavía.
 
 ### Sobre el desarrollador
-- 19 años, colombiano, sin formación formal en programación.
-- Construye con asistencia de IA. Ya desplegó un proyecto real: sitio web con base de datos,
-  bot de Telegram con niveles de confianza por fuente, y panel de moderación.
-- Trabaja con Cloudflare, Supabase, y ahora Claude Code.
-- **Necesita explicaciones claras y pasos concretos, no jerga.**
+- JKUL. Sin formación formal en programación; construye con asistencia de IA.
+- **Necesita explicaciones claras y pasos concretos, no jerga.** Es la razón de
+  que el código de este repositorio esté comentado como está: en español, y
+  explicando el porqué de cada decisión, no solo el qué.
 
 ---
 

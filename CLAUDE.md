@@ -69,10 +69,19 @@ asistente-renta/
 │   ├── formularios/      # el Excel generado de cada cliente
 │   └── base.db
 ├── .env                  # configuración de la IA — NUNCA se sube a git
+├── docs/capturas/        # las capturas del README. Clientes INVENTADOS
+├── LICENSE               # AGPL-3.0, texto íntegro de la FSF
+├── README.md             # la portada del repositorio
 ├── requirements.txt
-├── iniciar.sh            # Mac
+├── iniciar.command       # Mac, doble clic desde el Finder
+├── iniciar.sh            # Mac, desde la terminal
 └── iniciar.bat           # Windows
 ```
+
+**Licencia: AGPL-3.0.** El repositorio es público. Antes de subir cualquier cosa,
+dos comprobaciones que no se saltan: que no salga ningún documento ni nombre de
+cliente de verdad —tampoco en las capturas— y que el `.env` siga fuera. Lo que
+se publica queda clonado; no hay marcha atrás.
 
 ---
 

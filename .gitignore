@@ -45,6 +45,11 @@ datos/
 # ...menos los recursos de la interfaz, que sí son parte del código
 !static/**
 
+# ...y menos las capturas del README, que son de clientes INVENTADOS.
+# Antes de agregar una aquí: mírela. Si sale el nombre de alguien de
+# verdad, no entra. Se generan con datos falsos, nunca con la base real.
+!docs/capturas/*.png
+
 # ==========================================================
 # Python
 # ==========================================================

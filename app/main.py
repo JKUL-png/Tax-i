@@ -1,6 +1,19 @@
 """
 Servidor del asistente de organización documental para renta.
 
+Tax-i — un archivador de documentos para la temporada de renta.
+Copyright (C) 2026 JKUL
+
+Este programa es software libre: usted puede redistribuirlo y/o
+modificarlo bajo los términos de la Licencia Pública General Affero de
+GNU, publicada por la Free Software Foundation, en su versión 3.
+
+Se distribuye con la esperanza de que sea útil, pero SIN NINGUNA
+GARANTÍA; ni siquiera la garantía implícita de COMERCIABILIDAD o
+IDONEIDAD PARA UN PROPÓSITO PARTICULAR. Vea la Licencia Pública General
+Affero de GNU para más detalles. El texto completo está en el archivo
+LICENSE, y en <https://www.gnu.org/licenses/agpl-3.0.html>.
+
 Corre en http://localhost:8000 y sirve dos cosas:
   - las páginas de la interfaz (carpeta static/)
   - una pequeña API para leer y guardar clientes y sus documentos
