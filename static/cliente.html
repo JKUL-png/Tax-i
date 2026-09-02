@@ -75,6 +75,10 @@
                 role="tab" aria-selected="false" aria-controls="vista-formulario"
                 data-vista="formulario">Formulario 210</button>
         <button type="button" class="area-vista-boton"
+                role="tab" aria-selected="false" aria-controls="vista-exogena"
+                data-vista="exogena">Exógena<span class="conteo"
+                id="exogena-conteo"></span></button>
+        <button type="button" class="area-vista-boton"
                 role="tab" aria-selected="false" aria-controls="vista-historial"
                 data-vista="historial">Historial y exportar</button>
       </nav>
@@ -482,6 +486,83 @@
 
     </div>
 
+    <div class="area-panel" id="vista-exogena" role="tabpanel" hidden>
+    <!-- ---------- Exógena ----------
+         Lo que los terceros le reportaron a la DIAN sobre este cliente.
+         El archivo se descarga del portal de la DIAN y se carga aquí.
+
+         Los textos de esta pantalla están escritos como habla un
+         contador: "Sin soporte" es que falta el papel, no que haya que
+         declararlo; "Diferencia" es revíselo, no que esté mal. -->
+    <section class="seccion">
+
+      <!-- Los avisos de la DIAN. Van textuales: son de ella. -->
+      <div id="exogena-avisos" class="exogena-avisos oculto"></div>
+
+      <!-- Cuando todavía no hay nada cargado -->
+      <div id="exogena-vacia" class="exogena-vacia">
+        <h2>Todavía no hay exógena de este cliente</h2>
+        <p class="ayuda">
+          La información exógena se descarga del portal de la DIAN, en
+          <em>Consulta de Información reportada por terceros</em>, y baja
+          como un archivo de Excel. Cárguelo aquí tal como lo descargó.
+        </p>
+        <p class="ayuda">
+          Al cargarlo se crean solos los renglones del 210 que la DIAN
+          menciona, con el nombre que ella misma les da. Usted los puede
+          renombrar, reordenar, agregar y quitar después.
+        </p>
+        <button type="button" class="boton" id="boton-cargar-exogena">
+          Cargar el archivo de la DIAN
+        </button>
+        <input type="file" id="campo-exogena" class="oculto"
+               accept=".xlsx,.xlsm">
+        <div id="aviso-exogena" class="aviso oculto" role="alert"></div>
+      </div>
+
+      <!-- Cuando sí hay -->
+      <div id="exogena-cargada" class="oculto">
+
+        <div class="exogena-encabezado">
+          <div>
+            <h2 id="exogena-titulo">Exógena</h2>
+            <p class="ayuda" id="exogena-corte"></p>
+          </div>
+          <div class="area-acciones">
+            <button type="button" class="boton-texto"
+                    id="boton-recargar-exogena">Cargar otro archivo</button>
+            <button type="button" class="boton-texto peligro"
+                    id="boton-quitar-exogena">Quitar esta exógena</button>
+          </div>
+        </div>
+
+        <!-- Los cinco topes. Son resumen, no renglones. -->
+        <div class="exogena-topes" id="exogena-topes"></div>
+
+        <!-- Filtro por estado -->
+        <div class="exogena-filtros" id="exogena-filtros"
+             role="group" aria-label="Filtrar por estado"></div>
+
+        <div class="tabla-envoltura">
+          <table class="exogena-tabla">
+            <thead>
+              <tr>
+                <th class="ordenable" data-orden="detalle">Concepto y quién reporta</th>
+                <th class="ordenable numero" data-orden="valor">Reporta la DIAN</th>
+                <th>Soporte cargado</th>
+                <th>Renglón sugerido por la DIAN</th>
+                <th class="ordenable" data-orden="estado">Estado</th>
+              </tr>
+            </thead>
+            <tbody id="exogena-filas"></tbody>
+          </table>
+        </div>
+
+        <p class="ayuda" id="exogena-pie"></p>
+      </div>
+    </section>
+    </div>
+
     <div class="area-panel" id="vista-historial" role="tabpanel" hidden>
     <!-- ---------- Historial de actividad ----------
          Qué se subió, qué se marcó y qué se borró, con su fecha. Es lo
@@ -735,7 +816,9 @@
   <script src="/static/cliente-subir.js"></script>
   <script src="/static/cliente-exportar.js"></script>
   <script src="/static/cliente-respaldo.js"></script>
+  <script src="/static/selector-renglon.js"></script>
   <script src="/static/formulario.js"></script>
+  <script src="/static/cliente-exogena.js"></script>
   <script src="/static/rentai.js"></script>
   <script src="/static/riel.js"></script>
   <script src="/static/cliente-arranque.js"></script>

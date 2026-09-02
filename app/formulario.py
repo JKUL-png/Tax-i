@@ -239,6 +239,27 @@ def _mapa_e_indice():
         return _mapa_guardado["mapa"], _mapa_guardado["indice"]
 
 
+def celdas_de_renglon(numero):
+    """Las casillas de captura que la plantilla tiene para un renglón.
+
+    'numero' es el del formulario 210 sin la R: "32" para R32. Devuelve
+    solo casillas donde SÍ se puede escribir; las que tienen fórmula
+    quedan fuera, porque escribir encima de una fórmula rompe el
+    archivo del contador.
+    """
+    numero = str(numero).strip()
+    if not numero:
+        return []
+    encontradas = []
+    for celda in mapa()["celdas"]:
+        if celda.get("renglon") != numero:
+            continue
+        if celda["tipo"] != TIPO_CAPTURA:
+            continue
+        encontradas.append(_para_pantalla(celda))
+    return encontradas
+
+
 def resumen_plantilla():
     """Lo que la pantalla necesita saber sobre la plantilla."""
     ruta = ruta_plantilla()

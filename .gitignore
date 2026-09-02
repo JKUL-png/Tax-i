@@ -50,6 +50,7 @@ datos/
 # verdad, no entra. Se generan con datos falsos, nunca con la base real.
 !docs/capturas/*.png
 
+
 # ==========================================================
 # Python
 # ==========================================================

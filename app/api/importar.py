@@ -1,6 +1,6 @@
 """Importar una lista de clientes desde un Excel o un CSV, en dos pasos."""
 
-from app import bitacora, checklist, db, documentos, importar
+from app import bitacora, db, documentos, importar
 from app.api.base import (
     app, limpiar_digitos, limpiar_fecha, limpiar_nombre,
 )
@@ -80,7 +80,7 @@ def api_confirmar_importacion(peticion, **partes):
             fecha_vencimiento=fecha,
             notas=notas,
         )
-        db.crear_renglones(cliente["id"], checklist.LISTA_BASE)
+        # Sin checklist: nada se agrega solo. Ver app/api/clientes.py.
         bitacora.anotar(cliente["id"], bitacora.CLIENTE_CREADO,
                         cliente["nombre"])
         creados.append(cliente)

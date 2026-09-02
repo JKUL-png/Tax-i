@@ -55,6 +55,12 @@ for cli, nombre, contenido in [
     db.guardar_datos_extraidos(cli["id"], d["id"],
         [{"concepto": "Salarios", "valor": "45.000.000"}], "ia")
 
+# El archivo de exógena que el contador descargó de la DIAN. Los datos
+# van en la base, pero el archivo original es suyo y tiene que volver.
+carpeta_exogena = A / "exogena" / str(c1["id"])
+carpeta_exogena.mkdir(parents=True, exist_ok=True)
+(carpeta_exogena / "reporteExogena2025.xlsx").write_bytes(b"PK\x03\x04 exogena")
+
 print("\nA. Armar el respaldo")
 zip_path = A / "respaldo.zip"
 informe = respaldo.armar(zip_path)
@@ -70,6 +76,9 @@ revisar("un nombre con ':' y '/' se limpió para Windows",
         not any(":" in n for n in nombres),
         [n for n in nombres if "Ana" in n][:1])
 revisar("el .env NO va en el respaldo", not any(".env" in n for n in nombres))
+revisar("lleva el reporte de exógena que descargó de la DIAN",
+        informe["exogena"] == 1 and any(n.startswith("exogena/") for n in nombres),
+        [n for n in nombres if n.startswith("exogena/")][:1])
 
 print("\nB. Revisar antes de tocar nada")
 info = respaldo.revisar(zip_path)
@@ -104,6 +113,11 @@ revisar("lo ya leído de los documentos volvió",
 ruta = documentos.ruta_del_documento(c1["id"], db.listar_documentos(c1["id"])[0]["nombre_guardado"])
 revisar("y los archivos están en el disco, con su contenido",
         ruta and ruta.exists() and b"%PDF" in ruta.read_bytes(), str(ruta))
+exogena_vuelta = list((B / "exogena").rglob("*.xlsx"))
+revisar("el reporte de exógena también volvió",
+        len(exogena_vuelta) == 1
+        and exogena_vuelta[0].read_bytes() == b"PK\x03\x04 exogena",
+        [str(x) for x in exogena_vuelta])
 
 print("\nD. Restaurar encima NO borra lo que había")
 otro = db.crear_cliente("Trabajo del computador B", "77", None)

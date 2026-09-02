@@ -156,28 +156,19 @@ function dibujarDocumento(documento) {
   const asignacion = document.createElement("div");
   asignacion.className = "documento-asignacion";
 
-  const selector = document.createElement("select");
-  selector.className = "selector-renglon";
-  selector.setAttribute("aria-label", "Asignar a un renglón del checklist");
-
-  const vacia = document.createElement("option");
-  vacia.value = "";
-  vacia.textContent = "— sin asignar —";
-  selector.appendChild(vacia);
-
-  renglonesDelCliente.forEach(function (renglon) {
-    const opcion = document.createElement("option");
-    opcion.value = renglon.id;
-    opcion.textContent = renglon.titulo;
-    selector.appendChild(opcion);
+  /* Un campo con búsqueda, no un <select> del navegador: con los
+     renglones que salen de la exógena la lista se sale de la pantalla.
+     Ver static/selector-renglon.js. */
+  const selector = SelectorRenglon.crear({
+    renglones: renglonesDelCliente,
+    elegido: documento.renglon_id || null,
+    etiqueta: "Asignar a un renglón del checklist",
+    alElegir: function (id) {
+      asignarDocumento(documento.id, id || null);
+    }
   });
 
-  selector.value = documento.renglon_id || "";
-  selector.addEventListener("change", function () {
-    asignarDocumento(documento.id, selector.value || null);
-  });
-
-  asignacion.appendChild(selector);
+  asignacion.appendChild(selector.elemento);
 
   // Si el programa cree saber a qué renglón va, lo propone. La sugerencia
   // sale del nombre del archivo, con código: no la hizo ninguna IA.

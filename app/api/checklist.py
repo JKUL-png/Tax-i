@@ -1,7 +1,8 @@
 """El checklist de cada cliente: qué se le pidió y qué ya llegó."""
 
 from app import bitacora, checklist, db
-from app.api.base import app, campo_texto, revisado
+from app.api.base import (app, campo_lista_de_numeros, campo_texto,
+                          revisado)
 from app.servidor import ErrorHttp
 
 
@@ -49,6 +50,17 @@ def api_agregar_lista_base(peticion, id_cliente):
     bitacora.anotar(id_cliente, bitacora.LISTA_BASE_AGREGADA, "",
                     len(renglones))
     return renglones
+
+
+@app.put("/api/clientes/{id_cliente}/checklist/orden")
+def api_reordenar_checklist(peticion, id_cliente):
+    """Reacomoda los renglones en el orden que el contador los dejó."""
+    if db.obtener_cliente(id_cliente) is None:
+        raise ErrorHttp(404, "Ese cliente no existe.")
+    ids = campo_lista_de_numeros(peticion.diccionario(), "ids")
+    if not ids:
+        raise ErrorHttp(400, "No llegó ningún renglón que reordenar.")
+    return db.reordenar_checklist(id_cliente, ids)
 
 
 @app.patch("/api/checklist/{id_renglon}")

@@ -4352,3 +4352,421 @@ code {
   padding-left: 10px;
   margin-top: 8px;
 }
+
+/* ==========================================================
+   El selector de renglones con búsqueda
+
+   Reemplaza al <select> del navegador. El desplegable lo dibuja la
+   página, no el sistema operativo, y por eso se ve igual en Windows y
+   en Mac, y no se corta contra el borde de la ventana.
+   ========================================================== */
+
+.selector-buscable {
+  position: relative;
+  display: inline-block;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.selector-boton {
+  width: 100%;
+  max-width: 30rem;
+  text-align: left;
+  padding: 0.35rem 1.6rem 0.35rem 0.55rem;
+  border: 1px solid var(--borde-fuerte);
+  border-radius: 6px;
+  background: var(--superficie);
+  color: var(--texto);
+  font: inherit;
+  font-size: var(--t-celda);
+  cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.selector-boton::after {
+  content: "";
+  position: absolute;
+  right: 0.6rem;
+  top: 50%;
+  margin-top: -2px;
+  border: 4px solid transparent;
+  border-top-color: var(--n5);
+  pointer-events: none;
+}
+
+.selector-boton:hover { border-color: var(--primary); }
+.selector-boton:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 1px;
+}
+.selector-boton.selector-vacio { color: var(--texto-tenue); }
+
+.selector-desplegable {
+  position: absolute;
+  z-index: 40;
+  top: calc(100% + 3px);
+  left: 0;
+  min-width: 100%;
+  width: max-content;
+  max-width: min(34rem, 90vw);
+  background: var(--superficie);
+  border: 1px solid var(--borde-fuerte);
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(19, 26, 22, 0.16);
+  padding: 0.4rem;
+}
+
+/* En las últimas filas de una tabla larga no cabe hacia abajo. */
+.selector-desplegable.selector-hacia-arriba {
+  top: auto;
+  bottom: calc(100% + 3px);
+}
+
+.selector-buscador {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 0.35rem 0.5rem;
+  border: 1px solid var(--borde);
+  border-radius: 5px;
+  font: inherit;
+  font-size: var(--t-celda);
+  margin-bottom: 0.35rem;
+}
+.selector-buscador:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: -1px;
+}
+
+/* Alto fijo con su propio scroll: la lista nunca tapa la pantalla. */
+.selector-lista {
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.selector-opcion {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 0.35rem 0.5rem;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--texto);
+  font: inherit;
+  font-size: var(--t-celda);
+  cursor: pointer;
+  white-space: normal;
+}
+
+.selector-opcion.selector-resaltada { background: var(--n2); }
+.selector-opcion.selector-elegida {
+  background: var(--primary-tenue);
+  font-weight: 600;
+}
+.selector-opcion.selector-vacio { color: var(--texto-tenue); }
+.selector-opcion.selector-crear { color: var(--primary); font-weight: 600; }
+
+.selector-nada {
+  margin: 0;
+  padding: 0.5rem;
+  color: var(--texto-tenue);
+  font-size: var(--t-meta);
+}
+
+/* ==========================================================
+   La pestaña Exógena
+   ========================================================== */
+
+/* Los avisos de la DIAN. Van textuales y siempre visibles: el primero
+   dice que la información puede cambiar si un tercero la modifica. */
+.exogena-avisos {
+  border: 1px solid var(--borde);
+  border-left: 3px solid var(--n5);
+  border-radius: 8px;
+  background: var(--superficie);
+  padding: 0.75rem 1rem;
+  margin-bottom: 1rem;
+}
+
+.exogena-avisos-titulo {
+  margin: 0 0 0.5rem;
+  font-size: var(--t-rotulo);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--texto-tenue);
+}
+
+.exogena-aviso {
+  margin: 0 0 0.5rem;
+  font-size: var(--t-meta);
+  color: var(--texto-secundario);
+  line-height: 1.5;
+}
+.exogena-aviso:last-child { margin-bottom: 0; }
+
+.exogena-vacia {
+  background: var(--superficie);
+  border: 1px solid var(--borde);
+  border-radius: 10px;
+  padding: 1.5rem;
+  max-width: 42rem;
+}
+.exogena-vacia h2 { margin-top: 0; }
+
+.exogena-encabezado {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: 1rem;
+}
+.exogena-encabezado h2 { margin: 0; }
+.exogena-encabezado .ayuda { margin: 0.25rem 0 0; }
+
+/* Los topes: resumen, no renglones. Por eso van arriba y aparte. */
+.exogena-topes { margin-bottom: 1rem; }
+
+.exogena-topes-titulo {
+  margin: 0 0 0.5rem;
+  font-size: var(--t-rotulo);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--texto-tenue);
+}
+
+.exogena-topes-fila {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.exogena-tope {
+  flex: 1 1 9rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  padding: 0.6rem 0.75rem;
+  background: var(--superficie);
+  border: 1px solid var(--borde);
+  border-radius: 8px;
+}
+
+.exogena-tope-nombre {
+  font-size: var(--t-meta);
+  color: var(--texto-tenue);
+}
+
+.exogena-tope-valor {
+  font-family: var(--fuente-cifras);
+  font-size: var(--t-celda);
+  font-variant-numeric: tabular-nums;
+}
+
+.exogena-filtros {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin-bottom: 0.75rem;
+}
+
+.exogena-filtro {
+  padding: 0.25rem 0.6rem;
+  border: 1px solid var(--borde-fuerte);
+  border-radius: 999px;
+  background: var(--superficie);
+  color: var(--texto-secundario);
+  font: inherit;
+  font-size: var(--t-meta);
+  cursor: pointer;
+}
+.exogena-filtro:hover { border-color: var(--primary); }
+.exogena-filtro-activo {
+  background: var(--primary-tenue);
+  border-color: var(--primary);
+  color: var(--primary-hover);
+  font-weight: 600;
+}
+
+/* La tabla es ancha: rueda dentro de su caja, nunca la página entera. */
+.tabla-envoltura {
+  overflow-x: auto;
+  border: 1px solid var(--borde);
+  border-radius: 10px;
+  background: var(--superficie);
+}
+
+.exogena-tabla {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--t-celda);
+}
+
+.exogena-tabla th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  text-align: left;
+  padding: 0.55rem 0.75rem;
+  background: var(--n2);
+  border-bottom: 1px solid var(--borde-fuerte);
+  font-size: var(--t-rotulo);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--texto-secundario);
+  white-space: nowrap;
+}
+
+.exogena-tabla th.ordenable { cursor: pointer; }
+.exogena-tabla th.ordenable:hover { color: var(--primary); }
+.exogena-tabla th.numero,
+.exogena-tabla td.numero { text-align: right; }
+
+.exogena-tabla td {
+  padding: 0.6rem 0.75rem;
+  border-bottom: 1px solid var(--raya);
+  vertical-align: top;
+}
+
+.exogena-tabla tr:last-child td { border-bottom: 0; }
+.exogena-tabla tbody tr:hover { background: var(--n1); }
+
+.exogena-detalle { font-weight: 600; line-height: 1.35; }
+
+.exogena-quien {
+  margin-top: 0.15rem;
+  font-size: var(--t-meta);
+  color: var(--texto-tenue);
+}
+
+.exogena-tabla td.numero strong {
+  font-family: var(--fuente-cifras);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* Las dos cifras cuando no cuadran. Se muestran las dos y ya: cuál
+   está bien lo decide el contador. */
+.exogena-otra-cifra {
+  margin-top: 0.2rem;
+  font-size: var(--t-meta);
+  color: var(--alerta-texto);
+  white-space: nowrap;
+}
+
+.exogena-uso {
+  margin: 0;
+  font-size: var(--t-meta);
+  color: var(--texto-secundario);
+  line-height: 1.45;
+  white-space: pre-wrap;
+  max-width: 30rem;
+}
+
+.exogena-nota {
+  margin: 0.35rem 0 0;
+  font-size: var(--t-meta);
+  color: var(--texto-tenue);
+  font-style: italic;
+  max-width: 30rem;
+}
+
+.exogena-falta { color: var(--texto-tenue); font-size: var(--t-meta); }
+.exogena-soporte { display: block; margin-bottom: 0.2rem; }
+
+.exogena-adicional { margin-top: 0.35rem; }
+.exogena-adicional summary {
+  cursor: pointer;
+  font-size: var(--t-meta);
+  color: var(--texto-tenue);
+}
+.exogena-adicional dl {
+  margin: 0.35rem 0 0;
+  font-size: var(--t-meta);
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.1rem 0.5rem;
+}
+.exogena-adicional dt { color: var(--texto-tenue); }
+.exogena-adicional dd { margin: 0; word-break: break-word; }
+
+/* Cuando la DIAN propone varios renglones. Las opciones van tal como
+   ella las escribió; el programa no elige. */
+.exogena-decision {
+  margin-top: 0.5rem;
+  padding: 0.5rem;
+  border: 1px dashed var(--borde-fuerte);
+  border-radius: 8px;
+  background: var(--n1);
+}
+
+.exogena-decision-titulo {
+  margin: 0 0 0.4rem;
+  font-size: var(--t-meta);
+  font-weight: 600;
+  color: var(--texto-secundario);
+}
+
+.exogena-opcion {
+  display: block;
+  width: 100%;
+  text-align: left;
+  margin-bottom: 0.25rem;
+  padding: 0.35rem 0.5rem;
+  border: 1px solid var(--borde-fuerte);
+  border-radius: 6px;
+  background: var(--superficie);
+  color: var(--texto);
+  font: inherit;
+  font-size: var(--t-meta);
+  line-height: 1.4;
+  cursor: pointer;
+}
+.exogena-opcion:hover { border-color: var(--primary); }
+.exogena-opcion-elegida {
+  background: var(--primary-tenue);
+  border-color: var(--primary);
+  font-weight: 600;
+}
+
+.exogena-al-210 { margin-top: 0.35rem; }
+
+/* Los estados. "Sin soporte" es que falta el papel, no que haya que
+   declararlo. "Diferencia" es revíselo, no que esté mal. */
+.exogena-estado {
+  display: inline-block;
+  margin: 0 0.25rem 0.25rem 0;
+  padding: 0.15rem 0.5rem;
+  border-radius: 999px;
+  border: 1px solid var(--borde-fuerte);
+  font-size: var(--t-rotulo);
+  white-space: nowrap;
+  color: var(--texto-secundario);
+}
+
+.exogena-estado.estado-logro {
+  border-color: var(--primary);
+  color: var(--primary-hover);
+  background: var(--primary-tenue);
+}
+.exogena-estado.estado-revisar {
+  border-color: var(--alerta-texto);
+  color: var(--alerta-texto);
+}
+.exogena-estado.estado-falta { color: var(--texto-tenue); }
+
+.exogena-porque {
+  margin: 0.25rem 0 0;
+  font-size: var(--t-meta);
+  color: var(--texto-tenue);
+  line-height: 1.4;
+  max-width: 18rem;
+}
+
+.exogena-tabla .vacio {
+  padding: 1.5rem;
+  text-align: center;
+  color: var(--texto-tenue);
+}

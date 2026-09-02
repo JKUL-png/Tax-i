@@ -201,12 +201,20 @@ def main():
                     or "Venció" in pagina.locator("#perfil-plazo").inner_text())
             revisar("muestra la fecha en palabras",
                     "diciembre" in pagina.locator("#perfil-fecha").inner_text())
-            revisar("muestra el avance del checklist",
-                    "/" in pagina.locator("#perfil-avance").inner_text())
+            # El cliente nuevo arranca sin checklist: nada se agrega
+            # solo. Los renglones salen de cargar la exógena o del botón
+            # de la lista sugerida, y las dos cosas las decide él.
+            revisar("un cliente nuevo dice que no tiene checklist todavía",
+                    "sin checklist" in
+                    pagina.locator("#perfil-faltan").inner_text().lower(),
+                    pagina.locator("#perfil-faltan").inner_text())
+            revisar("y no inventa un avance que no existe",
+                    pagina.locator("#perfil-avance").inner_text().strip() == "—",
+                    pagina.locator("#perfil-avance").inner_text())
             revisar("muestra cuántos documentos hay",
                     pagina.locator("#perfil-documentos").inner_text().strip() == "0")
-            revisar("destaca lo que falta",
-                    pagina.locator("#perfil-pendientes").is_visible())
+            revisar("no destaca faltantes cuando no hay checklist",
+                    not pagina.locator("#perfil-pendientes").is_visible())
             revisar("tiene el historial de actividad",
                     pagina.locator("#lista-actividad .actividad").count() > 0)
             # text_content y no inner_text: la sección del historial viene
@@ -379,8 +387,172 @@ def main():
 
             errores.clear()
 
+            # ---------- La pestaña Exógena ----------
+            # Es la prueba que importa de la fase 2: un error de
+            # JavaScript aquí no se ve desde el servidor, la página
+            # carga con código 200 y los botones simplemente no hacen
+            # nada.
+            titulo("F. La pestaña Exógena")
+            errores.clear()
+            pagina.goto(DIRECCION + "/cliente?id=%d" % id_cliente,
+                        wait_until="networkidle")
+
+            pestana = pagina.locator('[data-vista="exogena"]')
+            revisar("la pestaña se llama Exógena, como la llama el contador",
+                    pestana.count() == 1
+                    and "Exógena" in pestana.inner_text(),
+                    pestana.inner_text() if pestana.count() else "no está")
+
+            pestana.click()
+            pagina.wait_for_timeout(400)
+            revisar("abre sin errores de JavaScript", not errores, errores[:3])
+            revisar("un cliente sin exógena no arranca con nada inventado",
+                    pagina.locator("#exogena-vacia").is_visible())
+
+            ejemplo = RAIZ / "pruebas" / "ejemplos" / "reporteExogena2025_EJEMPLO.xlsx"
+            if not ejemplo.exists():
+                revisar("está el archivo de ejemplo", False, str(ejemplo))
+            else:
+                pagina.locator("#campo-exogena").set_input_files(str(ejemplo))
+                pagina.wait_for_selector("#exogena-cargada:not(.oculto)",
+                                         timeout=20000)
+                pagina.wait_for_timeout(600)
+                revisar("carga el archivo sin errores de JavaScript",
+                        not errores, errores[:3])
+
+                filas = pagina.locator("#exogena-filas tr")
+                revisar("pinta los 36 registros reportados",
+                        filas.count() == 36, filas.count())
+
+                topes = pagina.locator(".exogena-tope")
+                revisar("los cinco topes van arriba, aparte de la tabla",
+                        topes.count() == 5, topes.count())
+
+                avisos = pagina.locator(".exogena-aviso")
+                revisar("muestra los tres avisos de la DIAN",
+                        avisos.count() == 3, avisos.count())
+
+                texto_avisos = pagina.locator("#exogena-avisos").inner_text()
+                revisar("y el tercero va palabra por palabra",
+                        "NO ES INDISPENSABLE y NO REEMPLAZA" in texto_avisos)
+                revisar("se ve la fecha de corte del proceso",
+                        "corte" in pagina.locator("#exogena-corte").inner_text())
+
+                # Los textos son los que definen el producto.
+                tabla = pagina.locator("#vista-exogena").inner_text()
+                revisar("la columna dice «Renglón sugerido por la DIAN»",
+                        "renglón sugerido por la dian" in tabla.lower())
+                revisar("«Sin soporte» dice que falta el papel",
+                        "Sin soporte" in tabla)
+                revisar("en ninguna parte dice que haya que declararlo",
+                        "hay que declararlo" not in tabla.lower())
+                revisar("ni dice que algo esté mal o que haya un error",
+                        "está mal" not in tabla.lower()
+                        and "hay un error" not in tabla.lower())
+                revisar("ni llama a esto «cruce» ni «conciliación»",
+                        "cruce" not in tabla.lower()
+                        and "conciliaci" not in tabla.lower())
+
+                revisar("marca las filas que requieren decisión",
+                        pagina.locator(
+                            '.exogena-estado:has-text("Requiere decisión")'
+                        ).count() == 8)
+                revisar("y muestra las opciones tal como las escribió la DIAN",
+                        "R29 Patrimonio Bruto (si el saldo es positivo)"
+                        in tabla)
+                revisar("los posibles duplicados se marcan con su motivo",
+                        pagina.locator(".exogena-porque").count() > 0)
+
+                # El filtro por estado.
+                filtro = pagina.locator(
+                    '.exogena-filtro:has-text("Requiere decisión")')
+                revisar("hay filtro por estado", filtro.count() == 1)
+                if filtro.count():
+                    filtro.click()
+                    pagina.wait_for_timeout(300)
+                    revisar("filtrar deja solo esas filas",
+                            pagina.locator("#exogena-filas tr").count() == 8,
+                            pagina.locator("#exogena-filas tr").count())
+                    filtro.click()
+                    pagina.wait_for_timeout(300)
+
+                revisar("sin errores de JavaScript en toda la pestaña",
+                        not errores, errores[:3])
+
+            # ---------- El selector de renglones ----------
+            titulo("G. El selector de renglones")
+            errores.clear()
+            pagina.locator('[data-vista="documentos"]').click()
+            pagina.wait_for_timeout(500)
+
+            # El selector vive en cada documento, y la sección anterior
+            # los borró todos. Se sube uno y se confirma, como lo haría
+            # el contador.
+            pagina.locator("#campo-archivos").set_input_files([{
+                "name": "certificado.pdf",
+                "mimeType": "application/pdf",
+                "buffer": b"%PDF-1.4 para el selector",
+            }])
+            pagina.wait_for_selector("#revision-carga:not(.oculto)",
+                                     timeout=15000)
+            pagina.locator("#revision-confirmar").click()
+            try:
+                pagina.wait_for_selector(".selector-buscable", timeout=20000)
+            except Exception:
+                pass
+            pagina.wait_for_timeout(400)
+
+            selector = pagina.locator(".selector-buscable").first
+            if selector.count() == 0:
+                revisar("hay documentos con selector de renglón", False,
+                        "el cliente no tiene documentos en este punto")
+            else:
+                revisar("ya no es un <select> del navegador",
+                        pagina.locator("select.selector-renglon").count() == 0)
+
+                selector.locator(".selector-boton").click()
+                pagina.wait_for_timeout(300)
+                desplegable = selector.locator(".selector-desplegable")
+                revisar("se abre el desplegable", desplegable.is_visible())
+                revisar("tiene alto máximo y su propio scroll",
+                        selector.locator(".selector-lista").evaluate(
+                            "e => e.style.maxHeight !== ''"))
+
+                # Buscar escribiendo.
+                selector.locator(".selector-buscador").fill("Patrimonio")
+                pagina.wait_for_timeout(300)
+                opciones = selector.locator(".selector-opcion")
+                revisar("buscar escribiendo recorta la lista",
+                        0 < opciones.count() < 15, opciones.count())
+                revisar("y encuentra sin importar las tildes",
+                        "Patrimonio" in opciones.first.inner_text())
+
+                # El teclado: flechas, Enter, Escape.
+                pagina.keyboard.press("ArrowDown")
+                pagina.wait_for_timeout(150)
+                revisar("las flechas mueven el resaltado",
+                        selector.locator(".selector-resaltada").count() == 1)
+                pagina.keyboard.press("Escape")
+                pagina.wait_for_timeout(250)
+                revisar("Escape lo cierra", not desplegable.is_visible())
+
+                selector.locator(".selector-boton").click()
+                pagina.wait_for_timeout(250)
+                selector.locator(".selector-buscador").fill("Patrimonio")
+                pagina.wait_for_timeout(250)
+                pagina.keyboard.press("ArrowDown")
+                pagina.keyboard.press("Enter")
+                pagina.wait_for_timeout(600)
+                revisar("Enter elige la resaltada",
+                        "Patrimonio" in selector.locator(".selector-boton")
+                                                .inner_text(),
+                        selector.locator(".selector-boton").inner_text())
+
+                revisar("sin errores de JavaScript en el selector",
+                        not errores, errores[:3])
+
             # ---------- La pantalla de cuenta ----------
-            titulo("F. La pantalla de Cuenta")
+            titulo("H. La pantalla de Cuenta")
             pagina.goto(DIRECCION + "/cuenta", wait_until="networkidle")
             revisar("abre sin errores de JavaScript", not errores, errores[:3])
             revisar("deja elegir el proveedor de IA",

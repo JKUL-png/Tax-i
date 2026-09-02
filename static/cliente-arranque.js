@@ -20,6 +20,10 @@ if (!idCliente) {
   // documento se arma con los renglones, así que tienen que existir ya.
   // Y al final la fila de lectura, que necesita saber qué documentos hay.
   cargarChecklist().then(cargarDocumentos).then(arrancarLaCola);
+
+  // La pestaña Exógena se enciende aparte: no depende de las otras y
+  // trae sus propios datos.
+  if (window.ExogenaTaxi) ExogenaTaxi.encender(idCliente);
 }
 
 recordarPlegables();

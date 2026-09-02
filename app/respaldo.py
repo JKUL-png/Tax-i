@@ -56,6 +56,7 @@ CARPETA_DATOS = RAIZ / "datos"
 NOMBRE_BASE = "base.db"
 CARPETA_DOCUMENTOS = "documentos"
 CARPETA_FORMULARIOS = "formularios"
+CARPETA_EXOGENA = "exogena"
 NOMBRE_LEEME = "RESPALDO.txt"
 
 # Techo de lo que se acepta restaurar. Un respaldo de verdad no llega
@@ -93,7 +94,8 @@ def _texto_del_leeme(clientes, cuantos_documentos):
         "  %s   la base de datos completa: clientes, checklists, valores\n"
         "        del Formulario 210, lo leído de cada documento y la bitácora\n"
         "  %s/   los documentos, en una carpeta por cliente\n"
-        "  %s/  los archivos de Excel que se generaron\n\n"
+        "  %s/  los archivos de Excel que se generaron\n"
+        "  %s/     los reportes de exógena que descargó de la DIAN\n\n"
         "Qué NO trae\n"
         "-----------\n"
         "  El archivo .env, donde vive la llave del servicio de IA. Se deja\n"
@@ -115,6 +117,7 @@ def _texto_del_leeme(clientes, cuantos_documentos):
             datetime.now().strftime("%d/%m/%Y a las %H:%M"),
             len(clientes), cuantos_documentos,
             NOMBRE_BASE, CARPETA_DOCUMENTOS, CARPETA_FORMULARIOS,
+            CARPETA_EXOGENA,
         )
     )
 
@@ -136,7 +139,8 @@ def armar(destino):
     destino.parent.mkdir(parents=True, exist_ok=True)
 
     clientes = db.listar_clientes()
-    informe = {"clientes": len(clientes), "documentos": 0, "formularios": 0}
+    informe = {"clientes": len(clientes), "documentos": 0, "formularios": 0,
+               "exogena": 0}
 
     with zipfile.ZipFile(destino, "w", zipfile.ZIP_DEFLATED) as paquete:
         # 1. La base. Es lo único imprescindible: sin ella los archivos
@@ -176,6 +180,26 @@ def armar(destino):
                                   archivo.name),
                 )
                 informe["formularios"] += 1
+
+        # 4. Los archivos de exógena que el contador descargó de la
+        #    DIAN. Los datos ya van en la base, pero el archivo original
+        #    es suyo y es lo que puede volver a abrir para verlo con sus
+        #    ojos. Sin esto, restaurar le devolvía las cifras pero no el
+        #    papel de donde salieron.
+        for cliente in clientes:
+            carpeta = CARPETA_DATOS / "exogena" / str(cliente["id"])
+            if not carpeta.exists():
+                continue
+            nombre_carpeta = _nombre_de_carpeta(cliente)
+            for archivo in sorted(carpeta.iterdir()):
+                if not archivo.is_file() or documentos.es_basura(archivo.name):
+                    continue
+                paquete.write(
+                    archivo,
+                    "%s/%s/%s" % (CARPETA_EXOGENA, nombre_carpeta,
+                                  archivo.name),
+                )
+                informe["exogena"] += 1
 
         paquete.writestr(
             NOMBRE_LEEME,
@@ -318,6 +342,22 @@ def restaurar(ruta_zip):
             if not numero.isdigit():
                 continue
             carpeta = CARPETA_DATOS / "formularios" / ("cliente-%s" % numero)
+            carpeta.mkdir(parents=True, exist_ok=True)
+            (carpeta / partes[-1]).write_bytes(paquete.read(nombre))
+
+        # 4. Los archivos de exógena.
+        for nombre in paquete.namelist():
+            if not nombre.startswith(CARPETA_EXOGENA + "/"):
+                continue
+            if nombre.endswith("/"):
+                continue
+            partes = Path(nombre).parts
+            if len(partes) < 3:
+                continue
+            numero = partes[1].split(" - ")[0].strip()
+            if not numero.isdigit():
+                continue
+            carpeta = CARPETA_DATOS / "exogena" / numero
             carpeta.mkdir(parents=True, exist_ok=True)
             (carpeta / partes[-1]).write_bytes(paquete.read(nombre))
 

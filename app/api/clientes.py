@@ -1,7 +1,8 @@
 """Las direcciones de la API para crear, leer y borrar clientes."""
 
 from app import (
-    bitacora, checklist, db, documentos, formulario, vencimientos,
+    bitacora, checklist, db, documentos, exogena_cliente, formulario,
+    vencimientos,
 )
 from app.api.base import (
     NO_MANDADO, app, campo, campo_lista_de_numeros, campo_texto,
@@ -51,9 +52,12 @@ def api_crear_cliente(peticion, **partes):
         fecha_vencimiento=fecha,
         notas=campo(datos, "notas"),
     )
-    # Se le arma el checklist sugerido para que no arranque en blanco.
-    # Es un punto de partida: el contador lo ajusta como necesite.
-    db.crear_renglones(cliente["id"], checklist.LISTA_BASE)
+    # El cliente arranca VACÍO, a propósito. Nada se agrega solo.
+    #
+    # Los renglones salen de una de dos partes, y las dos las decide él:
+    # de cargar la exógena en la pestaña Exógena —de ahí salen con el
+    # nombre que la propia DIAN les da— o del botón de la lista
+    # sugerida, que sigue ahí para el cliente que no tiene exógena.
     bitacora.anotar(cliente["id"], bitacora.CLIENTE_CREADO, cliente["nombre"])
     return cliente
 
@@ -97,6 +101,8 @@ def api_eliminar_cliente(peticion, id_cliente):
     documentos.eliminar_carpeta_cliente(id_cliente)
     # Y el archivo de Excel de ese cliente, que también es confidencial.
     formulario.eliminar_carpeta_cliente(id_cliente)
+    # Y el reporte de exógena que descargó de la DIAN, por lo mismo.
+    exogena_cliente.eliminar_carpeta_cliente(id_cliente)
 
 
 @app.get("/api/clientes/{id_cliente}/bitacora")

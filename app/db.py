@@ -9,6 +9,7 @@ Ese archivo contiene datos confidenciales de terceros, por eso la
 carpeta datos/ está excluida de git.
 """
 
+import json
 import sqlite3
 from contextlib import contextmanager
 from datetime import datetime
@@ -129,6 +130,13 @@ def crear_tablas():
                 -- Para que los renglones se muestren siempre en el mismo
                 -- orden, sin importar cuándo se agregaron.
                 orden          INTEGER NOT NULL,
+                -- El número del renglón del 210 cuando el renglón salió
+                -- de la exógena: '32' para R32. Vacío en los que
+                -- escribió el contador.
+                codigo_renglon TEXT NOT NULL DEFAULT '',
+                -- 'contador' o 'dian'. Los de la DIAN se crean solos al
+                -- cargar la exógena; los del contador los escribe él.
+                origen         TEXT NOT NULL DEFAULT 'contador',
                 actualizado_en TEXT NOT NULL,
                 FOREIGN KEY (cliente_id) REFERENCES clientes(id)
                     ON DELETE CASCADE
@@ -319,6 +327,104 @@ def crear_tablas():
             " ON datos_extraidos (documento_id)"
         )
 
+        # La información exógena de cada cliente: lo que los terceros le
+        # reportaron a la DIAN. Una carga por cliente y por año gravable.
+        #
+        # Se guardan los avisos legales de la DIAN TEXTUALES y la fecha
+        # de corte, porque el propio primer aviso dice que la
+        # información puede cambiar si un tercero la modifica después.
+        conexion.execute(
+            """
+            CREATE TABLE IF NOT EXISTS exogena_cargas (
+                id              INTEGER PRIMARY KEY AUTOINCREMENT,
+                cliente_id      INTEGER NOT NULL,
+                anio            TEXT NOT NULL,
+                -- Lo que dice la cabecera del archivo sobre el titular.
+                identificacion  TEXT NOT NULL DEFAULT '',
+                tipo_documento  TEXT NOT NULL DEFAULT '',
+                nombre          TEXT NOT NULL DEFAULT '',
+                -- Hasta cuándo alcanzaron a llegar los datos, y cuándo
+                -- se generó el archivo. No son lo mismo.
+                fecha_corte     TEXT NOT NULL DEFAULT '',
+                fecha_reporte   TEXT NOT NULL DEFAULT '',
+                -- Los tres avisos de la DIAN, en JSON, palabra por
+                -- palabra. No se resumen ni se reescriben.
+                avisos          TEXT NOT NULL DEFAULT '[]',
+                -- Los cinco topes, en JSON. Son resumen, no renglones.
+                topes           TEXT NOT NULL DEFAULT '[]',
+                archivo         TEXT NOT NULL DEFAULT '',
+                cargado_en      TEXT NOT NULL,
+                FOREIGN KEY (cliente_id) REFERENCES clientes(id)
+                    ON DELETE CASCADE
+            )
+            """
+        )
+        # Una sola carga por cliente y año: volver a cargar el archivo
+        # reemplaza la anterior, no la acumula.
+        conexion.execute(
+            "CREATE UNIQUE INDEX IF NOT EXISTS idx_exogena_cliente_anio"
+            " ON exogena_cargas (cliente_id, anio)"
+        )
+
+        # Cada cosa que un tercero reportó. Una fila del archivo, una
+        # fila aquí.
+        #
+        # 'requiere_decision' se marca cuando la DIAN propone más de un
+        # renglón para la misma cifra. El programa NUNCA elige: guarda
+        # las opciones tal como ella las escribió y espera al contador.
+        # 'renglon_elegido' es lo que él decidió, y arranca vacío.
+        #
+        # 'posible_duplicado' se marca cuando dos filas pueden ser el
+        # mismo hecho económico. Solo se marca: no se unen, no se
+        # descartan y no se elige cuál vale.
+        conexion.execute(
+            """
+            CREATE TABLE IF NOT EXISTS exogena_filas (
+                id                INTEGER PRIMARY KEY AUTOINCREMENT,
+                carga_id          INTEGER NOT NULL,
+                cliente_id        INTEGER NOT NULL,
+                -- En qué fila del Excel estaba. Es lo que le permite al
+                -- contador volver al archivo y verlo con sus ojos.
+                fila_excel        INTEGER NOT NULL,
+                nit_reporta       TEXT NOT NULL DEFAULT '',
+                nombre_reporta    TEXT NOT NULL DEFAULT '',
+                detalle           TEXT NOT NULL DEFAULT '',
+                -- El código que viene dentro del detalle: (Concepto: 2276)
+                concepto          TEXT NOT NULL DEFAULT '',
+                valor             REAL,
+                -- El texto completo de la columna de uso sugerido, sin
+                -- recortar ni reescribir. Es de la DIAN.
+                uso_sugerido      TEXT NOT NULL DEFAULT '',
+                nota              TEXT NOT NULL DEFAULT '',
+                -- Los renglones, los topes citados, las opciones y la
+                -- información adicional, en JSON.
+                renglones         TEXT NOT NULL DEFAULT '[]',
+                topes             TEXT NOT NULL DEFAULT '[]',
+                opciones          TEXT NOT NULL DEFAULT '[]',
+                adicional         TEXT NOT NULL DEFAULT '{}',
+                requiere_decision INTEGER NOT NULL DEFAULT 0,
+                renglon_elegido   TEXT NOT NULL DEFAULT '',
+                posible_duplicado INTEGER NOT NULL DEFAULT 0,
+                duplicado_de      TEXT NOT NULL DEFAULT '[]',
+                -- El soporte que el contador enlazó a esta fila. Lo
+                -- enlaza él: el programa a lo sumo propone uno.
+                documento_id      INTEGER,
+                FOREIGN KEY (carga_id) REFERENCES exogena_cargas(id)
+                    ON DELETE CASCADE,
+                FOREIGN KEY (cliente_id) REFERENCES clientes(id)
+                    ON DELETE CASCADE
+            )
+            """
+        )
+        conexion.execute(
+            "CREATE INDEX IF NOT EXISTS idx_exogena_filas_cliente"
+            " ON exogena_filas (cliente_id)"
+        )
+        conexion.execute(
+            "CREATE INDEX IF NOT EXISTS idx_exogena_filas_carga"
+            " ON exogena_filas (carga_id)"
+        )
+
         # --- Cambios sobre bases que ya existían ---
         # Si la base se creó con una versión anterior del programa, le falta
         # la columna "notas". Se agrega aquí en vez de pedirle al contador
@@ -347,6 +453,25 @@ def crear_tablas():
         if columnas_valores and "plantilla" not in columnas_valores:
             conexion.execute(
                 "ALTER TABLE valores_210 ADD COLUMN plantilla TEXT"
+            )
+
+        # Los renglones que salen de la exógena traen el código del
+        # formulario 210 ("32") y quedan marcados con su origen. Los que
+        # ya existían los escribió el contador, así que 'contador' es el
+        # valor correcto por defecto.
+        columnas_checklist = {
+            fila["name"]
+            for fila in conexion.execute("PRAGMA table_info(checklist)")
+        }
+        if columnas_checklist and "codigo_renglon" not in columnas_checklist:
+            conexion.execute(
+                "ALTER TABLE checklist ADD COLUMN codigo_renglon TEXT"
+                " NOT NULL DEFAULT ''"
+            )
+        if columnas_checklist and "origen" not in columnas_checklist:
+            conexion.execute(
+                "ALTER TABLE checklist ADD COLUMN origen TEXT"
+                " NOT NULL DEFAULT 'contador'"
             )
 
         columnas_doc = {
@@ -717,7 +842,8 @@ def listar_checklist(id_cliente):
     with conectar() as conexion:
         filas = conexion.execute(
             """
-            SELECT id, cliente_id, titulo, estado, orden, actualizado_en
+            SELECT id, cliente_id, titulo, estado, orden, actualizado_en,
+                   codigo_renglon, origen
             FROM checklist
             WHERE cliente_id = ?
             ORDER BY orden, id
@@ -757,15 +883,21 @@ def obtener_renglon(id_renglon):
     """Devuelve un renglón del checklist, o None si no existe."""
     with conectar() as conexion:
         fila = conexion.execute(
-            "SELECT id, cliente_id, titulo, estado, orden, actualizado_en"
-            " FROM checklist WHERE id = ?",
+            "SELECT id, cliente_id, titulo, estado, orden, actualizado_en,"
+            " codigo_renglon, origen FROM checklist WHERE id = ?",
             (id_renglon,),
         ).fetchone()
     return dict(fila) if fila else None
 
 
-def crear_renglon(cliente_id, titulo, estado="faltante"):
-    """Agrega un renglón al final del checklist de un cliente."""
+def crear_renglon(cliente_id, titulo, estado="faltante",
+                  codigo_renglon="", origen="contador"):
+    """Agrega un renglón al final del checklist de un cliente.
+
+    'origen' dice quién lo puso: 'contador' si lo escribió él, 'dian' si
+    salió de la exógena. 'codigo_renglon' es el número del 210 ('32'),
+    y es lo que después permite llevar el valor a su casilla.
+    """
     ahora = datetime.now().isoformat(timespec="seconds")
     with conectar() as conexion:
         # El siguiente número de orden: uno más que el último que haya.
@@ -776,9 +908,10 @@ def crear_renglon(cliente_id, titulo, estado="faltante"):
         orden = (fila["ultimo"] or 0) + 1
 
         cursor = conexion.execute(
-            "INSERT INTO checklist (cliente_id, titulo, estado, orden, actualizado_en)"
-            " VALUES (?, ?, ?, ?, ?)",
-            (cliente_id, titulo, estado, orden, ahora),
+            "INSERT INTO checklist (cliente_id, titulo, estado, orden,"
+            " actualizado_en, codigo_renglon, origen)"
+            " VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (cliente_id, titulo, estado, orden, ahora, codigo_renglon, origen),
         )
         id_nuevo = cursor.lastrowid
     return obtener_renglon(id_nuevo)
@@ -805,8 +938,13 @@ def crear_renglones(cliente_id, titulos):
     return listar_checklist(cliente_id)
 
 
-def actualizar_renglon(id_renglon, titulo=None, estado=None):
-    """Cambia el nombre o el estado de un renglón."""
+def actualizar_renglon(id_renglon, titulo=None, estado=None, orden=None):
+    """Cambia el nombre, el estado o el lugar de un renglón.
+
+    El contador puede renombrar hasta los renglones que salieron de la
+    exógena: son suyos. Renombrar uno de la DIAN no le quita el código
+    del 210, así que el valor sigue sabiendo a qué casilla va.
+    """
     campos = []
     valores = []
 
@@ -817,6 +955,10 @@ def actualizar_renglon(id_renglon, titulo=None, estado=None):
     if estado is not None:
         campos.append("estado = ?")
         valores.append(estado)
+
+    if orden is not None:
+        campos.append("orden = ?")
+        valores.append(orden)
 
     if campos:
         campos.append("actualizado_en = ?")
@@ -829,6 +971,23 @@ def actualizar_renglon(id_renglon, titulo=None, estado=None):
             )
 
     return obtener_renglon(id_renglon)
+
+
+def reordenar_checklist(cliente_id, ids_en_orden):
+    """Reacomoda los renglones de un cliente en el orden que se le pase.
+
+    Solo mueve los que sean de ese cliente: un id de otro se ignora en
+    vez de mover algo que no era.
+    """
+    ahora = datetime.now().isoformat(timespec="seconds")
+    with conectar() as conexion:
+        for posicion, id_renglon in enumerate(ids_en_orden, start=1):
+            conexion.execute(
+                "UPDATE checklist SET orden = ?, actualizado_en = ?"
+                " WHERE id = ? AND cliente_id = ?",
+                (posicion, ahora, id_renglon, cliente_id),
+            )
+    return listar_checklist(cliente_id)
 
 
 def eliminar_renglon(id_renglon):
@@ -1204,3 +1363,202 @@ def eliminar_documentos(cliente_id, ids):
             [cliente_id] + ids,
         )
     return cursor.rowcount
+
+
+# ----------------------------------------------------------
+# Operaciones sobre la información exógena
+# ----------------------------------------------------------
+#
+# Los campos que son listas o diccionarios se guardan en JSON: son cosas
+# que se leen y se muestran enteras, nunca se buscan por adentro, y así
+# no hacen falta cinco tablas más para lo mismo.
+
+
+def _desde_json(texto, por_defecto):
+    """Devuelve lo que había en un campo JSON, sin reventar si está dañado."""
+    if not texto:
+        return por_defecto
+    try:
+        return json.loads(texto)
+    except (ValueError, TypeError):
+        return por_defecto
+
+
+def obtener_carga_exogena(cliente_id, anio=None):
+    """La exógena cargada de un cliente. La del año pedido, o la última."""
+    consulta = "SELECT * FROM exogena_cargas WHERE cliente_id = ?"
+    parametros = [cliente_id]
+    if anio:
+        consulta += " AND anio = ?"
+        parametros.append(anio)
+    consulta += " ORDER BY anio DESC, id DESC LIMIT 1"
+
+    with conectar() as conexion:
+        fila = conexion.execute(consulta, parametros).fetchone()
+    if not fila:
+        return None
+
+    carga = dict(fila)
+    carga["avisos"] = _desde_json(carga["avisos"], [])
+    carga["topes"] = _desde_json(carga["topes"], [])
+    return carga
+
+
+def listar_cargas_exogena(cliente_id):
+    """Los años de los que hay exógena cargada, del más nuevo al más viejo."""
+    with conectar() as conexion:
+        filas = conexion.execute(
+            "SELECT id, anio, fecha_corte, cargado_en FROM exogena_cargas"
+            " WHERE cliente_id = ? ORDER BY anio DESC",
+            (cliente_id,),
+        ).fetchall()
+    return [dict(fila) for fila in filas]
+
+
+def listar_filas_exogena(carga_id):
+    """Todo lo que le reportaron al cliente, en el orden del archivo.
+
+    Cada fila trae el nombre del documento que el contador le enlazó, si
+    le enlazó alguno, para poder abrir el original desde la tabla.
+    """
+    with conectar() as conexion:
+        filas = conexion.execute(
+            "SELECT f.*, d.nombre_original, d.nombre_guardado"
+            " FROM exogena_filas f"
+            " LEFT JOIN documentos d ON d.id = f.documento_id"
+            " WHERE f.carga_id = ? ORDER BY f.fila_excel",
+            (carga_id,),
+        ).fetchall()
+
+    resultado = []
+    for fila in filas:
+        dato = dict(fila)
+        dato["renglones"] = _desde_json(dato["renglones"], [])
+        dato["topes"] = _desde_json(dato["topes"], [])
+        dato["opciones"] = _desde_json(dato["opciones"], [])
+        dato["adicional"] = _desde_json(dato["adicional"], {})
+        dato["duplicado_de"] = _desde_json(dato["duplicado_de"], [])
+        dato["requiere_decision"] = bool(dato["requiere_decision"])
+        dato["posible_duplicado"] = bool(dato["posible_duplicado"])
+        resultado.append(dato)
+    return resultado
+
+
+def obtener_fila_exogena(id_fila):
+    """Una sola fila de la exógena, o None."""
+    with conectar() as conexion:
+        fila = conexion.execute(
+            "SELECT * FROM exogena_filas WHERE id = ?", (id_fila,)
+        ).fetchone()
+    if not fila:
+        return None
+    dato = dict(fila)
+    dato["renglones"] = _desde_json(dato["renglones"], [])
+    dato["topes"] = _desde_json(dato["topes"], [])
+    dato["opciones"] = _desde_json(dato["opciones"], [])
+    dato["adicional"] = _desde_json(dato["adicional"], {})
+    dato["duplicado_de"] = _desde_json(dato["duplicado_de"], [])
+    dato["requiere_decision"] = bool(dato["requiere_decision"])
+    dato["posible_duplicado"] = bool(dato["posible_duplicado"])
+    return dato
+
+
+def guardar_exogena(cliente_id, lectura, archivo=""):
+    """Guarda una exógena leída, reemplazando la que hubiera de ese año.
+
+    Volver a cargar el archivo del mismo año reemplaza los registros: la
+    DIAN misma advierte que la información cambia cuando un tercero la
+    modifica, así que la carga nueva manda.
+
+    Lo que NO se toca son los renglones del checklist. Eso se decide
+    aparte (ver app/exogena_cliente.py) justamente para no borrarle al
+    contador un renglón que ya tenga documentos encima.
+    """
+    cabecera = lectura["cabecera"]
+    anio = cabecera.get("anio") or ""
+    ahora = datetime.now().isoformat(timespec="seconds")
+
+    with conectar() as conexion:
+        # Fuera la carga anterior del mismo año, si la había. Sus filas
+        # se van con ella por el ON DELETE CASCADE.
+        conexion.execute(
+            "DELETE FROM exogena_cargas WHERE cliente_id = ? AND anio = ?",
+            (cliente_id, anio),
+        )
+        cursor = conexion.execute(
+            "INSERT INTO exogena_cargas"
+            " (cliente_id, anio, identificacion, tipo_documento, nombre,"
+            "  fecha_corte, fecha_reporte, avisos, topes, archivo, cargado_en)"
+            " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (
+                cliente_id, anio,
+                cabecera.get("identificacion", ""),
+                cabecera.get("tipo_documento", ""),
+                cabecera.get("nombre", ""),
+                cabecera.get("fecha_corte", ""),
+                cabecera.get("fecha_reporte", ""),
+                json.dumps(lectura["avisos"], ensure_ascii=False),
+                json.dumps(lectura["topes"], ensure_ascii=False),
+                archivo, ahora,
+            ),
+        )
+        carga_id = cursor.lastrowid
+
+        for fila in lectura["filas"]:
+            conexion.execute(
+                "INSERT INTO exogena_filas"
+                " (carga_id, cliente_id, fila_excel, nit_reporta,"
+                "  nombre_reporta, detalle, concepto, valor, uso_sugerido,"
+                "  nota, renglones, topes, opciones, adicional,"
+                "  requiere_decision, posible_duplicado, duplicado_de)"
+                " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (
+                    carga_id, cliente_id, fila["fila_excel"],
+                    fila["nit_reporta"], fila["nombre_reporta"],
+                    fila["detalle"], fila["concepto"], fila["valor"],
+                    fila["uso_sugerido"], fila["nota"],
+                    json.dumps(fila["renglones"], ensure_ascii=False),
+                    json.dumps(fila["topes"], ensure_ascii=False),
+                    json.dumps(fila["opciones"], ensure_ascii=False),
+                    json.dumps(fila["informacion_adicional"], ensure_ascii=False),
+                    1 if fila["requiere_decision"] else 0,
+                    1 if fila["posible_duplicado"] else 0,
+                    json.dumps(fila["duplicado_de"], ensure_ascii=False),
+                ),
+            )
+
+    return obtener_carga_exogena(cliente_id, anio)
+
+
+def enlazar_soporte_exogena(id_fila, documento_id):
+    """Enlaza (o desenlaza, con None) el documento que respalda una fila."""
+    with conectar() as conexion:
+        conexion.execute(
+            "UPDATE exogena_filas SET documento_id = ? WHERE id = ?",
+            (documento_id, id_fila),
+        )
+    return obtener_fila_exogena(id_fila)
+
+
+def elegir_renglon_exogena(id_fila, codigo):
+    """Guarda el renglón que el contador eligió para una fila.
+
+    Con codigo = "" se vuelve atrás y la fila queda otra vez esperando
+    decisión. El programa nunca escribe aquí por su cuenta.
+    """
+    with conectar() as conexion:
+        conexion.execute(
+            "UPDATE exogena_filas SET renglon_elegido = ? WHERE id = ?",
+            (codigo or "", id_fila),
+        )
+    return obtener_fila_exogena(id_fila)
+
+
+def borrar_exogena(cliente_id, anio):
+    """Quita la exógena de un año. No toca los renglones del checklist."""
+    with conectar() as conexion:
+        cursor = conexion.execute(
+            "DELETE FROM exogena_cargas WHERE cliente_id = ? AND anio = ?",
+            (cliente_id, anio),
+        )
+    return cursor.rowcount > 0

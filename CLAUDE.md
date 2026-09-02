@@ -58,6 +58,8 @@ asistente-renta/
 │   ├── rentai.py         # la asistente que conversa y propone
 │   ├── proveedores.py    # con cuál servicio de IA se habla
 │   ├── extraccion.py     # leerle los datos a un documento UNA vez
+│   ├── exogena.py        # leer el reporte de la DIAN. Solo parseo, sin IA
+│   ├── exogena_cliente.py # los renglones y la tabla de cada cliente
 │   ├── cola.py           # la fila de documentos por leer, en otro hilo
 │   ├── respaldo.py       # llevarse todo en un ZIP, y traerlo de vuelta
 │   ├── demostracion.py   # el cliente inventado, para mostrar el programa
@@ -72,6 +74,7 @@ asistente-renta/
 │   ├── archivos/         # documentos subidos, por cliente
 │   ├── papelera/         # lo borrado, por si fue un error. No se vacía sola
 │   ├── formularios/      # el Excel generado de cada cliente
+│   ├── exogena/          # los reportes de la DIAN, por cliente
 │   └── base.db
 ├── .env                  # configuración de la IA — NUNCA se sube a git
 ├── docs/capturas/        # las capturas del README. Clientes INVENTADOS
@@ -159,6 +162,47 @@ cuando ya está en manos del contador y no lo puedes depurar.
 
 ---
 
+## La información exógena
+
+La exógena es lo que los terceros —bancos, empleadores, notarías,
+municipios— le reportaron a la DIAN sobre un contribuyente. El contador la
+descarga del portal de la DIAN como un Excel y es lo primero que mira. La
+pestaña se llama **Exógena**, que es la palabra que él usa: ni "reporte", ni
+"cruce", ni "conciliación".
+
+- **Se lee con código, nunca con IA.** Es una tabla bien formada.
+  `app/exogena.py` la parsea y funciona completo con `IA_PROVEEDOR=ninguno`.
+  Si alguna vez parece que hace falta IA para leerla, algo se entendió mal.
+- **Nada de números de fila fijos.** La fila de encabezados se busca por el
+  texto «Uso declaración Sugerida». El formato puede cambiar el año que viene.
+- **Los tres avisos legales de la DIAN se guardan y se muestran textuales.**
+  Son de ella, no nuestros. Junto con la fecha de corte, porque el primero
+  dice que la información cambia si un tercero la modifica después.
+- **Cuando la DIAN propone varios renglones, Tax-i no elige.** Ni con IA, ni
+  con reglas, ni mirando el signo del valor. Se marca "requiere decisión" y se
+  le muestran las opciones palabra por palabra, con el doble espacio de la
+  DIAN incluido. Elegir es criterio profesional.
+- **Los posibles duplicados solo se marcan**, con el motivo de por qué se
+  marcaron. No se unen, no se descartan y no se elige cuál vale.
+- **Los renglones salen del archivo oficial**, con el nombre que la propia
+  DIAN les da, y quedan marcados con `origen='dian'`. El contador los puede
+  renombrar, reordenar y quitar: son suyos.
+- **Volver a cargar reemplaza los registros, nunca los renglones.** Pueden
+  tener documentos asignados, y borrarlos en octubre es un daño real.
+- **Nada se agrega solo.** Un cliente nuevo arranca con el checklist vacío.
+  Los renglones salen de cargar la exógena o del botón de la lista sugerida, y
+  las dos cosas las decide el contador.
+- **Al 210, uno por uno y con aprobación explícita.** Nunca en lote, nunca
+  automático, y nunca un valor que todavía requiera decisión.
+
+Cómo se escriben los textos de esa pantalla, que es lo que define el producto:
+
+- **"Sin soporte"** significa falta el papel. Nunca "hay que declararlo".
+- **"Diferencia"** significa revíselo. Nunca "está mal" ni "hay un error".
+- La columna dice **"Renglón sugerido por la DIAN"**, no "sugerido" a secas.
+
+---
+
 ## Reglas innegociables
 
 ### Línea legal
@@ -236,6 +280,7 @@ consentimiento al desarrollador.
     .venv/bin/python pruebas/probar_extraccion.py    # leer una vez, y la fila
     .venv/bin/python pruebas/probar_respaldo.py      # llevarse todo y devolverlo
     .venv/bin/python pruebas/probar_demostracion.py  # el modo demostración
+    .venv/bin/python pruebas/probar_exogena.py       # el lector de la exógena
 
 `probar_pantallas.py` abre Chromium de verdad y falla si el JavaScript revienta.
 Hace falta porque un error de JavaScript no se ve desde el servidor: la página

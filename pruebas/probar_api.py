@@ -1,5 +1,5 @@
 """
-Prueba de las 46 direcciones de la API, por HTTP de verdad.
+Prueba de las 53 direcciones de la API, por HTTP de verdad.
 
 Para qué es
 -----------
@@ -277,9 +277,18 @@ def probar_checklist(identificador):
 
     codigo, renglones, _ = pedir("GET",
                                  "/api/clientes/%d/checklist" % identificador)
-    comprobar("el cliente nuevo arranca con la lista sugerida",
-              codigo == 200 and len(renglones) > 5,
+    # Nada se agrega solo: el cliente nuevo arranca VACÍO. Los renglones
+    # salen de cargar la exógena o del botón de la lista sugerida, y las
+    # dos cosas las decide el contador.
+    comprobar("el cliente nuevo arranca sin ningún renglón",
+              codigo == 200 and renglones == [],
               "código %s, %s renglones" % (codigo, len(renglones or [])))
+
+    codigo, base, _ = pedir("POST",
+                            "/api/clientes/%d/checklist/base" % identificador)
+    comprobar("el botón de la lista sugerida sí la agrega, cuando él la pide",
+              codigo == 201 and len(base) > 5,
+              "código %s, %s renglones" % (codigo, len(base or [])))
 
     codigo, renglon, _ = pedir("POST",
                                "/api/clientes/%d/checklist" % identificador,
@@ -702,8 +711,142 @@ def probar_cuenta():
         pedir("GET", "/api/cuenta")   # que el servidor no quede con lo viejo
 
 
+def probar_exogena(identificador):
+    titulo("J. Exógena")
+
+    ejemplo = RAIZ / "pruebas" / "ejemplos" / "reporteExogena2025_EJEMPLO.xlsx"
+    if not ejemplo.exists():
+        comprobar("está el archivo de ejemplo de la exógena", False,
+                  str(ejemplo))
+        return
+
+    # Antes de cargar nada, la pestaña tiene que contestar que no hay.
+    codigo, vacio, _ = pedir("GET", "/api/clientes/%d/exogena" % identificador)
+    comprobar("un cliente sin exógena contesta que no hay",
+              codigo == 200 and vacio["hay_exogena"] is False,
+              "código %s" % codigo)
+
+    # Un archivo que no es un Excel se rechaza antes de tocar nada.
+    codigo, error, _ = subir("/api/clientes/%d/exogena" % identificador,
+                             "archivo", [("cualquier.txt", b"no soy un excel")])
+    comprobar("rechaza un archivo que no es Excel y lo dice claro",
+              codigo == 400 and "DIAN" in json.dumps(error, ensure_ascii=False),
+              "código %s: %s" % (codigo, error))
+
+    codigo, cargada, _ = subir("/api/clientes/%d/exogena" % identificador,
+                               "archivo",
+                               [(ejemplo.name, ejemplo.read_bytes())])
+    comprobar("carga el reporte de la DIAN y contesta 201", codigo == 201,
+              "código %s: %s" % (codigo, cargada))
+    if codigo != 201:
+        return
+
+    comprobar("leyó los 36 registros",
+              cargada["resumen"]["registros"] == 36,
+              cargada["resumen"])
+    comprobar("y creó los 15 renglones del 210 que menciona la DIAN",
+              cargada["renglones"]["creados"] == 15,
+              cargada["renglones"])
+
+    codigo, renglones, _ = pedir(
+        "GET", "/api/clientes/%d/checklist" % identificador)
+    de_la_dian = [r for r in renglones if r["origen"] == "dian"]
+    comprobar("los renglones quedaron marcados como de la DIAN",
+              len(de_la_dian) == 15, len(de_la_dian))
+    comprobar("con el nombre que ella misma les da",
+              any(r["titulo"].startswith("R32 — Ingresos brutos por rentas")
+                  for r in de_la_dian))
+    comprobar("y con el número del renglón del 210 guardado",
+              all(r["codigo_renglon"] for r in de_la_dian))
+
+    codigo, tabla, _ = pedir("GET",
+                             "/api/clientes/%d/exogena" % identificador)
+    comprobar("la tabla trae las filas con su estado",
+              codigo == 200 and len(tabla["filas"]) == 36,
+              "código %s" % codigo)
+    comprobar("los tres avisos de la DIAN van textuales",
+              len(tabla["carga"]["avisos"]) == 3
+              and "NO ES INDISPENSABLE" in tabla["carga"]["avisos"][2])
+    comprobar("y la fecha de corte también",
+              tabla["carga"]["fecha_corte"].startswith("2026-08-26"),
+              tabla["carga"]["fecha_corte"])
+    comprobar("los cinco topes van aparte de las filas",
+              len(tabla["topes"]) == 5, len(tabla["topes"]))
+    comprobar("las filas sin soporte se marcan como que falta el papel",
+              tabla["conteos"].get("sin_soporte") == 36,
+              tabla["conteos"])
+    comprobar("ocho filas requieren decisión del contador",
+              tabla["conteos"].get("requiere_decision") == 8,
+              tabla["conteos"])
+    comprobar("y se marcan los posibles duplicados",
+              tabla["conteos"].get("posible_duplicado", 0) >= 4,
+              tabla["conteos"])
+
+    # --- La decisión es de él, y solo entre lo que la DIAN propone ---
+    decision = next(f for f in tabla["filas"] if f["requiere_decision"])
+    codigo, _, _ = pedir("PUT",
+                         "/api/exogena/filas/%d/renglon" % decision["id"],
+                         {"codigo": "R999"})
+    comprobar("no acepta un renglón que la DIAN no propuso", codigo == 400,
+              "código %s" % codigo)
+
+    codigo, casillas, _ = pedir(
+        "GET", "/api/exogena/filas/%d/casillas" % decision["id"])
+    comprobar("mientras no elija, no ofrece ninguna casilla del 210",
+              codigo == 200 and casillas["requiere_decision"] is True,
+              casillas)
+
+    codigo, _, _ = pedir("POST",
+                         "/api/exogena/filas/%d/al-210" % decision["id"],
+                         {"celda": "G32"})
+    comprobar("y no deja llevar al 210 un valor sin decidir", codigo == 409,
+              "código %s" % codigo)
+
+    elegido = decision["renglones"][0]["codigo"]
+    codigo, guardada, _ = pedir(
+        "PUT", "/api/exogena/filas/%d/renglon" % decision["id"],
+        {"codigo": elegido})
+    comprobar("sí acepta uno de los que la DIAN sí propuso",
+              codigo == 200 and guardada["renglon_elegido"] == elegido,
+              "código %s: %s" % (codigo, elegido))
+
+    codigo, volvio, _ = pedir(
+        "PUT", "/api/exogena/filas/%d/renglon" % decision["id"], {"codigo": ""})
+    comprobar("y deja volver atrás y dejarla sin decidir",
+              codigo == 200 and volvio["renglon_elegido"] == "",
+              "código %s" % codigo)
+
+    # --- Volver a cargar reemplaza los registros, NO los renglones ---
+    codigo, otra_vez, _ = subir("/api/clientes/%d/exogena" % identificador,
+                                "archivo",
+                                [(ejemplo.name, ejemplo.read_bytes())])
+    comprobar("volver a cargar el mismo año reemplaza la carga anterior",
+              codigo == 201 and otra_vez["reemplazo"] is True,
+              "código %s" % codigo)
+    comprobar("y NO vuelve a crear los renglones que ya estaban",
+              otra_vez["renglones"]["creados"] == 0
+              and otra_vez["renglones"]["ya_estaban"] == 15,
+              otra_vez["renglones"])
+
+    codigo, tabla, _ = pedir("GET",
+                             "/api/clientes/%d/exogena" % identificador)
+    comprobar("no se duplicaron los registros",
+              len(tabla["filas"]) == 36, len(tabla["filas"]))
+
+    # --- Quitar la exógena no toca los renglones ---
+    codigo, _, _ = pedir("DELETE",
+                         "/api/clientes/%d/exogena/2025" % identificador)
+    comprobar("quita la exógena de un año", codigo == 204, "código %s" % codigo)
+
+    codigo, quedaron, _ = pedir(
+        "GET", "/api/clientes/%d/checklist" % identificador)
+    comprobar("y los renglones se quedan: pueden tener documentos encima",
+              len([r for r in quedaron if r["origen"] == "dian"]) == 15,
+              len(quedaron))
+
+
 def limpiar(identificador):
-    titulo("J. Limpieza")
+    titulo("K. Limpieza")
 
     codigo, _, _ = pedir("DELETE", "/api/clientes/%d" % identificador)
     comprobar("borra el cliente de prueba y contesta 204", codigo == 204,
@@ -720,6 +863,10 @@ def limpiar(identificador):
     comprobar("y borra del disco la carpeta de sus documentos",
               carpeta is None or not carpeta.exists(),
               str(carpeta))
+
+    carpeta_exogena = RAIZ / "datos" / "exogena" / str(identificador)
+    comprobar("y también el reporte de exógena, que es de un tercero",
+              not carpeta_exogena.exists(), str(carpeta_exogena))
 
     # Los clientes que hayan quedado de la importación de prueba.
     _, lista, _ = pedir("GET", "/api/clientes")
@@ -789,6 +936,7 @@ def main():
             probar_documentos(identificador, id_renglon)
             probar_exportar(identificador)
             probar_formulario(identificador)
+            probar_exogena(identificador)
             probar_rentai(identificador)
         probar_importar()
         probar_cuenta()

@@ -47,6 +47,12 @@ LISTA_BASE_AGREGADA = "lista_base_agregada"
 
 FORMULARIO_GENERADO = "formulario_generado"
 
+EXOGENA_CARGADA = "exogena_cargada"
+EXOGENA_REEMPLAZADA = "exogena_reemplazada"
+EXOGENA_SOPORTE = "exogena_soporte"
+EXOGENA_DECISION = "exogena_decision"
+EXOGENA_AL_210 = "exogena_al_210"
+
 # Cómo se lee cada acción en pantalla. La primera forma es para una sola
 # cosa, la segunda para varias. Se escoge según la cantidad.
 TEXTOS = {
@@ -72,6 +78,17 @@ TEXTOS = {
                            "Se agregó la lista base del checklist ({n} renglones)"),
     FORMULARIO_GENERADO:  ("Se generó el archivo del Formulario 210",
                            "Se generó el archivo del Formulario 210"),
+    EXOGENA_CARGADA:      ("Se cargó la exógena",
+                           "Se cargó la exógena ({n} registros)"),
+    EXOGENA_REEMPLAZADA:  ("Se volvió a cargar la exógena y reemplazó la anterior",
+                           "Se volvió a cargar la exógena y reemplazó la anterior"
+                           " ({n} registros)"),
+    EXOGENA_SOPORTE:      ("Se enlazó un soporte a un registro de la exógena",
+                           "Se enlazaron {n} soportes a registros de la exógena"),
+    EXOGENA_DECISION:     ("Se eligió el renglón de un registro de la exógena",
+                           "Se eligieron los renglones de {n} registros"),
+    EXOGENA_AL_210:       ("Se llevó un valor de la exógena al Formulario 210",
+                           "Se llevaron {n} valores de la exógena al Formulario 210"),
 }
 
 # Cómo se pinta cada acción en la pantalla: sirve para que el contador
@@ -85,6 +102,9 @@ TONOS = {
     RENGLON_AGREGADO: "entrada",
     RENGLON_RECIBIDO: "logro",
     FORMULARIO_GENERADO: "logro",
+    EXOGENA_CARGADA: "entrada",
+    EXOGENA_REEMPLAZADA: "entrada",
+    EXOGENA_AL_210: "logro",
 }
 
 
