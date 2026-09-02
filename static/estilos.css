@@ -4269,3 +4269,86 @@ code {
   padding: var(--e6) var(--e3);
   text-align: left;
 }
+
+/* ----------------------------------------------------------
+   La fila de lectura de documentos
+
+   Los documentos se leen una vez y lo que se les saca queda guardado.
+   Esta caja dice en qué va esa fila y deja dispararla a mano.
+   ---------------------------------------------------------- */
+
+.caja-cola {
+  margin-bottom: var(--e4);
+}
+
+.cola-fila {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--e3);
+  flex-wrap: wrap;
+}
+
+.cola-texto {
+  margin: 0;
+  font-size: var(--t-lista);
+  color: var(--texto-secundario);
+}
+
+.caja-cola .ayuda {
+  margin: var(--e3) 0;
+}
+
+.caja-cola .opcion-linea {
+  margin-bottom: 0;
+}
+
+/* El motivo por el que un documento no se pudo leer, al lado de su
+   etiqueta. Va tenue: es una explicación, no una alarma. */
+.documento-motivo {
+  color: var(--texto-tenue);
+}
+
+/* ----------------------------------------------------------
+   Modo demostración y revisión de arranque
+   ---------------------------------------------------------- */
+
+/* Un cliente inventado, en el riel. La raya punteada a la izquierda lo
+   distingue sin depender del color: si alguien graba un video o toma una
+   captura, tiene que verse que ese cliente no es de nadie. */
+.riel-fila-demo {
+  border-left: 3px dashed var(--n4);
+  font-style: italic;
+}
+
+/* La franja de arriba mientras el modo demostración está prendido. */
+.franja-demo {
+  background: var(--alerta-fondo, #fdf6e3);
+  border-bottom: 1px solid var(--borde);
+  color: var(--alerta-texto, #8a5a12);
+  font-size: var(--t-lista);
+  padding: 10px var(--e4);
+  text-align: center;
+}
+
+.franja-demo strong {
+  font-weight: var(--p-fuerte, 600);
+}
+
+/* Cada punto de la revisión de arranque. */
+.revision-punto {
+  margin-bottom: var(--e3);
+}
+
+.revision-titulo {
+  margin: 0 0 6px;
+  font-weight: var(--p-fuerte, 600);
+}
+
+/* Qué hacer al respecto. Va separado del diagnóstico para que se lea
+   como una instrucción y no como más explicación. */
+.revision-que-hacer {
+  border-left: 2px solid var(--borde);
+  padding-left: 10px;
+  margin-top: 8px;
+}

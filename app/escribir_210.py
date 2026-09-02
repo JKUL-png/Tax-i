@@ -40,6 +40,7 @@ nada: ni imágenes, ni notas, ni formatos, ni anchos de columna.
 import json
 import re
 import shutil
+import threading
 import zipfile
 from datetime import datetime
 from pathlib import Path
@@ -48,7 +49,7 @@ from openpyxl import load_workbook
 from openpyxl.utils import coordinate_to_tuple, get_column_letter
 
 from app.documentos import sanitizar_nombre
-from app.recalcular import celdas_con_error, recalcular
+from app.recalcular import celdas_con_error, llave_de_archivo, recalcular
 from app.plantilla_210 import (
     COLUMNAS_VALOR,
     FILA_INICIAL,
@@ -131,6 +132,67 @@ def preparar_copia(ruta_plantilla, nombre_salida=None, carpeta=CARPETA_TRABAJO):
     return destino
 
 
+# ---------------------------------------------------------------------------
+# La ficha de la plantilla: lo que hay que saber de ella para escribir
+# ---------------------------------------------------------------------------
+#
+# Antes, cada vez que se armaba el formulario de un cliente se abría el
+# libro entero con openpyxl solo para preguntarle cuatro cosas. Abrirlo
+# tarda casi un segundo (1,3 MB, 15 hojas), y las cuatro respuestas son
+# siempre las mismas mientras la plantilla no cambie.
+#
+# Ahora se leen una vez y se guardan. Se lee de la plantilla ORIGINAL y no
+# de la copia de trabajo, y eso es correcto porque `preparar_copia` acaba
+# de copiar el original tal cual: en ese momento los dos archivos son
+# idénticos byte por byte.
+
+_fichas = {}
+_candado_fichas = threading.Lock()
+_CUANTAS_FICHAS = 3
+
+
+def _ficha_de_plantilla(ruta_plantilla):
+    """Lo que hace falta saber del libro para poder escribir en él.
+
+    Devuelve un diccionario con:
+      - 'anclas'      : para cada celda combinada, dónde vive de verdad
+      - 'fila_final'  : hasta qué fila llega la tabla
+      - 'valores'     : lo que hay escrito en cada celda de la hoja de
+                        captura, incluidas las fórmulas tal como están
+
+    Todo son datos sueltos, no el libro de openpyxl: así nadie puede
+    modificar sin querer lo que quedó guardado en memoria.
+    """
+    ruta = Path(ruta_plantilla)
+    llave = llave_de_archivo(ruta)
+
+    with _candado_fichas:
+        if llave in _fichas:
+            return _fichas[llave]
+
+        libro = load_workbook(ruta, data_only=False)
+        if HOJA_CAPTURA not in libro.sheetnames:
+            raise EscrituraBloqueada(
+                f"La plantilla no tiene la hoja «{HOJA_CAPTURA}»."
+            )
+        hoja = libro[HOJA_CAPTURA]
+        ficha = {
+            "anclas": _mapa_de_combinadas(hoja),
+            "fila_final": _ultima_fila_con_contenido(hoja),
+            "valores": {
+                celda.coordinate: celda.value
+                for fila in hoja.iter_rows()
+                for celda in fila
+                if celda.value is not None
+            },
+        }
+
+        if len(_fichas) >= _CUANTAS_FICHAS:
+            _fichas.clear()
+        _fichas[llave] = ficha
+        return ficha
+
+
 class EscritorPlantilla:
     """Escribe valores en la copia de trabajo de una plantilla.
 
@@ -153,17 +215,17 @@ class EscritorPlantilla:
             self.ruta_original, nombre_salida, carpeta_trabajo
         )
 
-        # Esta carga es SOLO para consultar: qué hay en cada celda, cuáles
-        # tienen fórmula, cuáles están combinadas. Nunca se guarda.
-        # Se hace sobre la copia, no sobre el original.
-        self._libro = load_workbook(self.ruta_copia, data_only=False)
-        if HOJA_CAPTURA not in self._libro.sheetnames:
-            raise EscrituraBloqueada(
-                f"La plantilla no tiene la hoja «{HOJA_CAPTURA}»."
-            )
-        self._hoja = self._libro[HOJA_CAPTURA]
-        self._anclas = _mapa_de_combinadas(self._hoja)
-        self._fila_final = _ultima_fila_con_contenido(self._hoja)
+        # Lo que hay que saber del libro para escribir en él: qué hay en
+        # cada celda, cuáles tienen fórmula, cuáles están combinadas y
+        # hasta dónde llega la tabla. Se consulta, nunca se guarda.
+        #
+        # Se saca de la plantilla original y no de la copia porque acaban
+        # de ser el mismo archivo, y así la lectura sirve para todos los
+        # clientes en vez de repetirse en cada uno.
+        ficha = _ficha_de_plantilla(self.ruta_original)
+        self._anclas = ficha["anclas"]
+        self._fila_final = ficha["fila_final"]
+        self._valores = ficha["valores"]
 
         # Cambios pendientes: coordenada -> valor nuevo.
         self.cambios = {}
@@ -231,7 +293,7 @@ class EscritorPlantilla:
         Si la celda tiene una fórmula, se aborta. Sin excepciones y sin
         forma de saltárselo.
         """
-        valor = self._hoja[celda].value
+        valor = self._valores.get(celda)
         if es_formula(valor):
             raise EscrituraBloqueada(
                 f"{HOJA_CAPTURA}!{celda} contiene una fórmula — escritura"
@@ -274,7 +336,7 @@ class EscritorPlantilla:
         if celda in self.cambios:
             anterior = self.cambios[celda]
         else:
-            anterior = self._hoja[celda].value
+            anterior = self._valores.get(celda)
         anterior = "" if anterior is None else anterior
 
         self.cambios[celda] = valor
@@ -539,49 +601,65 @@ def leer_todas_las_formulas(ruta_xlsx):
     están escritas. NUNCA con data_only=True: esa carga trae los resultados
     en vez de las fórmulas, y si se guardara, las borraría del archivo.
     """
-    libro = load_workbook(Path(ruta_xlsx), data_only=False)
-    todas = {}
-    for nombre in libro.sheetnames:
-        hoja = libro[nombre]
-        formulas = {}
-        for fila in hoja.iter_rows():
-            for celda in fila:
-                if es_formula(celda.value):
-                    formulas[celda.coordinate] = celda.value
-        todas[nombre] = formulas
-    return todas
+    # read_only=True: openpyxl va leyendo el archivo por partes en vez de
+    # armar el libro entero en memoria. Aquí solo se recorre y se lee, que
+    # es justo para lo que sirve ese modo, y tarda 3,5 veces menos: 0,24
+    # segundos en vez de 0,84. Se comprobó que devuelve exactamente las
+    # mismas 902 fórmulas que la carga normal.
+    libro = load_workbook(Path(ruta_xlsx), data_only=False, read_only=True)
+    try:
+        todas = {}
+        for nombre in libro.sheetnames:
+            hoja = libro[nombre]
+            formulas = {}
+            for fila in hoja.iter_rows():
+                for celda in fila:
+                    if es_formula(celda.value):
+                        formulas[celda.coordinate] = celda.value
+            todas[nombre] = formulas
+        return todas
+    finally:
+        # Cerrar es obligatorio en este modo: deja el archivo abierto, y en
+        # Windows un archivo abierto no se puede reemplazar. Sin esto,
+        # LibreOffice no podría devolver el libro recalculado encima.
+        libro.close()
 
 
 # Leer las 902 fórmulas de un libro toma más de un segundo, y la plantilla
 # original se lee en cada archivo que se genera. Se guarda lo leído en
-# memoria, con la fecha y el tamaño del archivo como llave: si alguien
-# cambia la plantilla, la llave cambia y se vuelve a leer.
+# memoria, con la ruta, la fecha y el tamaño del archivo como llave: si
+# alguien cambia la plantilla, la llave cambia y se vuelve a leer.
+#
+# El candado hace falta porque el servidor atiende cada petición en su
+# propio hilo. Sin él, un hilo puede vaciar la memoria justo entre que otro
+# guarda su resultado y lo lee de vuelta, y ese otro se cae con KeyError.
 _recordado = {}
+_candado_recordado = threading.Lock()
 _CUANTOS_SE_RECUERDAN = 4
 
 
 def _formulas_recordadas(ruta):
     """Como leer_todas_las_formulas, pero sin releer el mismo archivo dos veces."""
     ruta = Path(ruta)
-    datos = ruta.stat()
-    llave = (str(ruta.resolve()), datos.st_mtime, datos.st_size)
-    if llave not in _recordado:
-        if len(_recordado) >= _CUANTOS_SE_RECUERDAN:
-            _recordado.clear()
-        _recordado[llave] = leer_todas_las_formulas(ruta)
-    return _recordado[llave]
+    llave = llave_de_archivo(ruta)
+    with _candado_recordado:
+        if llave not in _recordado:
+            if len(_recordado) >= _CUANTOS_SE_RECUERDAN:
+                _recordado.clear()
+            _recordado[llave] = leer_todas_las_formulas(ruta)
+        return _recordado[llave]
 
 
 def _errores_recordados(ruta):
     """Lo mismo, para las celdas con error de la plantilla original."""
     ruta = Path(ruta)
-    datos = ruta.stat()
-    llave = ("errores", str(ruta.resolve()), datos.st_mtime, datos.st_size)
-    if llave not in _recordado:
-        if len(_recordado) >= _CUANTOS_SE_RECUERDAN:
-            _recordado.clear()
-        _recordado[llave] = celdas_con_error(ruta)
-    return _recordado[llave]
+    llave = ("errores",) + llave_de_archivo(ruta)
+    with _candado_recordado:
+        if llave not in _recordado:
+            if len(_recordado) >= _CUANTOS_SE_RECUERDAN:
+                _recordado.clear()
+            _recordado[llave] = celdas_con_error(ruta)
+        return _recordado[llave]
 
 
 def verificar_contra_original(ruta_original, ruta_generada,

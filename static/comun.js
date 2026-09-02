@@ -149,6 +149,76 @@ function pesoEnPalabras(bytes) {
 
 
 /* ----------------------------------------------------------
+   Progreso de lo que tarda
+   ---------------------------------------------------------- */
+
+/* Un indicador que dice QUÉ está pasando y desde hace cuánto.
+
+   La regla es que cualquier cosa que pase de dos segundos tiene que decir
+   en qué va, con palabras concretas: "Subiendo el documento 3 de 12", no
+   una ruedita girando. Una ruedita no informa nada — con ella el contador
+   no puede distinguir "está trabajando" de "se colgó", y a los diez
+   segundos ya no sabe si esperar o cerrar la ventana.
+
+   Se usa así:
+
+       const reloj = relojDeProgreso(elementoDeTexto);
+       reloj.paso("Subiendo el documento 3 de 12…");
+       reloj.pasoEn(1500, "Calculando los totales…");   // si se llega
+       ...
+       reloj.detener();                                  // siempre, en finally
+
+   Cada segundo vuelve a escribir el texto con lo que lleva corriendo:
+   "Subiendo el documento 3 de 12… (4 s)". Los dos primeros segundos no
+   muestran el número, porque casi todo termina antes y un contador que
+   parpadea medio segundo solo distrae. */
+function relojDeProgreso(elemento) {
+  const comenzo = Date.now();
+  let texto = "";
+  let latido = null;
+  const esperas = [];
+
+  function pintar() {
+    if (!elemento) return;
+    const segundos = Math.round((Date.now() - comenzo) / 1000);
+    elemento.textContent = segundos >= 2
+      ? texto + " (" + segundos + " s)"
+      : texto;
+  }
+
+  const reloj = {
+    /* Cambia lo que se está diciendo. */
+    paso: function (nuevo) {
+      texto = nuevo;
+      pintar();
+      if (latido === null) latido = setInterval(pintar, 1000);
+    },
+
+    /* Cambia el texto dentro de un rato, si para entonces no ha
+       terminado. Sirve para los pasos que uno sabe que vienen después
+       pero que el navegador no puede ver empezar, como el recálculo:
+       el servidor contesta una sola vez, al final de todo. */
+    pasoEn: function (milisegundos, nuevo) {
+      esperas.push(setTimeout(function () { reloj.paso(nuevo); },
+                              milisegundos));
+    },
+
+    /* Apaga el reloj y cancela los pasos que quedaron pendientes.
+       Va SIEMPRE en el finally: si no, sigue escribiendo sobre una
+       pantalla que ya cambió. */
+    detener: function () {
+      clearInterval(latido);
+      latido = null;
+      esperas.forEach(clearTimeout);
+      esperas.length = 0;
+    }
+  };
+
+  return reloj;
+}
+
+
+/* ----------------------------------------------------------
    Contar cosas en español
    ---------------------------------------------------------- */
 

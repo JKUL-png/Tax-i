@@ -187,6 +187,13 @@
       fila.classList.add("riel-fila-actual");
       fila.setAttribute("aria-current", "page");
     }
+    /* Los clientes inventados del modo demostración van marcados SIEMPRE.
+       Si alguien toma una captura o graba un video, tiene que verse en
+       dos segundos que ese no es el cliente de nadie. */
+    if (cliente.es_demo) {
+      fila.classList.add("riel-fila-demo");
+      fila.title = "Cliente inventado del modo demostración";
+    }
 
     var nombre = document.createElement("span");
     nombre.className = "riel-fila-nombre";

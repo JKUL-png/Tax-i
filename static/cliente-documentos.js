@@ -37,6 +37,41 @@ function mostrarAvisoDocumentos(texto, tipo) {
    Dibujar
    ---------------------------------------------------------- */
 
+/* En qué va la lectura de un documento, en una etiqueta de una línea.
+
+   Son los cuatro estados de la fila. El de fallo dice POR QUÉ falló: sin
+   el motivo, el contador ve una marca roja y no sabe si el archivo está
+   dañado, si se acabó el cupo o si el programa tiene un error. */
+const TEXTOS_DE_LECTURA = {
+  pendiente: ["Sin leer", "etiqueta-neutra"],
+  leyendo:   ["Leyéndose…", "etiqueta-alerta"],
+  listo:     ["Leído", "etiqueta-exito"],
+  fallo:     ["No se pudo leer", "etiqueta-error"]
+};
+
+function etiquetaDeLectura(documento) {
+  const estado = documento.estado_lectura || "pendiente";
+  const [texto, clase] = TEXTOS_DE_LECTURA[estado]
+    || TEXTOS_DE_LECTURA.pendiente;
+
+  const linea = document.createElement("p");
+  linea.className = "documento-detalle";
+
+  const marca = document.createElement("span");
+  marca.className = "etiqueta " + clase;
+  marca.textContent = texto;
+  linea.appendChild(marca);
+
+  if (estado === "fallo" && documento.motivo_lectura) {
+    const motivo = document.createElement("span");
+    motivo.className = "documento-motivo";
+    motivo.textContent = " " + documento.motivo_lectura;
+    linea.appendChild(motivo);
+  }
+  return linea;
+}
+
+
 function dibujarDocumentos(documentos) {
   documentosDelCliente = documentos;
 
@@ -115,6 +150,7 @@ function dibujarDocumento(documento) {
 
   datos.appendChild(nombre);
   datos.appendChild(detalle);
+  datos.appendChild(etiquetaDeLectura(documento));
 
   /* --- A qué renglón del checklist pertenece --- */
   const asignacion = document.createElement("div");
@@ -501,4 +537,150 @@ async function abrirVisor(documento) {
     enlace.textContent = "Abrir el archivo aparte";
     visorContenido.appendChild(enlace);
   }
+}
+
+
+/* ==========================================================
+   La fila de lectura
+
+   Los documentos se leen UNA vez y lo que se les saca queda guardado en
+   la base. Después RentAI contesta con esas filas y no vuelve a leer —ni
+   a pagar— los mismos documentos.
+
+   La lectura corre en otro hilo del servidor: el contador aprieta el
+   botón y sigue trabajando. Esta parte solo pregunta cada tanto en qué
+   va y repinta la lista.
+   ========================================================== */
+
+const cajaCola = document.getElementById("caja-cola");
+const colaTexto = document.getElementById("cola-texto");
+const botonProcesar = document.getElementById("cola-procesar");
+const marcaAutomatico = document.getElementById("cola-automatico");
+
+/* Cada cuánto se le pregunta al servidor mientras está trabajando. Dos
+   segundos: suficiente para que se vea vivo, sin llenar de peticiones. */
+const CADA_CUANTO = 2000;
+let relojDeCola = null;
+
+async function preguntarPorLaCola(repintar) {
+  try {
+    const respuesta = await fetch("/api/clientes/" + idCliente + "/datos");
+    if (!respuesta.ok) return null;
+    const datos = await respuesta.json();
+    mostrarEstadoDeCola(datos.estado);
+    if (repintar) cargarDocumentos();
+    return datos.estado;
+  } catch (e) {
+    return null;
+  }
+}
+
+function mostrarEstadoDeCola(estado) {
+  if (!cajaCola || !estado) return;
+
+  const cuenta = estado.estados || {};
+  const sinLeer = estado.sin_leer || 0;
+  const total = (cuenta.pendiente || 0) + (cuenta.leyendo || 0)
+              + (cuenta.listo || 0) + (cuenta.fallo || 0);
+
+  /* Sin documentos no hay nada que decir. */
+  cajaCola.classList.toggle("oculto", total === 0);
+  if (total === 0) return;
+
+  const partes = [];
+  if (cuenta.leyendo) {
+    partes.push("Leyendo " + contar(cuenta.leyendo, "documento", "documentos") + "…");
+  }
+  if (sinLeer - (cuenta.leyendo || 0) > 0) {
+    partes.push(contar(sinLeer - (cuenta.leyendo || 0), "documento sin leer",
+                       "documentos sin leer"));
+  }
+  if (cuenta.listo) {
+    partes.push(contar(cuenta.listo, "leído", "leídos"));
+  }
+  if (cuenta.fallo) {
+    partes.push(contar(cuenta.fallo, "no se pudo leer", "no se pudieron leer"));
+  }
+
+  colaTexto.textContent = partes.join(" · ");
+  botonProcesar.disabled = sinLeer === 0;
+  botonProcesar.textContent = sinLeer === 0
+    ? "Todo leído"
+    : "Procesar " + contar(sinLeer, "pendiente", "pendientes");
+}
+
+/* Mientras la fila trabaja se pregunta cada dos segundos. Cuando ya no
+   queda nada por leer, se deja de preguntar: sin esto el programa
+   seguiría haciendo peticiones toda la tarde sin motivo. */
+function vigilarLaCola() {
+  clearInterval(relojDeCola);
+  relojDeCola = setInterval(async function () {
+    const estado = await preguntarPorLaCola(true);
+    if (!estado || (estado.sin_leer || 0) === 0) {
+      clearInterval(relojDeCola);
+      relojDeCola = null;
+    }
+  }, CADA_CUANTO);
+}
+
+if (botonProcesar) {
+  botonProcesar.addEventListener("click", async function () {
+    botonProcesar.disabled = true;
+    colaTexto.textContent = "Poniendo a leer los documentos…";
+    try {
+      const respuesta = await fetch(
+        "/api/clientes/" + idCliente + "/datos/procesar", { method: "POST" }
+      );
+      if (!respuesta.ok) throw new Error(await textoDelError(respuesta));
+      const datos = await respuesta.json();
+      mostrarEstadoDeCola(datos.estado);
+      vigilarLaCola();
+    } catch (e) {
+      mostrarAviso(e.message || "No se pudo poner a leer los documentos.",
+                   "error");
+      preguntarPorLaCola(false);
+    }
+  });
+}
+
+if (marcaAutomatico) {
+  marcaAutomatico.addEventListener("change", async function () {
+    try {
+      const respuesta = await fetch("/api/cola/automatico", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prendido: marcaAutomatico.checked })
+      });
+      if (!respuesta.ok) throw new Error(await textoDelError(respuesta));
+      const datos = await respuesta.json();
+      marcaAutomatico.checked = datos.automatico;
+      mostrarAviso(
+        datos.automatico
+          ? "Al confirmar una carga, los documentos se leerán solos."
+          : "Los documentos se leerán solo cuando usted lo pida.",
+        "exito"
+      );
+    } catch (e) {
+      // Se devuelve la marca a como estaba: no quedó guardado.
+      marcaAutomatico.checked = !marcaAutomatico.checked;
+      mostrarAviso(e.message || "No se pudo guardar el ajuste.", "error");
+    }
+  });
+}
+
+/* Al abrir la pantalla se pregunta una vez, y si hay algo leyéndose se
+   queda vigilando. */
+async function arrancarLaCola() {
+  const estado = await preguntarPorLaCola(false);
+  try {
+    const respuesta = await fetch("/api/cola");
+    if (respuesta.ok) {
+      const fila = await respuesta.json();
+      if (marcaAutomatico) marcaAutomatico.checked = !!fila.automatico;
+      if (fila.trabajando) vigilarLaCola();
+    }
+  } catch (e) {
+    // Si no se puede preguntar, la pantalla funciona igual sin esto.
+  }
+  return estado;
 }

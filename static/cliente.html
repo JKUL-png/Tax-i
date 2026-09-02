@@ -273,6 +273,30 @@
         </div>
       </div>
 
+      <!-- ---------- La fila de lectura ----------
+           Los documentos se leen UNA vez y lo que se les saca queda
+           guardado. Después, preguntarle algo a RentAI ya no vuelve a
+           leerlos ni a gastar cupo. La lectura corre aparte: el contador
+           no se queda esperando. -->
+      <div id="caja-cola" class="tarjeta caja-cola oculto">
+        <div class="cola-fila">
+          <p id="cola-texto" class="cola-texto"></p>
+          <button type="button" class="boton" id="cola-procesar">
+            Procesar pendientes
+          </button>
+        </div>
+        <p class="ayuda">
+          Leer un documento gasta cupo del servicio de IA, y las capas
+          gratis tienen un límite diario. Por eso existe esta fila: usted
+          decide cuándo se leen. Lo ya leído no se vuelve a leer nunca.
+          Los XML de facturas los lee el programa solo, sin gastar nada.
+        </p>
+        <label class="opcion-linea">
+          <input type="checkbox" id="cola-automatico">
+          Procesar automáticamente al confirmar una carga
+        </label>
+      </div>
+
       <div id="lista-documentos" class="lista">
         <div class="vacio">Cargando…</div>
       </div>
@@ -393,10 +417,20 @@
                   valores de este cliente y se revisa que ninguna fórmula haya
                   cambiado. Su plantilla original nunca se modifica.
                 </p>
+                <p class="ayuda">
+                  <strong>Los totales no hay que calcularlos aquí:</strong>
+                  Excel los calcula solos al abrir el archivo. El botón
+                  «Actualizar totales» solo sirve para verlos en esta
+                  pantalla sin salir del programa, y es el paso más lento.
+                </p>
 
                 <div class="fila-botones">
                   <button type="button" class="boton" id="boton-generar">
                     Generar el archivo
+                  </button>
+                  <button type="button" class="boton-secundario"
+                          id="boton-totales">
+                    Actualizar totales
                   </button>
                   <a class="boton-secundario oculto" id="enlace-formulario"
                      download>Descargar el archivo</a>
@@ -465,6 +499,69 @@
           <ol id="lista-actividad" class="lista-actividad">
             <li class="vacio">Cargando…</li>
           </ol>
+        </div>
+      </details>
+    </section>
+
+    <!-- ---------- Respaldo de TODO el programa ----------
+         No es de este cliente: es de todo. Va aquí porque es donde el
+         contador viene a llevarse cosas.
+
+         Es lo más importante de esta pantalla. Si se le daña el disco en
+         octubre, sin esto pierde la temporada entera. -->
+    <section class="seccion">
+      <details class="plegable" id="plegable-respaldo">
+        <summary class="plegable-titulo"><h2>Respaldo de todo el programa</h2></summary>
+        <div class="plegable-cuerpo">
+
+      <div class="tarjeta">
+        <h3>Llevarse todo</h3>
+        <p class="ayuda">
+          Un solo archivo con <strong>todos</strong> los clientes, sus
+          documentos, sus checklists y lo capturado del Formulario 210.
+          Guárdelo en un disco externo o en una memoria USB.
+        </p>
+        <p class="ayuda">
+          <strong>No lleva la llave del servicio de IA.</strong> Se deja
+          afuera a propósito: un respaldo se copia y se mueve, y una llave
+          filtrada no se puede recoger. Se vuelve a escribir en Cuenta.
+        </p>
+        <div class="fila-botones">
+          <button type="button" class="boton" id="boton-respaldo">
+            Exportar todo
+          </button>
+        </div>
+        <div id="progreso-respaldo" class="progreso oculto">
+          <p id="progreso-respaldo-texto"></p>
+        </div>
+        <p class="ayuda">
+          Este archivo lleva información tributaria de sus clientes.
+          Guárdelo como guardaría los documentos en papel.
+        </p>
+      </div>
+
+      <div class="tarjeta">
+        <h3>Restaurar un respaldo</h3>
+        <p class="ayuda">
+          Para devolver el trabajo en otro computador, o para volver atrás
+          si algo se dañó. Primero se le muestra qué trae el archivo y
+          usted confirma.
+        </p>
+        <p class="ayuda">
+          Lo que haya ahora en este computador <strong>no se pierde</strong>:
+          antes de restaurar se guarda una copia en la carpeta
+          <span class="cifra">datos/</span>, con la fecha en el nombre.
+        </p>
+        <div class="fila-botones">
+          <button type="button" class="boton-secundario" id="boton-restaurar">
+            Escoger un archivo de respaldo…
+          </button>
+        </div>
+        <input type="file" id="campo-respaldo" class="oculto" accept=".zip">
+        <div id="revision-respaldo" class="resultado-formulario oculto"></div>
+        <div id="aviso-respaldo" class="aviso oculto" role="alert"></div>
+      </div>
+
         </div>
       </details>
     </section>
@@ -631,11 +728,13 @@
        Antes esto era un solo archivo de 1.100 líneas con ocho pantallas
        adentro; se partió por asunto en agosto de 2026. -->
   <script src="/static/comun.js"></script>
+  <script src="/static/demostracion.js"></script>
   <script src="/static/cliente-nucleo.js"></script>
   <script src="/static/cliente-checklist.js"></script>
   <script src="/static/cliente-documentos.js"></script>
   <script src="/static/cliente-subir.js"></script>
   <script src="/static/cliente-exportar.js"></script>
+  <script src="/static/cliente-respaldo.js"></script>
   <script src="/static/formulario.js"></script>
   <script src="/static/rentai.js"></script>
   <script src="/static/riel.js"></script>

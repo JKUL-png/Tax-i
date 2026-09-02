@@ -40,6 +40,7 @@ const conteoValores = document.getElementById("conteo-valores");
 const cajaTotales = document.getElementById("caja-totales");
 
 const botonGenerar = document.getElementById("boton-generar");
+const botonTotales = document.getElementById("boton-totales");
 const enlaceArchivo = document.getElementById("enlace-formulario");
 const progreso = document.getElementById("progreso-formulario");
 const progresoTexto = document.getElementById("progreso-formulario-texto");
@@ -599,21 +600,39 @@ function dibujarTotales(totales) {
   cajaTotales.appendChild(lista);
 }
 
-async function generar(desdeLaHoja) {
+/* Arma el archivo del cliente.
+
+   `conTotales` decide si además se le pide a LibreOffice que calcule los
+   totales. Sin totales tarda menos de un segundo; con totales, unos tres.
+
+   No calcularlos NO deja el archivo incompleto: el libro se entrega
+   marcado para que Excel los calcule solo al abrirlo. Lo único que se
+   gana calculándolos aquí es poder verlos dentro de Tax-i, en la tabla de
+   abajo. Por eso es un botón aparte y no parte de guardar. */
+async function generar(conTotales) {
   botonGenerar.disabled = true;
   botonRecalcular.disabled = true;
+  botonTotales.disabled = true;
   progreso.classList.remove("oculto");
-  progresoTexto.textContent = "Armando el archivo y revisando las fórmulas…"
-    + " Puede tardar unos segundos.";
-  if (desdeLaHoja) {
-    textoPendientes.textContent = "Calculando los totales…";
-  }
   resultado.classList.add("oculto");
   resultado.textContent = "";
 
+  const reloj = relojDeProgreso(progresoTexto);
+  reloj.paso("Escribiendo los valores y revisando que ninguna fórmula de"
+             + " la plantilla haya cambiado…");
+  if (conTotales) {
+    textoPendientes.textContent = "Calculando los totales…";
+    // El servidor contesta una sola vez, al final, así que la pantalla no
+    // puede ver empezar el recálculo. Se anuncia al segundo y medio, que
+    // es lo que tarda la parte de antes.
+    reloj.pasoEn(1500, "Calculando los totales con LibreOffice. Es el paso"
+                       + " más lento…");
+  }
+
   try {
     const informe = await pedir(
-      "/api/clientes/" + idCliente + "/formulario/generar",
+      "/api/clientes/" + idCliente + "/formulario/generar"
+      + (conTotales ? "?totales=si" : ""),
       { method: "POST" }
     );
 
@@ -632,6 +651,15 @@ async function generar(desdeLaHoja) {
         informe.recalculo.motivo,
         informe.recalculo.recalculado ? "ayuda" : "resultado-aviso"
       ));
+    } else {
+      // No se calcularon los totales, y en la mayoría de los casos no
+      // hace falta. Se dice por qué, para que no parezca que faltó algo.
+      resultado.appendChild(lineaResultado(
+        "Los totales no se calcularon aquí. No hace falta: al abrir el"
+        + " archivo en Excel se calculan solos. Si los quiere ver dentro"
+        + " de Tax-i, use «Actualizar totales».",
+        "ayuda"
+      ));
     }
 
     if (informe.totales && informe.totales.length > 0) {
@@ -641,8 +669,12 @@ async function generar(desdeLaHoja) {
     resultado.classList.remove("oculto");
     enlaceArchivo.classList.remove("oculto");
     enlaceArchivo.href = "/api/clientes/" + idCliente + "/formulario/archivo";
-    avisar("Totales actualizados. El archivo quedó listo para descargar.",
-           "exito");
+    avisar(
+      conTotales
+        ? "Totales actualizados. El archivo quedó listo para descargar."
+        : "El archivo quedó listo para descargar.",
+      "exito"
+    );
 
     await cargarHoja();
     cargarHistorial();
@@ -653,8 +685,10 @@ async function generar(desdeLaHoja) {
     resultado.classList.remove("oculto");
     enlaceArchivo.classList.add("oculto");
   } finally {
+    reloj.detener();
     botonGenerar.disabled = false;
     botonRecalcular.disabled = false;
+    botonTotales.disabled = false;
     progreso.classList.add("oculto");
   }
 }
@@ -830,8 +864,13 @@ document.addEventListener("valor-anotado", async function () {
 
 filtroHoja.addEventListener("input", dibujarHoja);
 soloConValor.addEventListener("change", dibujarHoja);
-botonRecalcular.addEventListener("click", function () { generar(true); });
+/* Los dos caminos del archivo. Generar es el normal y es rápido;
+   actualizar los totales pasa por LibreOffice y tarda unos segundos.
+   El botón del aviso de pendientes, arriba en la hoja, hace lo mismo
+   que el de totales. */
 botonGenerar.addEventListener("click", function () { generar(false); });
+botonTotales.addEventListener("click", function () { generar(true); });
+botonRecalcular.addEventListener("click", function () { generar(true); });
 selectorPlantilla.addEventListener("change", cambiarPlantilla);
 botonSubirPlantilla.addEventListener("click", function () {
   campoPlantilla.click();

@@ -241,6 +241,10 @@ class Configuracion:
             "necesita_llave": self.ficha.necesita_llave,
             "necesita_base_url": self.ficha.necesita_base_url,
             "proveedores": proveedores.lista_para_pantalla(),
+            # Los servicios que hablan como OpenAI, con su dirección ya
+            # puesta: al elegir uno solo queda pedir la llave.
+            "servicios_compatibles": list(proveedores.SERVICIOS_COMPATIBLES),
+            "aviso_capa_gratis": proveedores.AVISO_CAPA_GRATIS,
         }
 
 

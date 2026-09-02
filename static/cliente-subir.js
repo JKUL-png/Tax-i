@@ -439,10 +439,24 @@ async function subirArchivos(pendientes) {
   let enviados = 0;
   let entraronTodas = true;
 
+  // El indicador dice exactamente en qué documento va y cuántos segundos
+  // lleva. Vive en comun.js.
+  const reloj = relojDeProgreso(progresoTexto);
+
   try {
     for (const tanda of tandas) {
-      progresoTexto.textContent =
-        "Subiendo " + (enviados + 1) + " de " + pendientes.length + "…";
+      // Los documentos van en tandas, así que se nombra el tramo entero:
+      // "Subiendo los documentos 6 a 10 de 12". Cuando la tanda es de uno
+      // solo, se dice su nombre, que es más útil que el número.
+      const primero = enviados + 1;
+      const ultimo = enviados + tanda.length;
+      reloj.paso(
+        tanda.length === 1
+          ? "Subiendo " + primero + " de " + pendientes.length
+            + ": " + tanda[0].nombre + "…"
+          : "Subiendo los documentos " + primero + " a " + ultimo
+            + " de " + pendientes.length + "…"
+      );
 
       const formulario = new FormData();
       tanda.forEach(function (uno) {
@@ -481,6 +495,7 @@ async function subirArchivos(pendientes) {
     entraronTodas = false;
   }
 
+  reloj.detener();
   subiendo = false;
   botonConfirmarCarga.disabled = false;
   progreso.className = "progreso oculto";

@@ -57,6 +57,11 @@ asistente-renta/
 │   ├── formulario.py     # el Formulario 210 de cada cliente
 │   ├── rentai.py         # la asistente que conversa y propone
 │   ├── proveedores.py    # con cuál servicio de IA se habla
+│   ├── extraccion.py     # leerle los datos a un documento UNA vez
+│   ├── cola.py           # la fila de documentos por leer, en otro hilo
+│   ├── respaldo.py       # llevarse todo en un ZIP, y traerlo de vuelta
+│   ├── demostracion.py   # el cliente inventado, para mostrar el programa
+│   ├── revision.py       # ¿está todo listo para trabajar?
 │   ├── bitacora.py       # qué pasó con cada cliente y cuándo
 │   ├── vencimientos.py   # la tabla del calendario oficial (viene vacía)
 │   └── api/              # las direcciones, un archivo por asunto
@@ -146,6 +151,11 @@ cuando ya está en manos del contador y no lo puedes depurar.
   preferir lo legible sobre lo elegante, y explicar en lenguaje claro qué hace cada pieza.
 - **El código maneja los datos, la IA maneja lo desordenado.** Nunca se le pide a la IA que
   calcule, sume, compare cifras ni decida fechas. Si es XML, se parsea — no se manda a la IA.
+- **El modelo no tiene memoria; la memoria del sistema es la base de datos.** Cada documento
+  se lee UNA vez, al procesarlo (`app/extraccion.py`), y lo que se le sacó queda en la tabla
+  `datos_extraidos`. Después, cuando el contador le pregunta algo a RentAI, se le mandan esas
+  filas — nunca los documentos otra vez. Se paga una vez por documento en vez de en cada
+  pregunta, y lo ya extraído se sigue viendo con `IA_PROVEEDOR=ninguno`.
 
 ---
 
@@ -219,10 +229,13 @@ consentimiento al desarrollador.
 
 ## Pruebas
 
-    .venv/bin/python pruebas/probar_api.py          # el servidor, por HTTP real
-    .venv/bin/python pruebas/probar_pantallas.py    # el navegador, con Playwright
-    .venv/bin/python pruebas/revisar_windows.py     # el entorno
-    .venv/bin/python pruebas/probar_vencimientos.py # la tabla de fechas
+    .venv/bin/python pruebas/probar_api.py           # el servidor, por HTTP real
+    .venv/bin/python pruebas/probar_pantallas.py     # el navegador, con Playwright
+    .venv/bin/python pruebas/revisar_windows.py      # el entorno
+    .venv/bin/python pruebas/probar_vencimientos.py  # la tabla de fechas
+    .venv/bin/python pruebas/probar_extraccion.py    # leer una vez, y la fila
+    .venv/bin/python pruebas/probar_respaldo.py      # llevarse todo y devolverlo
+    .venv/bin/python pruebas/probar_demostracion.py  # el modo demostración
 
 `probar_pantallas.py` abre Chromium de verdad y falla si el JavaScript revienta.
 Hace falta porque un error de JavaScript no se ve desde el servidor: la página

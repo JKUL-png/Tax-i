@@ -30,6 +30,7 @@ la peor forma de fallar, porque parece que funcionó.
 import shutil
 import subprocess
 import tempfile
+import threading
 import time
 from pathlib import Path
 
@@ -94,22 +95,99 @@ def buscar_libreoffice():
     return None
 
 
+# ---------------------------------------------------------------------------
+# Los valores ya calculados de un libro, leídos una sola vez
+# ---------------------------------------------------------------------------
+#
+# Abrir el libro con openpyxl tarda casi un segundo: son 1,3 MB y 15 hojas,
+# y openpyxl los vuelve a leer enteros cada vez. Antes, armar el formulario
+# de un cliente abría el mismo archivo tres veces seguidas para preguntarle
+# cosas distintas: si tenía celdas con error, cuáles eran los totales, y qué
+# había en la hoja de captura. Ahora se lee una vez y las tres preguntas se
+# contestan de la memoria.
+#
+# La llave es la ruta con la fecha y el tamaño del archivo. Si el archivo
+# cambia —porque se volvió a generar o porque LibreOffice lo reescribió—,
+# la llave cambia sola y se vuelve a leer. Nunca se devuelve algo viejo.
+#
+# El candado hace falta porque el servidor atiende varias peticiones a la
+# vez, cada una en su hilo. Sin él, dos hilos pueden entrar juntos: uno
+# vacía la memoria mientras el otro está leyendo de ella.
+
+_calculados = {}
+_candado_calculados = threading.Lock()
+
+# Cuántos libros se recuerdan a la vez. Son 6.255 celdas por libro, unos
+# pocos cientos de kilobytes: el techo es para no crecer sin final, no
+# porque pese.
+_CUANTOS_LIBROS = 4
+
+
+def llave_de_archivo(ruta):
+    """Identifica una versión concreta de un archivo: ruta, fecha y tamaño.
+
+    Se usa st_mtime_ns (nanosegundos) y no st_mtime: en Windows la fecha
+    en segundos puede repetirse entre dos escrituras seguidas, y entonces
+    se devolvería el contenido viejo del archivo nuevo.
+    """
+    datos = ruta.stat()
+    return (str(ruta.resolve()), datos.st_mtime_ns, datos.st_size)
+
+
+def valores_calculados_del_libro(ruta_xlsx):
+    """Todos los valores calculados del libro: {'hoja': {'G32': 1500000}}.
+
+    Se abre con data_only=True, que trae los RESULTADOS de las fórmulas en
+    vez de las fórmulas mismas. Esta carga es de solo lectura y NUNCA se
+    guarda: si se guardara, borraría las 902 fórmulas del libro.
+
+    Lo que se devuelve son valores sueltos, no el libro de openpyxl. Así
+    nadie puede modificar sin querer lo que está guardado en la memoria.
+    """
+    ruta = Path(ruta_xlsx)
+    llave = llave_de_archivo(ruta)
+
+    with _candado_calculados:
+        if llave in _calculados:
+            return _calculados[llave]
+
+        # read_only=True: openpyxl lee el archivo por partes en vez de
+        # armar el libro entero en memoria. Aquí solo se recorre y se lee,
+        # y tarda 3,5 veces menos: 0,24 segundos en vez de 0,85. Se
+        # comprobó que devuelve exactamente las mismas 6.255 celdas.
+        libro = load_workbook(ruta, data_only=True, read_only=True)
+        try:
+            leidos = {}
+            for nombre in libro.sheetnames:
+                hoja = {}
+                for fila in libro[nombre].iter_rows():
+                    for celda in fila:
+                        if celda.value is not None:
+                            hoja[celda.coordinate] = celda.value
+                leidos[nombre] = hoja
+        finally:
+            # Obligatorio en este modo: deja el archivo abierto, y en
+            # Windows un archivo abierto no se puede reemplazar. Sin esto,
+            # LibreOffice no podría escribir encima el libro recalculado.
+            libro.close()
+
+        if len(_calculados) >= _CUANTOS_LIBROS:
+            _calculados.clear()
+        _calculados[llave] = leidos
+        return leidos
+
+
 def celdas_con_error(ruta_xlsx):
     """Lista las celdas que quedaron mostrando un error de Excel.
 
-    Se lee con data_only=True, que trae los resultados en vez de las
-    fórmulas. Es la única forma de ver un #REF!. Esta carga es de solo
-    lectura y NUNCA se guarda: si se guardara, borraría las fórmulas.
+    Se mira sobre los valores calculados del libro, que es la única forma
+    de ver un #REF!: las fórmulas no dicen si fallaron, solo sus resultados.
     """
-    libro = load_workbook(Path(ruta_xlsx), data_only=True)
     encontradas = []
-    for nombre in libro.sheetnames:
-        hoja = libro[nombre]
-        for fila in hoja.iter_rows():
-            for celda in fila:
-                valor = celda.value
-                if isinstance(valor, str) and valor.strip() in ERRORES_DE_EXCEL:
-                    encontradas.append(f"{nombre}!{celda.coordinate}={valor.strip()}")
+    for nombre, hoja in valores_calculados_del_libro(ruta_xlsx).items():
+        for coordenada, valor in hoja.items():
+            if isinstance(valor, str) and valor.strip() in ERRORES_DE_EXCEL:
+                encontradas.append(f"{nombre}!{coordenada}={valor.strip()}")
     return encontradas
 
 

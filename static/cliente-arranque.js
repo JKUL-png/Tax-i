@@ -18,7 +18,8 @@ if (!idCliente) {
 
   // Primero el checklist y DESPUÉS los documentos: el selector de cada
   // documento se arma con los renglones, así que tienen que existir ya.
-  cargarChecklist().then(cargarDocumentos);
+  // Y al final la fila de lectura, que necesita saber qué documentos hay.
+  cargarChecklist().then(cargarDocumentos).then(arrancarLaCola);
 }
 
 recordarPlegables();

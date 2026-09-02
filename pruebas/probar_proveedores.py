@@ -19,7 +19,11 @@ ninguna llave para correr esto.
     .venv/bin/python pruebas/probar_proveedores.py
 """
 
+import json
 import sys
+import threading
+import time
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 RAIZ = Path(__file__).resolve().parent.parent
@@ -44,6 +48,121 @@ MENSAJES = [
     {"role": "system", "content": "eres una asistente"},
     {"role": "user", "content": "hola"},
 ]
+
+
+# ----------------------------------------------------------
+# El reintento cuando se acaba el cupo
+#
+# En las capas gratis el error 429 («no hay cupo») es rutina, no una
+# avería. El programa espera y vuelve a intentar: 2 segundos, 4 y 8.
+#
+# Para probarlo se levanta un servidor de mentira que contesta lo que
+# haga falta en cada caso. No se habla con ningún servicio de verdad y
+# no se gasta ni un token.
+# ----------------------------------------------------------
+
+PUERTO_FALSO = 8231
+GUION = {"respuestas": [], "recibidas": 0}
+
+
+class _ServicioFalso(BaseHTTPRequestHandler):
+    """Contesta lo que diga GUION, en orden."""
+
+    protocol_version = "HTTP/1.1"
+
+    def do_POST(self):
+        self.rfile.read(int(self.headers.get("Content-Length") or 0))
+        cual = GUION["recibidas"]
+        GUION["recibidas"] += 1
+        codigo, pide_esperar = GUION["respuestas"][
+            min(cual, len(GUION["respuestas"]) - 1)
+        ]
+
+        if codigo == 200:
+            cuerpo = json.dumps(
+                {"choices": [{"message": {"content": "listo"}}]}
+            ).encode("utf-8")
+        else:
+            cuerpo = json.dumps(
+                {"error": {"message": "rate limit"}}
+            ).encode("utf-8")
+
+        self.send_response(codigo)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(cuerpo)))
+        if pide_esperar is not None:
+            self.send_header("Retry-After", str(pide_esperar))
+        self.end_headers()
+        self.wfile.write(cuerpo)
+
+    def log_message(self, formato, *argumentos):
+        pass
+
+
+class _ConfiguracionFalsa:
+    proveedor = "openai_compatible"
+    llave = "x" * 20
+    base_url = "http://127.0.0.1:%d" % PUERTO_FALSO
+    modelo = "modelo-de-prueba"
+
+
+def probar_reintentos():
+    servidor = ThreadingHTTPServer(("127.0.0.1", PUERTO_FALSO), _ServicioFalso)
+    servidor.daemon_threads = True
+    threading.Thread(target=servidor.serve_forever, daemon=True).start()
+
+    def conversar_con(respuestas):
+        """Devuelve (funcionó, texto, segundos, cuántas peticiones hubo)."""
+        GUION["respuestas"] = respuestas
+        GUION["recibidas"] = 0
+        comenzo = time.monotonic()
+        try:
+            salida = proveedores.conversar(_ConfiguracionFalsa(), MENSAJES)
+            return True, salida, time.monotonic() - comenzo, GUION["recibidas"]
+        except proveedores.ErrorDeProveedor as error:
+            return False, str(error), time.monotonic() - comenzo, GUION["recibidas"]
+
+    try:
+        # Dos veces sin cupo y a la tercera pasa.
+        bien, salida, tardo, veces = conversar_con(
+            [(429, None), (429, None), (200, None)]
+        )
+        comprobar("insiste y termina funcionando", bien, salida)
+        comprobar("fueron 3 peticiones: la primera y 2 reintentos", veces == 3)
+        comprobar("esperó 2 s y luego 4 s", 5.5 < tardo < 8, "%.1f s" % tardo)
+
+        # Nunca hay cupo: se rinde, pero avisando bien.
+        bien, salida, tardo, veces = conversar_con([(429, None)])
+        comprobar("si nunca hay cupo, no revienta", not bien)
+        comprobar("fueron 4 peticiones: la primera y 3 reintentos", veces == 4)
+        comprobar("esperó 2+4+8 segundos", 13 < tardo < 17, "%.1f s" % tardo)
+        comprobar("el aviso explica que las capas gratis tienen límite",
+                  "límite diario" in salida)
+        comprobar("y dice que el programa ya reintentó",
+                  "reintentó 3 veces" in salida)
+
+        # Si el servicio dice cuánto esperar, manda él.
+        bien, salida, tardo, veces = conversar_con([(429, 1), (200, None)])
+        comprobar("hace caso a Retry-After en vez de a su propio cálculo",
+                  bien and 0.7 < tardo < 2.5, "esperó %.1f s, no 2" % tardo)
+
+        # Pero si pide una barbaridad, no se queda congelado.
+        bien, salida, tardo, veces = conversar_con([(429, 600), (200, None)])
+        comprobar("si le piden esperar 10 minutos, no espera",
+                  not bien and tardo < 2, "%.1f s" % tardo)
+        comprobar("y le dice al contador que puede seguir trabajando",
+                  "seguir trabajando" in salida)
+
+        # Una llave mala no se arregla esperando: no se reintenta.
+        bien, salida, tardo, veces = conversar_con([(401, None)])
+        comprobar("una llave mala NO se reintenta", not bien and veces == 1,
+                  "%d petición" % veces)
+        comprobar("se rinde de una vez, sin esperar", tardo < 1,
+                  "%.2f s" % tardo)
+        comprobar("y dice que revise la llave", "llave" in salida)
+    finally:
+        servidor.shutdown()
+        servidor.server_close()
 
 
 def main():
@@ -222,6 +341,9 @@ def main():
               con_llave.llave not in texto)
     comprobar("ni el pedazo del medio de la llave",
               con_llave.llave[6:-4] not in texto)
+
+    titulo("I. Cuando no hay cupo (error 429), insiste antes de rendirse")
+    probar_reintentos()
 
     print()
     print("=" * 62)

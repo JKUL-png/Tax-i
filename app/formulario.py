@@ -30,6 +30,7 @@ su archivo con su bitácora. El de un cliente nunca se mezcla con el de otro.
 """
 
 import shutil
+import threading
 import unicodedata
 import zipfile
 from datetime import datetime
@@ -44,7 +45,7 @@ from app.escribir_210 import EscritorPlantilla, EscrituraBloqueada
 from app.plantilla_210 import (
     HOJA_CAPTURA, RAIZ, TIPO_CAPTURA, mapear_plantilla,
 )
-from app.recalcular import buscar_libreoffice
+from app.recalcular import buscar_libreoffice, valores_calculados_del_libro
 
 CARPETA_PLANTILLAS = RAIZ / "plantillas"
 CARPETA_FORMULARIOS = RAIZ / "datos" / "formularios"
@@ -194,11 +195,26 @@ def guardar_plantilla_subida(nombre_original, contenido):
 # memoria para no repetirlo en cada tecla que el contador escribe en el
 # buscador. Si cambia el archivo (otra plantilla, o la misma corregida), la
 # fecha de modificación cambia y el mapa se vuelve a armar solo.
+#
+# El candado hace falta porque el servidor atiende cada petición en su
+# propio hilo. Sin él, dos hilos pueden estar armando el mapa a la vez y
+# uno puede leer el diccionario cuando el otro lo dejó a medio actualizar.
 _mapa_guardado = {"ruta": None, "modificado": None, "mapa": None, "indice": None}
+_candado_mapa = threading.Lock()
 
 
 def mapa():
     """El mapa de celdas de la plantilla, sacado de memoria si ya se leyó."""
+    return _mapa_e_indice()[0]
+
+
+def indice():
+    """Las celdas del mapa en un diccionario: {'G32': {...}}."""
+    return _mapa_e_indice()[1]
+
+
+def _mapa_e_indice():
+    """El mapa y su índice, armados una sola vez aunque los pidan a la vez."""
     ruta = ruta_plantilla()
     if ruta is None:
         raise SinPlantilla(
@@ -206,23 +222,21 @@ def mapa():
             " Ponga ahí el archivo de Excel del Formulario 210."
         )
 
-    modificado = ruta.stat().st_mtime
-    if (_mapa_guardado["ruta"] != ruta
-            or _mapa_guardado["modificado"] != modificado):
-        armado = mapear_plantilla(ruta)
-        _mapa_guardado.update(
-            ruta=ruta,
-            modificado=modificado,
-            mapa=armado,
-            indice={c["celda"]: c for c in armado["celdas"]},
-        )
-    return _mapa_guardado["mapa"]
-
-
-def indice():
-    """Las celdas del mapa en un diccionario: {'G32': {...}}."""
-    mapa()
-    return _mapa_guardado["indice"]
+    # st_mtime_ns y no st_mtime: en Windows la fecha en segundos puede
+    # repetirse entre dos escrituras seguidas, y entonces se seguiría
+    # usando el mapa de la plantilla anterior.
+    modificado = ruta.stat().st_mtime_ns
+    with _candado_mapa:
+        if (_mapa_guardado["ruta"] != ruta
+                or _mapa_guardado["modificado"] != modificado):
+            armado = mapear_plantilla(ruta)
+            _mapa_guardado.update(
+                ruta=ruta,
+                modificado=modificado,
+                mapa=armado,
+                indice={c["celda"]: c for c in armado["celdas"]},
+            )
+        return _mapa_guardado["mapa"], _mapa_guardado["indice"]
 
 
 def resumen_plantilla():
@@ -346,36 +360,14 @@ def _para_pantalla(celda):
 # ---------------------------------------------------------------------------
 
 
-# Leer los valores ya calculados de un libro toma más de un segundo. Se
-# recuerdan en memoria con la fecha del archivo como llave: si el archivo
-# cambia (se volvió a generar), la llave cambia y se vuelve a leer.
-_valores_recordados = {}
-
-
 def valores_calculados(ruta_xlsx):
     """Todos los valores ya calculados de la hoja de captura: {celda: valor}.
 
-    Se abre con data_only=True, que trae los resultados en vez de las
-    fórmulas. Esta carga es de solo lectura y NUNCA se guarda: si se
-    guardara, borraría las 902 fórmulas del libro.
+    La lectura del libro la hace `valores_calculados_del_libro`, que la
+    guarda en memoria: el mismo archivo no se vuelve a abrir aunque se le
+    pregunten cosas distintas. Aquí solo se escoge la hoja de captura.
     """
-    ruta = Path(ruta_xlsx)
-    datos = ruta.stat()
-    llave = (str(ruta.resolve()), datos.st_mtime, datos.st_size)
-
-    if llave not in _valores_recordados:
-        if len(_valores_recordados) >= 6:
-            _valores_recordados.clear()
-        libro = load_workbook(ruta, data_only=True)
-        hoja = libro[HOJA_CAPTURA]
-        leidos = {}
-        for fila in hoja.iter_rows():
-            for celda in fila:
-                if celda.value is not None:
-                    leidos[celda.coordinate] = celda.value
-        _valores_recordados[llave] = leidos
-
-    return _valores_recordados[llave]
+    return valores_calculados_del_libro(ruta_xlsx).get(HOJA_CAPTURA, {})
 
 
 def _numero_o_nada(valor):
@@ -604,8 +596,9 @@ def leer_totales(ruta_xlsx):
     Los renglones de la liquidación privada (impuesto y saldos) no entran:
     ver SECCIONES_QUE_NO_SE_MUESTRAN.
     """
-    libro = load_workbook(Path(ruta_xlsx), data_only=True)
-    hoja = libro[mapa()["hoja"]]
+    # La misma lectura que ya usaron el aviso de errores y la hoja del
+    # cliente: el archivo se abrió una vez y de ahí salen las tres cosas.
+    hoja = valores_calculados_del_libro(ruta_xlsx).get(mapa()["hoja"], {})
 
     totales = []
     vistos = set()
@@ -616,7 +609,7 @@ def leer_totales(ruta_xlsx):
             continue
         if celda["renglon"] in vistos:
             continue
-        valor = hoja[celda["celda"]].value
+        valor = hoja.get(celda["celda"])
         if not isinstance(valor, (int, float)) or isinstance(valor, bool):
             continue
         vistos.add(celda["renglon"])
@@ -631,12 +624,34 @@ def leer_totales(ruta_xlsx):
     return totales
 
 
-def generar(cliente):
+def generar(cliente, con_totales=False):
     """Arma el archivo de Excel de un cliente y devuelve cómo salió.
 
     Siempre parte de la plantilla limpia y le escribe todos los valores
     capturados de ese cliente. El archivo anterior de ese cliente se
     reemplaza; los de los demás clientes ni se tocan.
+
+    Por qué `con_totales` viene apagado de fábrica
+    ----------------------------------------------
+    Calcular los totales es pedirle a LibreOffice que abra el libro,
+    recalcule las 902 fórmulas y lo vuelva a guardar. Eso cuesta cerca de
+    dos segundos, y hay que sumarle revisar otra vez el archivo que
+    LibreOffice reescribió entero. Es la mayor parte de lo que tarda
+    generar.
+
+    Y en la mayoría de los casos no hace falta: el archivo se entrega
+    marcado para que **Excel calcule los totales solo al abrirlo** (lo hace
+    `_marcar_para_recalcular` en escribir_210.py). El contador descarga su
+    archivo y ve sus totales, igual que siempre.
+
+    Lo único que se gana calculando aquí es poder mostrar los totales
+    DENTRO de Tax-i, en su propia tabla. Eso es útil, pero es una consulta,
+    no parte de guardar: por eso ahora se pide aparte, con el botón
+    «Actualizar totales».
+
+    Lo que NO cambia: la verificación de las 902 fórmulas contra la
+    plantilla original se hace siempre, en las dos formas. Es la que
+    protege el archivo del contador y no tiene interruptor.
     """
     plantilla = ruta_plantilla()
     if plantilla is None:
@@ -659,7 +674,7 @@ def generar(cliente):
             documento=guardado["documento"] or "digitado por el contador",
         )
 
-    ruta, ruta_bitacora = escritor.guardar()
+    ruta, ruta_bitacora = escritor.guardar(recalcular_totales=con_totales)
 
     informe = {
         "archivo": str(ruta.relative_to(RAIZ)),
@@ -668,6 +683,9 @@ def generar(cliente):
         "verificacion": escritor.informe_verificacion,
         "recalculo": escritor.informe_recalculo,
         "bitacora": str(ruta_bitacora.relative_to(RAIZ)),
+        # Si no se calcularon los totales, la pantalla lo dice y ofrece el
+        # botón para hacerlo. No es un error: el archivo está completo.
+        "con_totales": bool(con_totales),
         "totales": [],
     }
     if escritor.informe_recalculo and escritor.informe_recalculo["recalculado"]:

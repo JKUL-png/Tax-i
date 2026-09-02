@@ -141,8 +141,28 @@
           <p class="ayuda" id="ia-explicacion"></p>
         </div>
 
+        <!-- Cuál servicio concreto, dentro de los compatibles con OpenAI.
+             Al elegir uno se llena la dirección sola y solo queda pedir
+             la llave. Van primero los que tienen capa gratis. -->
+        <div class="campo oculto" id="campo-servicio">
+          <label for="ia-servicio">¿Cuál servicio?</label>
+          <select id="ia-servicio" class="selector-plantilla"></select>
+          <p class="ayuda" id="ia-servicio-resumen"></p>
+        </div>
+
+        <!-- Qué hace ese servicio con los documentos del cliente. Esto no
+             es un detalle: aquí va información tributaria de terceros. -->
+        <div class="aviso-modo oculto" id="ia-privacidad">
+          <p id="ia-privacidad-texto"></p>
+          <p><a id="ia-privacidad-enlace" href="#" target="_blank"
+                rel="noopener"></a></p>
+        </div>
+
         <!-- Lo que sale de este computador con este servicio -->
         <div class="aviso-modo" id="ia-que-sale"></div>
+
+        <!-- Por qué existe la fila de lectura. -->
+        <p class="ayuda oculto" id="ia-capa-gratis"></p>
 
         <!-- La dirección. Solo se ve cuando hace falta. -->
         <div class="campo oculto" id="campo-base-url">
@@ -237,6 +257,49 @@
       </div>
     </section>
 
+    <!-- ---------- La revisión de arranque ----------
+         Qué está en su sitio y qué no, en español. Si algo impide
+         trabajar, hay que saberlo antes de subir doce documentos. -->
+    <section class="seccion">
+      <div class="tarjeta">
+        <h2>¿Está todo listo para trabajar?</h2>
+        <p class="ayuda" id="revision-resumen">Revisando…</p>
+        <div id="revision-lista" class="lista"></div>
+        <div class="fila-botones">
+          <button type="button" class="boton-secundario" id="boton-revisar">
+            Volver a revisar, y probar la IA
+          </button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ---------- Modo demostración ----------
+         Para mostrarle el programa a otro contador sin enseñarle los
+         documentos de nadie. -->
+    <section class="seccion">
+      <div class="tarjeta">
+        <h2>Modo demostración</h2>
+        <p class="ayuda">
+          Carga un cliente <strong>inventado</strong>, con documentos
+          inventados, para poder mostrar el programa a un colega, grabar
+          un video o tomar capturas sin enseñar los documentos de ningún
+          cliente de verdad.
+        </p>
+        <p class="ayuda">
+          Todo lo que carga va marcado con
+          <span class="cifra" id="demo-marca">(EJEMPLO FICTICIO)</span>,
+          y cada documento dice en su primera línea que es ficticio. Al
+          apagarlo se borra todo eso; <strong>sus clientes de verdad no se
+          tocan</strong>.
+        </p>
+        <label class="opcion-linea">
+          <input type="checkbox" id="demo-interruptor">
+          Cargar el cliente de ejemplo
+        </label>
+        <div id="aviso-demo" class="aviso oculto" role="alert"></div>
+      </div>
+    </section>
+
     <p class="nota-prototipo">
       Prototipo. La entrada con usuario y contraseña todavía no existe;
       cuando exista, se conectará aquí. Mientras tanto, la seguridad de
@@ -249,6 +312,7 @@
   </div>
 
   <script src="/static/comun.js"></script>
+  <script src="/static/demostracion.js"></script>
   <script src="/static/riel.js"></script>
   <script src="/static/cuenta.js"></script>
 </body>

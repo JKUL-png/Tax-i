@@ -22,9 +22,18 @@ Qué sale de este computador
 ---------------------------
 Con IA_PROVEEDOR=ninguno (el valor por defecto) no sale nada y RentAI no
 funciona. Con la IA encendida, al servicio que el contador haya elegido
-le llega: el nombre del cliente, el texto de sus documentos, su checklist
-y la conversación. Los archivos NO se mandan: de un PDF se manda el texto
-que se extrajo aquí, nunca el archivo.
+le llega: el nombre del cliente, su checklist, la conversación y **los
+datos que ya se le sacaron a sus documentos**, no los documentos.
+
+Eso último cambió. Antes, cada pregunta remandaba el texto de los
+documentos, así que el mismo certificado salía de aquí una y otra vez.
+Ahora cada documento se lee UNA sola vez, al confirmarlo (eso lo hace
+app/extraccion.py, y ahí sí sale su texto esa única vez), lo que se le
+sacó queda guardado en la base, y a partir de entonces lo que sale son
+esas filas: "Salarios = 45.000.000", no el certificado entero.
+
+Sale menos, sale una vez, y lo ya leído se sigue viendo aunque después
+se apague la IA. Los archivos NO se mandan nunca.
 
 Con cuál servicio se habla lo decide el contador en la pantalla de
 Cuenta, y con eso decide también a quién le está confiando esos textos.
@@ -35,7 +44,7 @@ app/proveedores.py; aquí no se sabe con cuál se está hablando.
 
 import json
 
-from app import db, documentos, formulario, lectura, proveedores
+from app import db, formulario, proveedores
 from app.configuracion import CONFIG
 from app.plantilla_210 import TIPO_CAPTURA
 
@@ -55,7 +64,11 @@ MENSAJES_QUE_RECUERDA = 8
 # conversación. Si se agranda esto, empieza a rebotar con "servicio
 # ocupado" en el servicio más apretado.
 DOCUMENTOS_QUE_SE_MANDAN = 6
-LETRAS_POR_DOCUMENTO = 1000
+
+# Cuántos datos de cada documento se le cuentan. Ya no se manda el texto
+# del documento sino lo que se le sacó, que es mucho más corto: un
+# certificado que ocupaba 1.000 letras cabe ahora en seis renglones.
+DATOS_POR_DOCUMENTO = 12
 
 # Lo mismo para el catálogo: cada casilla se manda en una línea corta.
 LARGO_DE_LINEA_DEL_CATALOGO = 38
@@ -141,47 +154,73 @@ Si no hay nada que proponer, "propuestas" va vacío: [].
 # Lo que RentAI sabe del cliente
 # ---------------------------------------------------------------------------
 
-# El texto de un documento no cambia, así que se recuerda en memoria y no
-# se vuelve a sacar del PDF en cada mensaje.
-_texto_recordado = {}
+def resumen_de_documentos(cliente_id):
+    """Lo que ya se le sacó a los documentos, sacado de la BASE DE DATOS.
 
+    Antes esta función volvía a abrir los PDF y le remandaba su texto al
+    modelo en cada pregunta. Eso significaba pagar el mismo certificado
+    otra vez en cada mensaje, y esperar a que se releyera.
 
-def texto_de_documento(documento):
-    """El texto de un documento del cliente, o el motivo por el que no hay."""
-    llave = (documento["id"], documento["tamano"])
-    if llave in _texto_recordado:
-        return _texto_recordado[llave]
+    Ahora los documentos se leen UNA vez, al confirmarlos (ver
+    app/extraccion.py), y lo que se les sacó vive en la base. Aquí solo
+    se consultan esas filas. Los documentos ya no se vuelven a mandar
+    nunca: lo que sale son los datos, que son mucho más cortos.
 
-    ruta = documentos.ruta_del_documento(
-        documento["cliente_id"], documento["nombre_guardado"]
-    )
-    if not ruta.exists():
-        resultado = ("", "El archivo ya no está en el disco.")
-    else:
-        resultado = lectura.texto_del_documento(
-            documento["nombre_guardado"], ruta.read_bytes()
+    Eso también es lo que hace que lo ya leído se siga viendo con
+    IA_PROVEEDOR=ninguno: está en este computador.
+
+    Cada dato dice de qué documento salió y quién lo leyó. Los que leyó
+    un modelo van marcados como lectura automática, porque el contador
+    tiene que poder distinguir eso de lo que leyó el programa de un XML.
+    """
+    filas = db.listar_datos_extraidos(cliente_id)
+    documentos_del_cliente = db.listar_documentos(cliente_id)
+
+    if not documentos_del_cliente:
+        return "Este cliente todavía no tiene documentos subidos."
+
+    # Los datos, agrupados por el documento del que salieron.
+    por_documento = {}
+    for fila in filas:
+        por_documento.setdefault(fila["documento_id"], []).append(fila)
+
+    bloques = []
+    sin_leer = []
+
+    for documento in documentos_del_cliente[:DOCUMENTOS_QUE_SE_MANDAN]:
+        suyos = por_documento.get(documento["id"])
+        if not suyos:
+            sin_leer.append(documento["nombre_original"])
+            continue
+
+        # 'ia' es lectura automática; 'codigo' lo leyó el programa de un
+        # XML y es exacto. Se le dice al modelo, para que no presente lo
+        # uno como si fuera lo otro.
+        como = ("leído por el programa del XML: exacto"
+                if suyos[0]["origen"] == "codigo"
+                else "LECTURA AUTOMÁTICA: hay que verificarla")
+        lineas = [f"--- {documento['nombre_original']} ({como}) ---"]
+        for dato in suyos[:DATOS_POR_DOCUMENTO]:
+            partes = [dato["concepto"]]
+            if dato["valor"]:
+                partes.append(f"= {dato['valor']}")
+            if dato["detalle"]:
+                partes.append(f"({dato['detalle']})")
+            lineas.append("  " + " ".join(partes))
+        bloques.append("\n".join(lineas))
+
+    if sin_leer:
+        bloques.append(
+            "DOCUMENTOS QUE TODAVÍA NO SE HAN LEÍDO (%d): %s\n"
+            "  No sabes qué dicen. No adivines su contenido: dile al"
+            " contador que los procese primero."
+            % (len(sin_leer), ", ".join(sin_leer[:8]))
         )
 
-    if len(_texto_recordado) > 60:
-        _texto_recordado.clear()
-    _texto_recordado[llave] = resultado
-    return resultado
-
-
-def resumen_de_documentos(cliente_id):
-    """Los documentos del cliente con su texto, listos para contárselos."""
-    lineas = []
-    for documento in db.listar_documentos(cliente_id)[:DOCUMENTOS_QUE_SE_MANDAN]:
-        texto, motivo = texto_de_documento(documento)
-        encabezado = f"--- {documento['nombre_original']} ---"
-        if texto:
-            lineas.append(f"{encabezado}\n{texto[:LETRAS_POR_DOCUMENTO]}")
-        else:
-            lineas.append(f"{encabezado}\n(no se pudo leer: {motivo})")
-
-    if not lineas:
-        return "Este cliente todavía no tiene documentos subidos."
-    return "\n\n".join(lineas)
+    if not bloques:
+        return ("Este cliente tiene documentos, pero todavía no se ha"
+                " leído ninguno. No sabes qué dicen.")
+    return "\n\n".join(bloques)
 
 
 def catalogo_de_casillas():

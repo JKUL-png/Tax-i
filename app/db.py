@@ -66,6 +66,10 @@ def crear_tablas():
                 dos_digitos       TEXT NOT NULL,
                 -- Formato AAAA-MM-DD. Por ahora la escribe el contador a mano.
                 fecha_vencimiento TEXT,
+                -- 1 si es un cliente INVENTADO, del modo demostración.
+                -- Sirve para mostrarlo marcado en pantalla y para poder
+                -- quitarlos todos de un golpe sin tocar a los de verdad.
+                es_demo           INTEGER NOT NULL DEFAULT 0,
                 creado_en         TEXT NOT NULL
             )
             """
@@ -95,6 +99,12 @@ def crear_tablas():
                 renglon_id      INTEGER,
                 -- Si salió de un ZIP, aquí queda el nombre del ZIP.
                 venia_en_zip    TEXT,
+                -- En qué va la lectura de este documento: 'pendiente',
+                -- 'leyendo', 'listo' o 'fallo'. Es lo que hace que un
+                -- documento se lea UNA sola vez y no se vuelva a pagar.
+                estado_lectura  TEXT NOT NULL DEFAULT 'pendiente',
+                -- Si falló, por qué. Escrito para que lo lea el contador.
+                motivo_lectura  TEXT,
                 subido_en       TEXT NOT NULL,
                 FOREIGN KEY (cliente_id) REFERENCES clientes(id)
                     ON DELETE CASCADE
@@ -249,6 +259,66 @@ def crear_tablas():
             """
         )
 
+        # Lo que se le sacó a cada documento, guardado dato por dato.
+        #
+        # Por qué existe esta tabla
+        # -------------------------
+        # El modelo de IA no tiene memoria. Cada vez que se le pregunta
+        # algo hay que volver a contarle todo, y antes eso significaba
+        # remandarle el texto de los documentos en CADA pregunta: se
+        # pagaba el mismo documento diez veces y cada respuesta se
+        # demoraba lo que se demora leerlos.
+        #
+        # La memoria del sistema es esta tabla. Se lee cada documento UNA
+        # vez, lo que se le sacó queda aquí, y a partir de ahí las
+        # preguntas se contestan con estas filas. Tres cosas se ganan: se
+        # paga una vez por documento, las respuestas son inmediatas, y lo
+        # ya extraído se sigue viendo con IA_PROVEEDOR=ninguno, porque
+        # ya está en el computador y no hay que preguntarle a nadie.
+        #
+        # 'origen' dice quién lo sacó, y no es un detalle: es la regla
+        # del proyecto.
+        #   'codigo'  lo leyó el programa de un XML. Es exacto.
+        #   'ia'      lo leyó un modelo. Es LECTURA AUTOMÁTICA y se
+        #             muestra marcada como tal, para verificar contra el
+        #             documento original.
+        #
+        # 'documento_id' es lo que permite abrir el original al lado del
+        # dato. Ningún dato vive suelto: todos dicen de dónde salieron.
+        conexion.execute(
+            """
+            CREATE TABLE IF NOT EXISTS datos_extraidos (
+                id             INTEGER PRIMARY KEY AUTOINCREMENT,
+                cliente_id     INTEGER NOT NULL,
+                documento_id   INTEGER NOT NULL,
+                -- Qué es: "Salarios", "Retención practicada", "NIT del
+                -- emisor". Tal como lo dice el documento.
+                concepto       TEXT NOT NULL,
+                -- La cifra, cuando el dato es una cifra. Se guarda como
+                -- texto, tal como está escrita en el documento: el
+                -- programa no convierte ni redondea ni suma.
+                valor          TEXT,
+                -- Lo que no es cifra: un nombre, un NIT, un periodo.
+                detalle        TEXT,
+                -- 'codigo' o 'ia'. Ver arriba.
+                origen         TEXT NOT NULL,
+                extraido_en    TEXT NOT NULL,
+                FOREIGN KEY (cliente_id) REFERENCES clientes(id)
+                    ON DELETE CASCADE,
+                FOREIGN KEY (documento_id) REFERENCES documentos(id)
+                    ON DELETE CASCADE
+            )
+            """
+        )
+        conexion.execute(
+            "CREATE INDEX IF NOT EXISTS idx_extraidos_cliente"
+            " ON datos_extraidos (cliente_id)"
+        )
+        conexion.execute(
+            "CREATE INDEX IF NOT EXISTS idx_extraidos_documento"
+            " ON datos_extraidos (documento_id)"
+        )
+
         # --- Cambios sobre bases que ya existían ---
         # Si la base se creó con una versión anterior del programa, le falta
         # la columna "notas". Se agrega aquí en vez de pedirle al contador
@@ -259,6 +329,13 @@ def crear_tablas():
         }
         if "notas" not in columnas:
             conexion.execute("ALTER TABLE clientes ADD COLUMN notas TEXT")
+        # La marca del modo demostración. Los clientes que ya existían son
+        # de verdad, así que el valor por defecto (0) es el correcto.
+        if "es_demo" not in columnas:
+            conexion.execute(
+                "ALTER TABLE clientes ADD COLUMN es_demo INTEGER"
+                " NOT NULL DEFAULT 0"
+            )
 
         columnas_valores = {
             fila["name"]
@@ -280,6 +357,20 @@ def crear_tablas():
             conexion.execute("ALTER TABLE documentos ADD COLUMN hash TEXT")
         if "renglon_id" not in columnas_doc:
             conexion.execute("ALTER TABLE documentos ADD COLUMN renglon_id INTEGER")
+        # En qué va la lectura de cada documento. Es lo que hace que se
+        # lea UNA sola vez: si ya está 'listo', no se vuelve a leer ni a
+        # pagar. Los cuatro valores posibles son 'pendiente', 'leyendo',
+        # 'listo' y 'fallo'.
+        if "estado_lectura" not in columnas_doc:
+            conexion.execute(
+                "ALTER TABLE documentos ADD COLUMN estado_lectura TEXT"
+                " NOT NULL DEFAULT 'pendiente'"
+            )
+        # Si falló, por qué. Se le muestra al contador tal cual.
+        if "motivo_lectura" not in columnas_doc:
+            conexion.execute(
+                "ALTER TABLE documentos ADD COLUMN motivo_lectura TEXT"
+            )
 
 
 # ----------------------------------------------------------
@@ -295,7 +386,8 @@ def listar_clientes():
     with conectar() as conexion:
         filas = conexion.execute(
             """
-            SELECT id, nombre, dos_digitos, fecha_vencimiento, notas, creado_en
+            SELECT id, nombre, dos_digitos, fecha_vencimiento, notas,
+                   es_demo, creado_en
             FROM clientes
             ORDER BY
                 CASE WHEN fecha_vencimiento IS NULL OR fecha_vencimiento = ''
@@ -311,25 +403,42 @@ def obtener_cliente(id_cliente):
     """Devuelve un cliente por su id, o None si no existe."""
     with conectar() as conexion:
         fila = conexion.execute(
-            "SELECT id, nombre, dos_digitos, fecha_vencimiento, notas, creado_en"
-            " FROM clientes WHERE id = ?",
+            "SELECT id, nombre, dos_digitos, fecha_vencimiento, notas,"
+            " es_demo, creado_en FROM clientes WHERE id = ?",
             (id_cliente,),
         ).fetchone()
     return dict(fila) if fila else None
 
 
-def crear_cliente(nombre, dos_digitos, fecha_vencimiento=None, notas=None):
-    """Guarda un cliente nuevo y devuelve el registro completo."""
+def crear_cliente(nombre, dos_digitos, fecha_vencimiento=None, notas=None,
+                  es_demo=False):
+    """Guarda un cliente nuevo y devuelve el registro completo.
+
+    `es_demo` marca los clientes INVENTADOS del modo demostración. Solo
+    lo pone app/demostracion.py: por la pantalla no entra nunca, para que
+    nadie cree sin querer un cliente de verdad marcado como de mentira.
+    """
     creado_en = datetime.now().isoformat(timespec="seconds")
     with conectar() as conexion:
         cursor = conexion.execute(
             "INSERT INTO clientes"
-            " (nombre, dos_digitos, fecha_vencimiento, notas, creado_en)"
-            " VALUES (?, ?, ?, ?, ?)",
-            (nombre, dos_digitos, fecha_vencimiento, notas, creado_en),
+            " (nombre, dos_digitos, fecha_vencimiento, notas, es_demo,"
+            "  creado_en)"
+            " VALUES (?, ?, ?, ?, ?, ?)",
+            (nombre, dos_digitos, fecha_vencimiento, notas,
+             1 if es_demo else 0, creado_en),
         )
         id_nuevo = cursor.lastrowid
     return obtener_cliente(id_nuevo)
+
+
+def clientes_de_demostracion():
+    """Los ids de los clientes inventados. Vacío si no hay demostración."""
+    with conectar() as conexion:
+        filas = conexion.execute(
+            "SELECT id FROM clientes WHERE es_demo = 1 ORDER BY id"
+        ).fetchall()
+    return [fila["id"] for fila in filas]
 
 
 def actualizar_cliente(id_cliente, nombre=None, dos_digitos=None,
@@ -388,7 +497,8 @@ def listar_documentos(id_cliente):
         filas = conexion.execute(
             """
             SELECT id, cliente_id, nombre_original, nombre_guardado,
-                   extension, tamano, hash, renglon_id, venia_en_zip, subido_en
+                   extension, tamano, hash, renglon_id, venia_en_zip,
+                   estado_lectura, motivo_lectura, subido_en
             FROM documentos
             WHERE cliente_id = ?
             ORDER BY subido_en DESC, id DESC
@@ -418,7 +528,8 @@ def obtener_documento(id_documento):
         fila = conexion.execute(
             """
             SELECT id, cliente_id, nombre_original, nombre_guardado,
-                   extension, tamano, hash, renglon_id, venia_en_zip, subido_en
+                   extension, tamano, hash, renglon_id, venia_en_zip,
+                   estado_lectura, motivo_lectura, subido_en
             FROM documentos WHERE id = ?
             """,
             (id_documento,),
@@ -456,6 +567,144 @@ def eliminar_documento(id_documento):
             "DELETE FROM documentos WHERE id = ?", (id_documento,)
         )
     return cursor.rowcount > 0
+
+
+# ----------------------------------------------------------
+# Lo que se le sacó a cada documento
+#
+# Esta es la memoria del programa. Ver el comentario de la tabla
+# datos_extraidos, arriba, para el porqué.
+# ----------------------------------------------------------
+
+
+def marcar_lectura(id_documento, estado, motivo=""):
+    """Anota en qué va la lectura de un documento.
+
+    Los estados son 'pendiente', 'leyendo', 'listo' y 'fallo'. Devuelve
+    True si el documento existía.
+    """
+    if estado not in ("pendiente", "leyendo", "listo", "fallo"):
+        raise ValueError("Estado de lectura desconocido: %r" % (estado,))
+    with conectar() as conexion:
+        cursor = conexion.execute(
+            "UPDATE documentos SET estado_lectura = ?, motivo_lectura = ?"
+            " WHERE id = ?",
+            (estado, motivo or None, id_documento),
+        )
+    return cursor.rowcount > 0
+
+
+def documentos_sin_leer(cliente_id=None):
+    """Los documentos a los que todavía no se les sacó nada.
+
+    Sin `cliente_id` devuelve los de todos los clientes, que es como los
+    pide la cola cuando arranca el programa.
+
+    Van los que están 'pendiente' y también los que quedaron a medias en
+    'leyendo' —porque se cerró el programa a mitad—, para que se puedan
+    retomar. Los que fallaron NO vuelven solos: el contador decide si
+    reintentarlos, para no gastar cupo repitiendo lo que ya falló.
+    """
+    consulta = (
+        "SELECT * FROM documentos"
+        " WHERE estado_lectura IN ('pendiente', 'leyendo')"
+    )
+    parametros = []
+    if cliente_id is not None:
+        consulta += " AND cliente_id = ?"
+        parametros.append(cliente_id)
+    consulta += " ORDER BY id"
+
+    with conectar() as conexion:
+        filas = conexion.execute(consulta, parametros).fetchall()
+    return [dict(fila) for fila in filas]
+
+
+def rescatar_lecturas_a_medias():
+    """Devuelve a 'pendiente' los documentos que quedaron en 'leyendo'.
+
+    Un documento queda en 'leyendo' si se cerró el programa —o se fue la
+    luz— justo mientras se leía. Se llama al arrancar: así la cola retoma
+    donde iba en vez de dejar documentos colgados para siempre.
+
+    Devuelve cuántos rescató.
+    """
+    with conectar() as conexion:
+        cursor = conexion.execute(
+            "UPDATE documentos SET estado_lectura = 'pendiente'"
+            " WHERE estado_lectura = 'leyendo'"
+        )
+    return cursor.rowcount
+
+
+def guardar_datos_extraidos(cliente_id, documento_id, datos, origen):
+    """Guarda lo que se le sacó a un documento. Reemplaza lo que hubiera.
+
+    `datos` es una lista de diccionarios con 'concepto' y, opcionalmente,
+    'valor' y 'detalle'. `origen` es 'codigo' (lo leyó el programa de un
+    XML: es exacto) o 'ia' (lo leyó un modelo: es lectura automática y en
+    pantalla se muestra marcada como tal).
+
+    Se borra primero lo anterior de ese documento para que releer no
+    deje datos duplicados ni datos viejos de una lectura anterior.
+    """
+    if origen not in ("codigo", "ia"):
+        raise ValueError("Origen desconocido: %r" % (origen,))
+
+    cuando = datetime.now().isoformat(timespec="seconds")
+    with conectar() as conexion:
+        conexion.execute(
+            "DELETE FROM datos_extraidos WHERE documento_id = ?",
+            (documento_id,),
+        )
+        for dato in datos:
+            concepto = str(dato.get("concepto", "")).strip()
+            if not concepto:
+                continue
+            conexion.execute(
+                """
+                INSERT INTO datos_extraidos
+                    (cliente_id, documento_id, concepto, valor, detalle,
+                     origen, extraido_en)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                """,
+                (cliente_id, documento_id, concepto[:200],
+                 _o_nada(dato.get("valor")), _o_nada(dato.get("detalle")),
+                 origen, cuando),
+            )
+    return listar_datos_extraidos(cliente_id, documento_id=documento_id)
+
+
+def _o_nada(valor):
+    """Deja el valor como texto recortado, o None si está vacío."""
+    if valor is None:
+        return None
+    texto = str(valor).strip()
+    return texto[:300] if texto else None
+
+
+def listar_datos_extraidos(cliente_id, documento_id=None):
+    """Lo que se le sacó a los documentos de un cliente.
+
+    Cada fila trae el nombre del documento de donde salió, para que en
+    pantalla se pueda abrir el original al lado del dato. Ningún dato se
+    muestra suelto.
+    """
+    consulta = (
+        "SELECT e.*, d.nombre_original, d.nombre_guardado"
+        " FROM datos_extraidos e"
+        " JOIN documentos d ON d.id = e.documento_id"
+        " WHERE e.cliente_id = ?"
+    )
+    parametros = [cliente_id]
+    if documento_id is not None:
+        consulta += " AND e.documento_id = ?"
+        parametros.append(documento_id)
+    consulta += " ORDER BY e.documento_id, e.id"
+
+    with conectar() as conexion:
+        filas = conexion.execute(consulta, parametros).fetchall()
+    return [dict(fila) for fila in filas]
 
 
 # ----------------------------------------------------------

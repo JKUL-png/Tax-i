@@ -34,14 +34,14 @@ Nota: no se registra en los logs ningún nombre de cliente ni contenido de
 documentos. Solo errores técnicos.
 """
 
-from app import db
+from app import cola, db, revision
 from app.api.base import app
 
 # Cada uno de estos imports registra sus direcciones sobre `app`.
 # El orden no importa: las direcciones no se pisan entre sí.
 from app.api import (
     checklist, chat, clientes, cuenta, documentos, formulario, importar,
-    paginas, resumen,
+    paginas, respaldo, resumen, sistema,
 )
 
 # Esta tupla no se usa para nada más que dejar constancia de que los
@@ -49,7 +49,7 @@ from app.api import (
 # importarse. Sin ella parecen imports olvidados y alguien los borraría.
 MODULOS = (
     paginas, clientes, documentos, importar, checklist, resumen,
-    formulario, chat, cuenta,
+    formulario, chat, cuenta, respaldo, sistema,
 )
 
 
@@ -70,9 +70,31 @@ def arrancar():
     app.arrancar(
         maquina=elegidas.maquina,
         puerto=elegidas.puerto,
-        # Prepara la base de datos si es la primera vez.
-        al_arrancar=db.crear_tablas,
+        al_arrancar=preparar,
     )
+
+
+def preparar():
+    """Lo que hay que dejar listo antes de empezar a atender.
+
+    Se llama una sola vez, al prender el programa.
+    """
+    # Prepara la base de datos si es la primera vez, y le agrega las
+    # columnas nuevas si viene de una versión anterior.
+    db.crear_tablas()
+
+    # Los documentos que quedaron a medio leer —porque se cerró el
+    # programa o se fue la luz— vuelven a la fila. La fila vive en la
+    # base, así que retoma donde iba en vez de perder el trabajo.
+    # No se pone a leer sola: eso lo decide el contador.
+    fila = cola.al_arrancar_el_programa()
+    if fila["rescatados"]:
+        print("  %d documento(s) habían quedado a medio leer y vuelven"
+              " a la fila." % fila["rescatados"])
+
+    # Y se revisa que todo esté en su sitio, contándolo en español. Solo
+    # se escribe lo que hay que saber: si está todo bien, una línea.
+    revision.imprimir_al_arrancar()
 
 
 if __name__ == "__main__":

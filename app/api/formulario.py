@@ -127,10 +127,17 @@ def api_bitacora_formulario(peticion, id_cliente):
 
 @app.post("/api/clientes/{id_cliente}/formulario/generar")
 def api_generar_formulario(peticion, id_cliente):
-    """Arma el archivo de Excel de este cliente y devuelve cómo salió."""
+    """Arma el archivo de Excel de este cliente y devuelve cómo salió.
+
+    Con ?totales=si además se le pide a LibreOffice que calcule los totales
+    para poder mostrarlos en pantalla. Sin eso —que es lo normal— el
+    archivo se entrega igual y Excel calcula los totales al abrirlo. Ver
+    `formulario.generar`.
+    """
     cliente = cliente_o_404(id_cliente)
+    con_totales = peticion.si_o_no("totales", False)
     try:
-        salida = formulario.generar(cliente)
+        salida = formulario.generar(cliente, con_totales=con_totales)
         bitacora.anotar(id_cliente, bitacora.FORMULARIO_GENERADO)
         return salida
     except formulario.SinPlantilla as error:

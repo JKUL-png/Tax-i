@@ -102,7 +102,10 @@ def main():
         # --------------------------------------------------------------
         print("\nC. El archivo del cliente A")
         # --------------------------------------------------------------
-        informe = formulario.generar(uno)
+        # Primero el camino normal: sin calcular los totales. Es lo que
+        # hace el botón "Generar el archivo", y es el que usa el contador
+        # casi siempre. Los totales los calcula Excel al abrir el archivo.
+        rapido = formulario.generar(uno)
         archivo = formulario.archivo_cliente(uno["id"])
 
         comprobar("el archivo quedó en la carpeta del cliente A",
@@ -110,8 +113,25 @@ def main():
         comprobar("el cliente B no tiene archivo todavía",
                   not formulario.archivo_cliente(dos["id"]).exists())
         comprobar("se escribieron los 2 valores",
-                  informe["valores_escritos"] == 2)
-        comprobar("se verificaron las 902 fórmulas y ninguna cambió",
+                  rapido["valores_escritos"] == 2)
+        comprobar("sin calcular totales, NO se llamó a LibreOffice",
+                  rapido["recalculo"] is None and rapido["con_totales"] is False)
+        comprobar("pero las 902 fórmulas se verificaron igual",
+                  rapido["verificacion"]["formulas_comparadas"] == 902
+                  and rapido["verificacion"]["formulas_distintas"] == 0)
+        comprobar("y el archivo se entrega completo, para abrirlo en Excel",
+                  archivo.exists() and archivo.stat().st_size > 0,
+                  f"{archivo.stat().st_size} bytes")
+
+        # Ahora el camino de "Actualizar totales", que sí pasa por
+        # LibreOffice para poder mostrarlos dentro del programa.
+        informe = formulario.generar(uno, con_totales=True)
+        archivo = formulario.archivo_cliente(uno["id"])
+
+        comprobar("pidiendo los totales, sí se llamó a LibreOffice",
+                  informe["recalculo"] is not None
+                  and informe["con_totales"] is True)
+        comprobar("y también se verificaron las 902 fórmulas",
                   informe["verificacion"]["formulas_comparadas"] == 902
                   and informe["verificacion"]["formulas_distintas"] == 0)
         comprobar("se descarga con el nombre del cliente",

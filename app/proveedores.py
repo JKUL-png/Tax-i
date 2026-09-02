@@ -39,6 +39,7 @@ el contador eligió. En pantalla solo se muestra un pedacito.
 """
 
 import json
+import time
 import urllib.error
 import urllib.request
 
@@ -54,13 +55,44 @@ VERSION_ANTHROPIC = "2023-06-01"
 SEGUNDOS_DE_ESPERA = 60
 SEGUNDOS_DE_PRUEBA = 20
 
+# Reintentos cuando el servicio contesta "no hay cupo" (error 429).
+#
+# En las capas gratis —la de Groq, por ejemplo— el 429 no es una avería:
+# es lo normal cuando se mandan varios documentos seguidos. Casi siempre
+# se arregla esperando unos segundos, así que el programa espera y vuelve
+# a intentar en vez de molestar al contador.
+#
+# Se espera 2 segundos, después 4 y después 8. Son tres intentos además
+# del primero. Si el servicio dice cuánto esperar (cabecera Retry-After),
+# se le hace caso a él en vez de calcular.
+ESPERAS_POR_CUPO = (2, 4, 8)
+
+# Si el servicio pide esperar más que esto, no se espera. Dejar el
+# programa congelado dos minutos es peor que avisarle al contador y que
+# él decida si reintenta o sigue con otra cosa.
+ESPERA_MAXIMA_ACEPTADA = 30
+
 # Techo de la respuesta. Aquí se piden cifras y frases cortas, no
 # ensayos: con esto sobra y se gasta menos.
 LARGO_MAXIMO_RESPUESTA = 2000
 
 
 class ErrorDeProveedor(Exception):
-    """Algo salió mal hablando con el servicio, con un texto para mostrar."""
+    """Algo salió mal hablando con el servicio, con un texto para mostrar.
+
+    Además del texto lleva dos datos que el resto del código necesita
+    para decidir si vale la pena volver a intentar:
+
+      codigo             el número del error HTTP (429, 401, 500…), o 0
+                         si ni siquiera se pudo conectar.
+      segundos_sugeridos cuánto pidió esperar el propio servicio en la
+                         cabecera Retry-After, o None si no dijo nada.
+    """
+
+    def __init__(self, mensaje, codigo=0, segundos_sugeridos=None):
+        super().__init__(mensaje)
+        self.codigo = codigo
+        self.segundos_sugeridos = segundos_sugeridos
 
 
 def _sin_barra(texto):
@@ -88,6 +120,11 @@ class Proveedor:
     # Qué se le manda a este servicio cuando la IA está encendida.
     # Se muestra en la pantalla de Cuenta, para que el contador sepa.
     que_sale = ""
+    # Cuánto cuesta usarlo: 'gratis', 'mixto' (tiene capa gratis y capa
+    # de pago) o 'pago'. La pantalla ordena por esto y muestra primero
+    # los que no cuestan, porque el objetivo del programa es que se pueda
+    # usar completo sin pagar tokens.
+    costo = "pago"
 
     def url_del_chat(self, base_url):
         raise NotImplementedError
@@ -115,6 +152,7 @@ class Ninguno(Proveedor):
     clave = "ninguno"
     nombre = "Sin IA"
     necesita_llave = False
+    costo = "gratis"
     que_sale = "Nada. Ningún dato sale de este computador."
 
     def url_del_chat(self, base_url):
@@ -132,8 +170,11 @@ class Anthropic(Proveedor):
     necesita_llave = True
     base_url_por_defecto = "https://api.anthropic.com"
     modelo_sugerido = "claude-opus-5"
-    que_sale = ("El nombre del cliente, el texto de sus documentos, su"
-                " checklist y la conversación. Los archivos nunca.")
+    que_sale = ("El nombre del cliente, su checklist, la conversación y"
+                " los datos que ya se le sacaron a sus documentos. Cada"
+                " documento se lee UNA vez —ahí sí sale su texto— y de"
+                " ahí en adelante solo salen esos datos. Los archivos"
+                " nunca salen.")
 
     def url_del_chat(self, base_url):
         return _sin_barra(base_url or self.base_url_por_defecto) + "/v1/messages"
@@ -207,10 +248,17 @@ class CompatibleConOpenAI(Proveedor):
     nombre = "Compatible con OpenAI"
     necesita_llave = True
     necesita_base_url = True
+    # 'mixto': con este se puede apuntar tanto a un servicio con capa
+    # gratis (Groq) como a uno de pago (OpenAI). Cuál, lo elige el
+    # contador con la lista de SERVICIOS_COMPATIBLES.
+    costo = "mixto"
     base_url_por_defecto = "https://api.openai.com/v1"
     modelo_sugerido = "gpt-4o-mini"
-    que_sale = ("El nombre del cliente, el texto de sus documentos, su"
-                " checklist y la conversación. Los archivos nunca.")
+    que_sale = ("El nombre del cliente, su checklist, la conversación y"
+                " los datos que ya se le sacaron a sus documentos. Cada"
+                " documento se lee UNA vez —ahí sí sale su texto— y de"
+                " ahí en adelante solo salen esos datos. Los archivos"
+                " nunca salen.")
 
     def url_del_chat(self, base_url):
         return _sin_barra(base_url or self.base_url_por_defecto) + "/chat/completions"
@@ -261,6 +309,7 @@ class Ollama(Proveedor):
     clave = "ollama"
     nombre = "Ollama (en este computador)"
     necesita_llave = False
+    costo = "gratis"
     base_url_por_defecto = "http://localhost:11434"
     modelo_sugerido = "llama3.1"
     que_sale = ("Nada sale de este computador: el modelo corre aquí"
@@ -320,8 +369,96 @@ def obtener(clave):
     return PROVEEDORES.get((clave or "").strip().lower(), PROVEEDORES[POR_DEFECTO])
 
 
+# ----------------------------------------------------------
+# Los servicios que hablan como OpenAI, listos de un clic
+#
+# "Compatible con OpenAI" no es un servicio: es un idioma que hablan
+# muchos. El contador no tiene por qué saberse la dirección de cada uno,
+# así que aquí están las de los que sirven, y al elegir uno la dirección
+# se llena sola y solo queda pedir la llave.
+#
+# Van primero los que tienen capa gratis. El objetivo del programa es que
+# un contador pueda usarlo completo sin pagar tokens.
+# ----------------------------------------------------------
+
+SERVICIOS_COMPATIBLES = (
+    {
+        "clave": "groq",
+        "nombre": "Groq",
+        "base_url": "https://api.groq.com/openai/v1",
+        "costo": "gratis",
+        "resumen": ("Tiene capa gratis sin tarjeta. Es el camino"
+                    " recomendado para empezar."),
+        # Verificado en la documentación de Groq.
+        "privacidad": (
+            "Groq NO usa los datos para entrenar modelos, y esa política"
+            " es la misma en la capa gratis y en la de pago: Groq corre"
+            " modelos de otros, no desarrolla los suyos, así que no tiene"
+            " para qué entrenar con lo que uno le manda. Por defecto"
+            " tampoco guarda los datos de las consultas; puede registrarlos"
+            " temporalmente hasta 30 días para resolver problemas, y ese"
+            " registro se puede APAGAR en Data Controls, dentro de los"
+            " ajustes de la consola de Groq. Vale la pena apagarlo: aquí"
+            " se manda información tributaria de terceros."
+        ),
+        "enlace": "https://console.groq.com/settings",
+        "enlace_texto": "Consola de Groq → Ajustes → Data Controls",
+    },
+    {
+        "clave": "openai",
+        "nombre": "OpenAI",
+        "base_url": "https://api.openai.com/v1",
+        "costo": "pago",
+        "resumen": "Se paga por uso. No tiene capa gratis.",
+        "privacidad": (
+            "Revise en su cuenta de OpenAI qué hace con los datos de la"
+            " API antes de mandarle documentos de clientes."
+        ),
+        "enlace": "",
+        "enlace_texto": "",
+    },
+    {
+        "clave": "otro",
+        "nombre": "Otro (escribo la dirección)",
+        "base_url": "",
+        "costo": "",
+        "resumen": ("Cualquier otro que hable como OpenAI: OpenRouter,"
+                    " Together, DeepSeek, LM Studio, vLLM…"),
+        "privacidad": (
+            "Antes de elegir un servicio, mire qué hace con lo que uno le"
+            " manda. Hay capas gratis que entrenan con eso y donde"
+            " revisores humanos pueden leerlo. Aquí van documentos"
+            " tributarios de terceros: eso pesa más que el precio."
+        ),
+        "enlace": "",
+        "enlace_texto": "",
+    },
+)
+
+# Lo que hay que saber de las capas gratis, y por qué existe la fila.
+AVISO_CAPA_GRATIS = (
+    "Las capas gratis tienen un límite de uso diario. Cuando se acaba, el"
+    " servicio contesta «no hay cupo»: el programa espera y reintenta"
+    " solo, y si aun así no alcanza, lo que quede sin leer se queda"
+    " pendiente en la fila para más tarde. Por eso los documentos se leen"
+    " en una fila y no todos de golpe — así usted decide cuándo se gasta"
+    " el cupo del día, y nada se pierde si se acaba."
+)
+
+
 def lista_para_pantalla():
-    """Los proveedores, listos para dibujar el selector de la pantalla."""
+    """Los proveedores, listos para dibujar el selector de la pantalla.
+
+    El orden importa: primero los que NO cuestan. El objetivo del
+    proyecto es que un contador pueda usar el programa completo sin
+    pagar tokens, y la pantalla tiene que reflejar eso — si lo primero
+    que se ve es un servicio de pago, parece que hay que pagar.
+
+        1. Sin IA          nada sale del computador, y todo funciona
+        2. Ollama          el modelo corre aquí; tampoco sale nada
+        3. Compatible      apuntando a Groq, que tiene capa gratis
+        4. Anthropic       de pago
+    """
     return [
         {
             "clave": p.clave,
@@ -331,9 +468,10 @@ def lista_para_pantalla():
             "base_url_por_defecto": p.base_url_por_defecto,
             "modelo_sugerido": p.modelo_sugerido,
             "que_sale": p.que_sale,
+            "costo": p.costo,
         }
-        for p in (PROVEEDORES["ninguno"], PROVEEDORES["anthropic"],
-                  PROVEEDORES["openai_compatible"], PROVEEDORES["ollama"])
+        for p in (PROVEEDORES["ninguno"], PROVEEDORES["ollama"],
+                  PROVEEDORES["openai_compatible"], PROVEEDORES["anthropic"])
     ]
 
 
@@ -342,8 +480,29 @@ def lista_para_pantalla():
 # ----------------------------------------------------------
 
 
-def _pedir(url, cabeceras, cuerpo, metodo, segundos):
-    """Una petición HTTP. Devuelve el JSON, o levanta ErrorDeProveedor.
+def _segundos_que_pide(error):
+    """Cuánto pidió esperar el servicio en la cabecera Retry-After.
+
+    Devuelve el número de segundos, o None si no mandó la cabecera o si
+    mandó algo que no se entiende. La norma permite mandar una fecha en
+    vez de un número; eso casi no se usa para los cupos y aquí se ignora
+    en vez de adivinar mal.
+    """
+    try:
+        crudo = error.headers.get("Retry-After")
+    except Exception:
+        return None
+    if not crudo:
+        return None
+    try:
+        segundos = float(str(crudo).strip())
+    except ValueError:
+        return None
+    return segundos if segundos >= 0 else None
+
+
+def _una_peticion(url, cabeceras, cuerpo, metodo, segundos):
+    """Una sola petición HTTP. Devuelve el JSON, o levanta ErrorDeProveedor.
 
     Los mensajes de error están escritos para que los lea el contador,
     no para depurar. Y en ninguno de ellos aparece la llave.
@@ -362,7 +521,8 @@ def _pedir(url, cabeceras, cuerpo, metodo, segundos):
             cuerpo_error = error.read().decode("utf-8", "replace")[:400]
         except Exception:
             pass
-        raise _error_legible(error.code, cuerpo_error)
+        raise _error_legible(error.code, cuerpo_error,
+                             _segundos_que_pide(error))
     except urllib.error.URLError as error:
         raise ErrorDeProveedor(
             "No se pudo conectar con el servicio de IA. Revise la"
@@ -378,31 +538,96 @@ def _pedir(url, cabeceras, cuerpo, metodo, segundos):
         raise ErrorDeProveedor("El servicio contestó algo que no era JSON.")
 
 
-def _error_legible(codigo, detalle=""):
+def _pedir(url, cabeceras, cuerpo, metodo, segundos, reintentar_cupo=False):
+    """Como `_una_peticion`, pero insistiendo cuando no hay cupo.
+
+    Con `reintentar_cupo=True`, si el servicio contesta 429 («no hay
+    cupo»), se espera y se vuelve a intentar: 2 segundos, después 4 y
+    después 8. En las capas gratis el 429 es rutina, no una avería, y
+    esperar unos segundos lo resuelve casi siempre.
+
+    Solo se reintenta el 429. Una llave mala o un modelo que no existe
+    no se arreglan esperando: esos se avisan de una vez.
+
+    Si el servicio manda la cabecera Retry-After, se le hace caso a él en
+    vez de calcular — él sabe cuándo se le libera el cupo. Pero si pide
+    más de ESPERA_MAXIMA_ACEPTADA segundos no se espera: se corta y se le
+    dice al contador, que es mejor que dejarle el programa congelado.
+    """
+    if not reintentar_cupo:
+        return _una_peticion(url, cabeceras, cuerpo, metodo, segundos)
+
+    for espera_calculada in ESPERAS_POR_CUPO:
+        try:
+            return _una_peticion(url, cabeceras, cuerpo, metodo, segundos)
+        except ErrorDeProveedor as error:
+            if error.codigo != 429:
+                raise
+
+            espera = error.segundos_sugeridos
+            if espera is None:
+                espera = espera_calculada
+            if espera > ESPERA_MAXIMA_ACEPTADA:
+                raise ErrorDeProveedor(
+                    "Se acabó el cupo del servicio de IA y pide esperar"
+                    " %d segundos, que es demasiado para dejarlo esperando."
+                    " Puede seguir trabajando: lo que quedó pendiente se"
+                    " puede procesar más tarde." % round(espera),
+                    codigo=429, segundos_sugeridos=espera,
+                )
+            time.sleep(espera)
+
+    # Se acabaron los intentos. Se prueba una última vez y, si vuelve a
+    # ser falta de cupo, se le dice al contador que ya se insistió — para
+    # que no se ponga a reintentar a mano lo que el programa acaba de
+    # hacer tres veces.
+    try:
+        return _una_peticion(url, cabeceras, cuerpo, metodo, segundos)
+    except ErrorDeProveedor as error:
+        if error.codigo != 429:
+            raise
+        raise ErrorDeProveedor(
+            str(error) + " El programa ya esperó y reintentó %d veces."
+            % len(ESPERAS_POR_CUPO),
+            codigo=429, segundos_sugeridos=error.segundos_sugeridos,
+        ) from error
+
+
+def _error_legible(codigo, detalle="", segundos_sugeridos=None):
     """Convierte un número de error HTTP en algo que se pueda leer."""
     if codigo in (401, 403):
         return ErrorDeProveedor(
             "La llave de la IA no sirve o no tiene permiso. Revísela en"
-            " la pantalla de Cuenta."
+            " la pantalla de Cuenta.",
+            codigo=codigo,
         )
     if codigo == 404:
         return ErrorDeProveedor(
             "La dirección del servicio no existe, o el modelo que puso no"
-            " está en ese servicio. Revise los dos en la pantalla de Cuenta."
+            " está en ese servicio. Revise los dos en la pantalla de Cuenta.",
+            codigo=codigo,
         )
     if codigo == 429:
+        # Este es el único que se reintenta solo. Si el contador llega a
+        # ver este texto es porque ya se intentó tres veces esperando, y
+        # el cupo sigue agotado: no tiene sentido decirle que espere y
+        # reintente él, que es lo que el programa acaba de hacer.
         return ErrorDeProveedor(
-            "Se acabó el cupo del servicio, o está ocupado. Espere un"
-            " minuto y vuelva a intentar."
+            "Se acabó el cupo del servicio de IA por ahora. Las capas"
+            " gratis tienen un límite diario; puede seguir trabajando sin"
+            " IA y procesar lo pendiente más tarde.",
+            codigo=codigo, segundos_sugeridos=segundos_sugeridos,
         )
     if codigo >= 500:
         return ErrorDeProveedor(
             "El servicio de IA está caído en este momento (error %d)."
-            % codigo
+            % codigo,
+            codigo=codigo,
         )
     return ErrorDeProveedor(
         "El servicio de IA rechazó la petición (error %d). %s"
-        % (codigo, _resumen_del_detalle(detalle))
+        % (codigo, _resumen_del_detalle(detalle)),
+        codigo=codigo,
     )
 
 
@@ -449,7 +674,7 @@ def conversar(config, mensajes):
         datos = _pedir(
             url, cabeceras,
             proveedor.cuerpo(mensajes, config.modelo, pedir_json=True),
-            "POST", SEGUNDOS_DE_ESPERA,
+            "POST", SEGUNDOS_DE_ESPERA, reintentar_cupo=True,
         )
     except ErrorDeProveedor as error:
         # Hay servidores compatibles con OpenAI que no admiten que se les
@@ -462,7 +687,7 @@ def conversar(config, mensajes):
         datos = _pedir(
             url, cabeceras,
             proveedor.cuerpo(mensajes, config.modelo, pedir_json=False),
-            "POST", SEGUNDOS_DE_ESPERA,
+            "POST", SEGUNDOS_DE_ESPERA, reintentar_cupo=True,
         )
 
     return proveedor.leer_respuesta(datos)

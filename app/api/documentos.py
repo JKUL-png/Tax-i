@@ -3,7 +3,9 @@
 import mimetypes
 from pathlib import Path
 
-from app import bitacora, checklist, db, documentos, importar, lectura
+from app import (
+    bitacora, checklist, cola, db, documentos, extraccion, importar, lectura,
+)
 from app.api.base import app, campo_lista_de_numeros, cliente_o_404
 from app.servidor import ErrorHttp, Respuesta
 
@@ -156,7 +158,96 @@ def api_subir_documentos(peticion, id_cliente):
         bitacora.anotar(id_cliente, bitacora.DOCUMENTOS_SUBIDOS,
                         detalle, len(guardados))
 
-    return {"guardados": guardados, "ignorados": ignorados}
+    # Los documentos quedan anotados como pendientes de leer. Si el
+    # contador prendió «procesar automáticamente al confirmar», la fila
+    # arranca sola aquí; si no —que es de fábrica—, espera a que él
+    # apriete «Procesar pendientes». En los dos casos esta respuesta sale
+    # de una: leer se hace en otro hilo y nadie se queda esperando.
+    arrancó = False
+    if guardados and cola.procesar_automaticamente():
+        arrancó = cola.arrancar()
+
+    return {
+        "guardados": guardados,
+        "ignorados": ignorados,
+        "cola": {"arrancó": arrancó, **cola.estado()},
+    }
+
+
+# ----------------------------------------------------------
+# Lo que se le sacó a los documentos
+#
+# Cada documento se lee UNA vez y lo que se le sacó queda en la base.
+# Después RentAI contesta con esas filas y no vuelve a leer —ni a pagar—
+# los mismos documentos. Ver app/extraccion.py.
+# ----------------------------------------------------------
+
+
+@app.get("/api/clientes/{id_cliente}/datos")
+def api_datos_extraidos(peticion, id_cliente):
+    """Los datos que ya se le sacaron a los documentos de este cliente.
+
+    Cada dato dice de qué documento salió y quién lo leyó: 'codigo' si lo
+    leyó el programa de un XML (es exacto) o 'ia' si lo leyó un modelo
+    (es lectura automática y hay que verificarla contra el original).
+
+    Esto funciona con IA_PROVEEDOR=ninguno: lo ya leído está en este
+    computador y no hay a quién preguntarle.
+    """
+    cliente_o_404(id_cliente)
+    return {
+        "estado": extraccion.resumen(id_cliente),
+        "datos": db.listar_datos_extraidos(id_cliente),
+    }
+
+
+@app.post("/api/clientes/{id_cliente}/datos/procesar")
+def api_procesar_pendientes(peticion, id_cliente):
+    """Pone a leer los documentos de este cliente que estén sin leer.
+
+    Es el botón «Procesar pendientes»: el contador decide cuándo gastar
+    cupo. **Contesta de una**, sin esperar a que termine: la lectura corre
+    en otro hilo y el contador sigue trabajando. La pantalla pregunta cada
+    tanto en qué va.
+
+    Si un documento falla se reintenta una vez; si vuelve a fallar queda
+    marcado y la fila sigue con los demás. Uno malo no traba a nadie.
+    """
+    cliente_o_404(id_cliente)
+    arrancó = cola.arrancar(id_cliente)
+    if arrancó:
+        bitacora.anotar(id_cliente, bitacora.DOCUMENTOS_LEIDOS)
+    return {
+        "arrancó": arrancó,
+        "cola": cola.estado(id_cliente),
+        "estado": extraccion.resumen(id_cliente),
+    }
+
+
+@app.get("/api/cola")
+def api_estado_cola(peticion, **partes):
+    """En qué va la fila de lectura. La pantalla lo pregunta cada tanto."""
+    return cola.estado()
+
+
+@app.put("/api/cola/automatico")
+def api_cambiar_automatico(peticion, **partes):
+    """Prende o apaga el «procesar automáticamente al confirmar».
+
+    Viene apagado de fábrica: leer documentos gasta cupo y esa decisión es
+    del contador.
+    """
+    datos = peticion.diccionario()
+    if "prendido" not in datos:
+        raise ErrorHttp(400, "Falta decir si se prende o se apaga.")
+    return {"automatico": cola.cambiar_automatico(bool(datos["prendido"]))}
+
+
+@app.post("/api/cola/parar")
+def api_parar_cola(peticion, **partes):
+    """Le pide a la fila que pare cuando termine el documento que va leyendo."""
+    cola.parar()
+    return cola.estado()
 
 
 @app.get("/api/documentos/{id_documento}/archivo")

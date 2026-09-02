@@ -36,6 +36,7 @@ CLIENTE_EDITADO = "cliente_editado"
 DOCUMENTOS_SUBIDOS = "documentos_subidos"
 DOCUMENTOS_BORRADOS = "documentos_borrados"
 DOCUMENTO_ASIGNADO = "documento_asignado"
+DOCUMENTOS_LEIDOS = "documentos_leidos"
 
 RENGLON_AGREGADO = "renglon_agregado"
 RENGLON_EDITADO = "renglon_editado"
@@ -56,6 +57,8 @@ TEXTOS = {
     DOCUMENTOS_BORRADOS:  ("Se borró 1 documento", "Se borraron {n} documentos"),
     DOCUMENTO_ASIGNADO:   ("Se asignó un documento del checklist",
                            "Se asignaron {n} documentos del checklist"),
+    DOCUMENTOS_LEIDOS:    ("Se leyeron los documentos pendientes",
+                           "Se leyeron los documentos pendientes"),
     RENGLON_AGREGADO:     ("Se agregó un renglón al checklist",
                            "Se agregaron {n} renglones al checklist"),
     RENGLON_EDITADO:      ("Se cambió el texto de un renglón",
@@ -77,6 +80,7 @@ TONOS = {
     DOCUMENTOS_BORRADOS: "peligro",
     RENGLON_QUITADO: "peligro",
     DOCUMENTOS_SUBIDOS: "entrada",
+    DOCUMENTOS_LEIDOS: "entrada",
     LISTA_BASE_AGREGADA: "entrada",
     RENGLON_AGREGADO: "entrada",
     RENGLON_RECIBIDO: "logro",
