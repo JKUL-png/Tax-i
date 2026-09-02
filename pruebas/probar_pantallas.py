@@ -551,8 +551,114 @@ def main():
                 revisar("sin errores de JavaScript en el selector",
                         not errores, errores[:3])
 
+            # ---------- El botón de RentAI ----------
+            titulo("H. El botón de RentAI")
+            errores.clear()
+            pagina.goto(DIRECCION + "/cliente?id=%d" % id_cliente,
+                        wait_until="networkidle")
+
+            boton = pagina.locator("#rentai-abrir")
+            panel = pagina.locator("#rentai-panel")
+            revisar("el botón está", boton.count() == 1)
+
+            # Solo el logo: ni nombre, ni frases que roten.
+            revisar("no dice nada: solo el logo",
+                    boton.inner_text().strip() == "",
+                    repr(boton.inner_text()))
+            revisar("tiene el logo adentro",
+                    boton.locator("svg.marca-logo").count() == 1)
+            revisar("y una etiqueta para quien no ve el logo",
+                    boton.get_attribute("aria-label") is not None)
+
+            caja_boton = boton.bounding_box()
+            revisar("es cuadrado y pequeño",
+                    caja_boton is not None
+                    and caja_boton["width"] == caja_boton["height"]
+                    and caja_boton["width"] <= 48,
+                    caja_boton)
+
+            estilo = boton.evaluate(
+                "e => { const s = getComputedStyle(e);"
+                " return {fondo: s.backgroundColor, posicion:"
+                " getComputedStyle(e.parentElement).position}; }")
+            revisar("el fondo es negro", estilo["fondo"] == "rgb(20, 23, 21)",
+                    estilo["fondo"])
+            revisar("está fijo en la esquina",
+                    estilo["posicion"] == "fixed", estilo["posicion"])
+
+            verde = boton.locator(".marca-cara").evaluate(
+                "e => getComputedStyle(e).fill")
+            revisar("el logo va en verde", verde == "rgb(47, 190, 141)", verde)
+
+            # No tapa el contenido: la esquina de abajo a la derecha,
+            # fuera de la columna donde el contador está trabajando.
+            ancho = pagina.evaluate("() => window.innerWidth")
+            alto = pagina.evaluate("() => window.innerHeight")
+            revisar("no tapa contenido: vive en la esquina de abajo",
+                    caja_boton["x"] > ancho * 0.85
+                    and caja_boton["y"] > alto * 0.85,
+                    caja_boton)
+
+            # Clic abre, clic otra vez cierra.
+            abierto_al_entrar = pagina.locator("#rentai").evaluate(
+                "e => !e.classList.contains('rentai-cerrada')")
+            if abierto_al_entrar:
+                boton.click()
+                pagina.wait_for_timeout(350)
+
+            boton.click()
+            pagina.wait_for_timeout(350)
+            revisar("un clic abre el chat", panel.is_visible())
+            revisar("y lo dice para los lectores de pantalla",
+                    boton.get_attribute("aria-expanded") == "true")
+            revisar("el botón sigue ahí para poder cerrarlo",
+                    boton.is_visible())
+
+            boton.click()
+            pagina.wait_for_timeout(350)
+            revisar("otro clic lo cierra", not panel.is_visible())
+            revisar("y también lo dice",
+                    boton.get_attribute("aria-expanded") == "false")
+
+            # La animación: crece desde el botón y dura poco.
+            # El navegador devuelve el origen en píxeles, no en
+            # porcentaje: crecer desde la esquina de abajo a la derecha
+            # —que es donde está el botón— significa que el origen cae
+            # justo en el ancho y el alto del panel.
+            animacion = panel.evaluate(
+                "e => { const s = getComputedStyle(e);"
+                " return {origen: s.transformOrigin,"
+                "         ancho: e.offsetWidth, alto: e.offsetHeight,"
+                "         escala: s.transform,"
+                "         duracion: s.transitionDuration}; }")
+            esquina = "%dpx %dpx" % (animacion["ancho"], animacion["alto"])
+            revisar("el panel crece desde la esquina donde está el botón",
+                    animacion["origen"] == esquina,
+                    "%s (se esperaba %s)" % (animacion["origen"], esquina))
+            revisar("y cerrado está encogido, no solo invisible",
+                    animacion["escala"] not in ("none", ""),
+                    animacion["escala"])
+            revisar("y la animación dura 200 ms o menos",
+                    all(float(d.rstrip("s")) <= 0.2
+                        for d in animacion["duracion"].split(", ")),
+                    animacion["duracion"])
+
+            revisar("sin errores de JavaScript en todo el paso",
+                    not errores, errores[:3])
+
+            # Con el sistema pidiendo menos movimiento, no hay animación.
+            pagina.emulate_media(reduced_motion="reduce")
+            pagina.reload(wait_until="networkidle")
+            pagina.wait_for_timeout(300)
+            sin_motor = pagina.locator("#rentai-panel").evaluate(
+                "e => getComputedStyle(e).transitionDuration")
+            revisar("respeta a quien pidió menos movimiento",
+                    all(float(d.rstrip("s")) == 0
+                        for d in sin_motor.split(", ")), sin_motor)
+            pagina.emulate_media(reduced_motion="no-preference")
+
             # ---------- La pantalla de cuenta ----------
-            titulo("H. La pantalla de Cuenta")
+            titulo("I. La pantalla de Cuenta")
             pagina.goto(DIRECCION + "/cuenta", wait_until="networkidle")
             revisar("abre sin errores de JavaScript", not errores, errores[:3])
             revisar("deja elegir el proveedor de IA",

@@ -2231,63 +2231,115 @@ input[type="text"].celda-campo:focus {
   right: 24px;
   bottom: 24px;
   z-index: 60;
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 10px;
 }
 
-/* --- Cerrada: la pastilla --- */
+/* --- Cerrada: el botón ---
 
-.rentai-pastilla {
-  display: none;
+   Un cuadrado pequeño con el logo y nada más. Antes era una pastilla
+   ancha con frases que iban rotando: ocupaba una franja de la pantalla
+   para no decir nada, y el contador la leía una vez y ya. */
+
+.rentai-boton {
+  position: relative;
+  display: flex;
   align-items: center;
-  gap: 10px;
-  max-width: min(420px, calc(100vw - 48px));
-  padding: var(--e2) var(--e4);
-  background: var(--superficie);
-  border: 1px solid var(--borde-fuerte);
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  background: #141715;
+  border: 1px solid #2C312E;
   border-radius: var(--radio);
-  /* Rentai sí flota encima de la página, así que sí lleva sombra. Es la
+  /* RentAI sí flota encima de la página, así que sí lleva sombra. Es la
      única del programa junto con la del visor. */
   box-shadow: var(--sombra-media);
-  font-family: inherit;
-  font-size: var(--t-celda);
-  color: var(--texto-secundario);
   cursor: pointer;
-  text-align: left;
 }
 
-.rentai-cerrada .rentai-pastilla {
+.rentai-boton:hover { border-color: var(--riel-verde); }
+
+.rentai-boton:focus-visible {
+  outline: 2px solid var(--riel-verde);
+  outline-offset: 2px;
+}
+
+/* El logo: es la misma cara de la marca, en verde sobre el negro.
+   Cuando RentAI está apagada se pone gris, y así se ve de lejos que no
+   está disponible sin tener que abrirla. */
+.rentai-boton .marca-logo {
+  width: 24px;
+  height: 24px;
+}
+
+.rentai-boton .marca-cara    { fill: var(--riel-verde); }
+.rentai-boton .marca-pliegue { fill: #1B7C5B; }
+
+.rentai-apagada .rentai-boton .marca-cara    { fill: #767C79; }
+.rentai-apagada .rentai-boton .marca-pliegue { fill: #5A605D; }
+
+/* El punto de aviso: hay una propuesta esperando que él la anote o la
+   descarte. Un punto y ya — sin número, sin texto y sin globo. El
+   contador está trabajando en otra cosa. */
+.rentai-aviso {
+  position: absolute;
+  top: -3px;
+  right: -3px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--riel-verde);
+  /* El borde del color del botón lo recorta contra el negro y hace que
+     se lea como un punto pegado encima, no como una mancha. */
+  border: 2px solid #141715;
+}
+
+/* --- Abierta: el panel ---
+
+   Va encima del botón, no en su lugar: el botón se queda ahí y es el
+   que cierra. Crece desde su esquina de abajo a la derecha, que es de
+   donde salió, en vez de aparecer de golpe en medio de la pantalla. */
+
+.rentai-panel {
+  position: absolute;
+  right: 0;
+  bottom: calc(44px + 10px);
   display: flex;
-}
-
-.rentai-pastilla:hover {
-  border-color: var(--primary);
-}
-
-.rentai-nombre {
-  font-weight: var(--p-fuerte);
-  color: var(--texto);
-  flex: 0 0 auto;
-}
-
-/* El texto que rota. Se desvanece al cambiar para que no dé un brinco. */
-.rentai-frase {
-  flex: 1 1 auto;
-  min-width: 0;
+  flex-direction: column;
+  width: min(400px, calc(100vw - 48px));
+  height: min(600px, calc(100vh - 120px));
+  background: var(--superficie);
+  border: 1px solid var(--borde);
+  border-radius: var(--radio);
+  box-shadow: var(--sombra-media);
   overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
-  opacity: 1;
-  transition: opacity 0.25s ease;
+
+  transform-origin: 100% 100%;
+  transition: opacity 160ms ease, transform 160ms ease,
+              visibility 160ms linear;
 }
 
-.rentai-frase-yendo {
+.rentai-cerrada .rentai-panel {
   opacity: 0;
+  transform: scale(0.9) translateY(6px);
+  visibility: hidden;
+  pointer-events: none;
 }
 
-/* El puntico verde: está despierta. Gris si está apagada. */
+/* Hay gente a la que el movimiento en pantalla le da mareo o le
+   dispara una migraña, y el sistema operativo trae una casilla para
+   pedir que no lo haya. Aquí se respeta: el panel sale y entra sin
+   crecer ni desvanecerse. */
+@media (prefers-reduced-motion: reduce) {
+  .rentai-panel {
+    transition: none;
+  }
+  .rentai-cerrada .rentai-panel {
+    transform: none;
+  }
+}
+
+/* El puntico de la barra del panel: verde cuando RentAI está despierta,
+   gris cuando está apagada. No es el mismo que el aviso del botón. */
 .rentai-punto {
   flex: 0 0 auto;
   width: 8px;
@@ -2298,24 +2350,6 @@ input[type="text"].celda-campo:focus {
 
 .rentai-apagada .rentai-punto {
   background: var(--borde-fuerte);
-}
-
-/* --- Abierta: el panel --- */
-
-.rentai-panel {
-  display: flex;
-  flex-direction: column;
-  width: min(400px, calc(100vw - 48px));
-  height: min(600px, calc(100vh - 120px));
-  background: var(--superficie);
-  border: 1px solid var(--borde);
-  border-radius: var(--radio);
-  box-shadow: var(--sombra-media);
-  overflow: hidden;
-}
-
-.rentai-cerrada .rentai-panel {
-  display: none;
 }
 
 .rentai-barra {
@@ -2549,20 +2583,16 @@ input[type="text"].celda-campo:focus {
   text-align: center;
 }
 
-/* En el celular ocupa el ancho completo, como cualquier chat. */
+/* En el celular el panel ocupa el ancho completo, como cualquier chat.
+   El botón se queda del tamaño que es: es un cuadrado, no una barra. */
 @media (max-width: 560px) {
   .rentai {
     right: 12px;
-    left: 12px;
     bottom: 12px;
-    align-items: stretch;
   }
   .rentai-panel {
-    width: 100%;
+    width: calc(100vw - 24px);
     height: min(560px, calc(100vh - 80px));
-  }
-  .rentai-pastilla {
-    max-width: none;
   }
 }
 
@@ -3647,75 +3677,6 @@ code {
 }
 
 /* ==========================================================
-   El botón de RentAI
-
-   Antes era una pastilla flotante que aparecía y desaparecía. Ahora vive
-   fija abajo a la derecha siempre que se esté dentro de un cliente,
-   porque es donde tiene sentido: RentAI solo sabe hablar de un cliente.
-   ========================================================== */
-
-.rentai-pastilla {
-  display: flex;
-  align-items: center;
-  gap: var(--e3);
-  max-width: min(380px, calc(100vw - 48px));
-  height: 46px;
-  padding: 0 var(--e4) 0 var(--e3);
-  background: var(--riel-fondo);
-  border: 1px solid var(--riel-borde);
-  border-radius: var(--radio);
-  box-shadow: var(--sombra-media);
-  font-family: inherit;
-  font-size: var(--t-lista);
-  color: var(--riel-texto);
-  cursor: pointer;
-  text-align: left;
-}
-
-.rentai-pastilla:hover {
-  border-color: var(--riel-verde);
-}
-
-.rentai-pastilla:focus-visible {
-  outline: 2px solid var(--primary);
-  outline-offset: 2px;
-}
-
-/* El logo dentro del botón: es RentAI la que habla, y es la misma cara
-   de la marca. Cuando está apagada se pone gris. */
-.rentai-pastilla .marca-logo {
-  width: 26px;
-  height: 26px;
-}
-
-.rentai-pastilla .marca-cara { fill: var(--riel-verde); }
-.rentai-pastilla .marca-pliegue { fill: #1B7C5B; }
-
-.rentai-apagada .rentai-pastilla .marca-cara { fill: #767C79; }
-.rentai-apagada .rentai-pastilla .marca-pliegue { fill: #5A605D; }
-
-.rentai-pastilla .rentai-nombre {
-  color: #FFFFFF;
-  font-weight: var(--p-fuerte);
-}
-
-.rentai-pastilla .rentai-frase {
-  color: var(--riel-tenue);
-}
-
-/* El atajo de teclado, escrito. En este programa nada se adivina. */
-.rentai-tecla {
-  margin-left: auto;
-  flex: 0 0 auto;
-  font-family: var(--fuente-cifras);
-  font-size: var(--t-rotulo);
-  color: var(--riel-tenue);
-  border: 1px solid var(--riel-borde);
-  border-radius: var(--radio-chico);
-  padding: 0 4px;
-}
-
-/* ==========================================================
    Pantallas angostas
 
    Por debajo de 1000px el riel no cabe al lado del panel sin dejar el
@@ -3745,11 +3706,10 @@ code {
   }
 }
 
-/* El botón de RentAI desaparece mientras el panel está abierto: los dos
-   ocupan la misma esquina. La regla de arriba lo pone en display:flex
-   siempre, así que hace falta apagarlo aquí de forma explícita. */
-.rentai:not(.rentai-cerrada) .rentai-pastilla {
-  display: none;
+/* Con el panel abierto el botón se queda: es el que lo cierra. Se le
+   baja el logo un punto para que se note cuál de los dos manda. */
+.rentai:not(.rentai-cerrada) .rentai-boton .marca-cara {
+  fill: #1B7C5B;
 }
 
 /* La columna del riel se pinta desde el contenedor, no desde el riel.

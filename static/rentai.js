@@ -1,9 +1,9 @@
 /* ==========================================================
-   RentAI: la barra de la asistente.
+   RentAI: la asistente.
 
-   Cerrada es una pastilla con un texto que va cambiando solo. Al hacerle
-   clic se abre la conversación, con el historial de lo que se ha hablado
-   sobre este cliente. Se minimiza cuando estorbe.
+   Cerrada es un botón cuadrado en la esquina de abajo a la derecha, con
+   el logo y nada más. El mismo botón abre y cierra la conversación, que
+   trae el historial de lo que se ha hablado sobre este cliente.
 
    RentAI propone; nunca anota sola. Cada propuesta sale con el documento
    de donde salió y con dos botones: anotar o descartar.
@@ -18,7 +18,7 @@ if (!idCliente) return;
 
 const caja = document.getElementById("rentai");
 const botonAbrir = document.getElementById("rentai-abrir");
-const frase = document.getElementById("rentai-frase");
+const aviso = document.getElementById("rentai-aviso");
 const estado = document.getElementById("rentai-estado");
 const mensajes = document.getElementById("rentai-mensajes");
 const campoTexto = document.getElementById("rentai-texto");
@@ -26,63 +26,27 @@ const botonEnviar = document.getElementById("rentai-enviar");
 const botonMinimizar = document.getElementById("rentai-minimizar");
 const botonLimpiar = document.getElementById("rentai-limpiar");
 
-/* Los textos que van rotando en la pastilla cuando está cerrada. Son
-   cortos a propósito: se leen de reojo, sin dejar de trabajar. */
-const FRASES = [
-  "Escríbame lo que quiera sobre este cliente",
-  "Listo para transcribir",
-  "¿Le leo los documentos?",
-  "Dígame qué anotar",
-  "Aquí estoy, sin apuro",
-  "¿Qué le falta a este cliente?",
-  "Dícteme una cifra y la anoto",
-  "Puedo buscar en los documentos",
-  "Pregúnteme qué dice un certificado",
-  "¿Empezamos por los ingresos?",
-  "Yo propongo, usted decide",
-  "Nada se anota sin que usted diga",
-  "¿Reviso qué llegó?",
-  "Cuénteme qué necesita",
-  "Escriba con confianza",
-  "¿Le busco los salarios?",
-  "Leo el XML de las facturas",
-  "Sin apuros: usted manda",
-  "¿Qué dice ese PDF? Pregúnteme",
-  "Lista cuando usted quiera"
-];
-
-/* Cada cuánto cambia la frase. Cuatro segundos alcanza para leerla sin
-   que quede parpadeando. */
-const CADA_CUANTO = 4000;
-
 let disponible = false;
 let hablando = false;
 
 
 /* ----------------------------------------------------------
-   La frase que rota
+   El punto de aviso
+
+   Un punto pequeño encima del botón cuando hay algo esperándolo: una
+   propuesta que RentAI hizo y que él todavía no anotó ni descartó. Sin
+   texto y sin globo — el contador está trabajando en otra cosa, y un
+   cartel que se le atraviesa es peor que no avisar.
+
+   Se cuenta de las tarjetas que ya están pintadas, así que no hace
+   falta preguntarle nada más al servidor.
    ---------------------------------------------------------- */
 
-let cual = Math.floor(Math.random() * FRASES.length);
-let temporizadorFrase = null;
-
-function siguienteFrase() {
-  frase.classList.add("rentai-frase-yendo");
-  setTimeout(function () {
-    cual = (cual + 1) % FRASES.length;
-    frase.textContent = FRASES[cual];
-    frase.classList.remove("rentai-frase-yendo");
-  }, 250);
-}
-
-function arrancarFrases() {
-  frase.textContent = FRASES[cual];
-  clearInterval(temporizadorFrase);
-  temporizadorFrase = setInterval(siguienteFrase, CADA_CUANTO);
-}
-
-function pararFrases() {
-  clearInterval(temporizadorFrase);
+function revisarAviso() {
+  const esperando = mensajes.querySelectorAll(
+    ".propuesta:not(.propuesta-anotada):not(.propuesta-descartada)").length;
+  const abierta = !caja.classList.contains("rentai-cerrada");
+  aviso.classList.toggle("oculto", abierta || esperando === 0);
 }
 
 
@@ -93,17 +57,24 @@ function pararFrases() {
 function abrir() {
   caja.classList.remove("rentai-cerrada");
   botonAbrir.setAttribute("aria-expanded", "true");
-  pararFrases();
+  botonAbrir.setAttribute("aria-label", "Cerrar RentAI");
   campoTexto.focus();
   alFinal();
+  revisarAviso();
   guardarSiEstabaAbierta(true);
 }
 
 function cerrar() {
   caja.classList.add("rentai-cerrada");
   botonAbrir.setAttribute("aria-expanded", "false");
-  arrancarFrases();
+  botonAbrir.setAttribute("aria-label", "Abrir RentAI");
+  revisarAviso();
   guardarSiEstabaAbierta(false);
+}
+
+/* El mismo botón abre y cierra. */
+function alternar() {
+  if (caja.classList.contains("rentai-cerrada")) abrir(); else cerrar();
 }
 
 /* Se recuerda si la dejó abierta, igual que las secciones de la página.
@@ -261,6 +232,7 @@ function dibujarPropuesta(propuesta) {
       tarjeta.appendChild(listo);
       /* La sección del formulario se entera y se refresca sola. */
       document.dispatchEvent(new CustomEvent("valor-anotado"));
+      revisarAviso();
     } catch (error) {
       anotar.disabled = false;
       mostrarError(error.message);
@@ -274,6 +246,7 @@ function dibujarPropuesta(propuesta) {
   descartar.addEventListener("click", function () {
     tarjeta.classList.add("propuesta-descartada");
     botones.textContent = "";
+    revisarAviso();
   });
 
   botones.appendChild(anotar);
@@ -356,6 +329,7 @@ async function enviar() {
     mostrarError(error.message);
   } finally {
     hablando = false;
+    revisarAviso();
     botonEnviar.disabled = false;
     alFinal();
     campoTexto.focus();
@@ -395,14 +369,13 @@ async function cargarConversacion() {
     }
     anteriores.forEach(dibujarMensaje);
     alFinal();
+    revisarAviso();
   } catch (error) {
     mostrarVacio();
   }
 }
 
 async function arrancar() {
-  arrancarFrases();
-
   try {
     const quien = await pedir("/api/rentai");
     disponible = quien.disponible;
@@ -423,7 +396,7 @@ async function arrancar() {
   if (estabaAbierta()) abrir();
 }
 
-botonAbrir.addEventListener("click", abrir);
+botonAbrir.addEventListener("click", alternar);
 botonMinimizar.addEventListener("click", cerrar);
 botonEnviar.addEventListener("click", enviar);
 campoTexto.addEventListener("input", ajustarAlto);
