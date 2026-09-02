@@ -764,13 +764,18 @@
        El botón es solo el logo: antes era una pastilla ancha con frases
        que iban rotando, y ocupaba una franja de la pantalla para no
        decir nada. Si hay una propuesta esperando, le sale un punto
-       encima. Sin texto y sin globo: el contador está trabajando. -->
+       encima. Sin texto y sin globo: el contador está trabajando.
+
+       El logo lleva data-gesto-propio porque no parpadea con los demás:
+       tiene sus propios gestos, y cuando RentAI está pensando de verdad
+       se le nota. Ver static/rentai.js. -->
   <div id="rentai" class="rentai rentai-cerrada">
 
     <button type="button" class="rentai-boton" id="rentai-abrir"
             aria-expanded="false" aria-controls="rentai-panel"
             title="RentAI" aria-label="Abrir RentAI">
-      <svg class="marca-logo" viewBox="0 0 32 32" aria-hidden="true"><path class="marca-cara" d="M6 3h13.5L29 12.5V26a3 3 0 0 1-3 3H6a3 3 0 0 1-3-3V6a3 3 0 0 1 3-3Zm3.2 9.9v5.2h4.4v-5.2H9.2Zm8.4 2.7-1.9 1.9 3.8 3.8 6-6.7-1.9-1.7-4.1 4.6-1.9-1.9Z"/><path class="marca-pliegue" d="M19.5 3 29 12.5h-6.5a3 3 0 0 1-3-3V3Z"/></svg>
+      <svg class="marca-logo" viewBox="0 0 32 32" aria-hidden="true"
+           data-gesto-propio><path class="marca-cara" d="M6 3h13.5L29 12.5V26a3 3 0 0 1-3 3H6a3 3 0 0 1-3-3V6a3 3 0 0 1 3-3Zm3.2 9.9v5.2h4.4v-5.2H9.2Zm9.2 0v5.2h4.4v-5.2h-4.4Z"/><path class="marca-pliegue" d="M19.5 3 29 12.5h-6.5a3 3 0 0 1-3-3V3Z"/></svg>
       <span class="rentai-aviso oculto" id="rentai-aviso"
             aria-hidden="true"></span>
     </button>

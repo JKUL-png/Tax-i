@@ -70,7 +70,10 @@
        querySelector a secas parpadeaba el del riel mientras el grande,
        que es el que se está mirando, se quedaba tieso. Parpadean juntos:
        es la misma marca en dos tamaños, no dos dibujos. */
-    var logos = document.querySelectorAll(".marca-logo");
+    /* Menos los que llevan data-gesto-propio: el botón de RentAI tiene
+       sus propios gestos, y si parpadeara también con este reloj los dos
+       se pisarían y el logo daría brincos. */
+    var logos = document.querySelectorAll(".marca-logo:not([data-gesto-propio])");
     if (logos.length === 0) return;
 
     /* Los logos arrancan en "listo" (el guiño), que es como están

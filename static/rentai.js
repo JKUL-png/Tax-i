@@ -31,6 +31,90 @@ let hablando = false;
 
 
 /* ----------------------------------------------------------
+   Los gestos del logo
+
+   El logo del botón es la misma cara de la marca y tiene los tres
+   gestos de siempre (ver static/marca/marca.js):
+
+     esperando  los dos ojos abiertos — es como se queda
+     leyendo    los ojos entrecerrados — está pensando
+     listo      el guiño con el visto — revisado
+
+   Se queda en «esperando» y de vez en cuando hace algo: parpadea cada
+   5 a 9 segundos, y cada 20 a 35 hace un gesto más largo, o el de
+   pensar o el del visto. Los intervalos van salteados a propósito: uno
+   cada diez segundos exactos se siente un reloj, y lo que se busca es
+   que parezca que hay alguien ahí.
+
+   Cuando RentAI está pensando DE VERDAD —mientras contesta— se queda
+   con los ojos entrecerrados hasta que termina. Ahí el gesto no es
+   adorno: es la única señal de que está trabajando si el panel está
+   cerrado.
+
+   Si el sistema pide menos movimiento, el logo no se mueve.
+   ---------------------------------------------------------- */
+
+const logo = botonAbrir.querySelector(".marca-logo");
+
+const quietos = window.matchMedia
+  && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+/* Mientras contesta, los gestos sueltos se callan: manda el de verdad. */
+let pensandoDeVerdad = false;
+let temporizadorGesto = null;
+
+function ponerGesto(cual) {
+  if (window.MarcaTaxi) window.MarcaTaxi.gesto(logo, cual);
+}
+
+function enReposo() {
+  ponerGesto(pensandoDeVerdad ? "leyendo" : "esperando");
+}
+
+/* Un gesto y de vuelta al reposo. */
+function gestoCorto(cual, cuanto) {
+  if (pensandoDeVerdad) return;
+  ponerGesto(cual);
+  window.setTimeout(enReposo, cuanto);
+}
+
+function siguienteGesto() {
+  if (!pensandoDeVerdad) {
+    /* Casi siempre parpadea; de tanto en tanto se queda pensando un
+       momento o hace el guiño del visto. Que no sea siempre lo mismo es
+       lo que hace que no se sienta un reloj. */
+    const suerte = Math.random();
+    if (suerte < 0.62) {
+      gestoCorto("leyendo", 130);                 // el parpadeo
+    } else if (suerte < 0.82) {
+      gestoCorto("leyendo", 700);                 // se quedó pensando
+    } else {
+      gestoCorto("listo", 1400);                  // el ojito con el visto
+    }
+  }
+  temporizadorGesto = window.setTimeout(
+    siguienteGesto, 5000 + Math.random() * 4000);
+}
+
+function arrancarGestos() {
+  if (quietos) return;
+  window.clearTimeout(temporizadorGesto);
+  temporizadorGesto = window.setTimeout(
+    siguienteGesto, 2000 + Math.random() * 3000);
+}
+
+/* Lo llama enviar(): mientras RentAI contesta, el logo lo muestra. */
+function mostrarQuePiensa(si) {
+  pensandoDeVerdad = si;
+  caja.classList.toggle("rentai-pensando-boton", si && !quietos);
+  if (quietos) return;
+  ponerGesto(si ? "leyendo" : "esperando");
+  /* Al terminar de contestar, el guiño del visto: acabó de revisar. */
+  if (!si) window.setTimeout(function () { gestoCorto("listo", 1200); }, 120);
+}
+
+
+/* ----------------------------------------------------------
    El punto de aviso
 
    Un punto pequeño encima del botón cuando hay algo esperándolo: una
@@ -290,6 +374,7 @@ async function enviar() {
   }
 
   hablando = true;
+  mostrarQuePiensa(true);
   botonEnviar.disabled = true;
   campoTexto.value = "";
   ajustarAlto();
@@ -329,6 +414,7 @@ async function enviar() {
     mostrarError(error.message);
   } finally {
     hablando = false;
+    mostrarQuePiensa(false);
     revisarAviso();
     botonEnviar.disabled = false;
     alFinal();
@@ -376,6 +462,8 @@ async function cargarConversacion() {
 }
 
 async function arrancar() {
+  arrancarGestos();
+
   try {
     const quien = await pedir("/api/rentai");
     disponible = quien.disponible;

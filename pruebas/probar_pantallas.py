@@ -574,7 +574,7 @@ def main():
             revisar("es cuadrado y pequeño",
                     caja_boton is not None
                     and caja_boton["width"] == caja_boton["height"]
-                    and caja_boton["width"] <= 48,
+                    and 44 <= caja_boton["width"] <= 60,
                     caja_boton)
 
             estilo = boton.evaluate(
@@ -589,6 +589,49 @@ def main():
             verde = boton.locator(".marca-cara").evaluate(
                 "e => getComputedStyle(e).fill")
             revisar("el logo va en verde", verde == "rgb(47, 190, 141)", verde)
+
+            # --- Los gestos del logo ---
+            # Son los tres de la marca: los dos ojos abiertos, los ojos
+            # entrecerrados (está pensando) y el guiño con el visto.
+            cara = boton.locator(".marca-cara")
+            reposo = cara.get_attribute("d")
+            revisar("en reposo tiene los dos ojos abiertos",
+                    reposo.endswith("v5.2h4.4v-5.2h-4.4Z"), reposo[-30:])
+
+            revisar("el logo no parpadea con los demás, hace lo suyo",
+                    boton.locator("svg[data-gesto-propio]").count() == 1)
+
+            trazos = boton.locator(".marca-logo").evaluate(
+                "e => Object.keys(window.MarcaTaxi.GESTOS)")
+            revisar("conoce los tres gestos de la marca",
+                    sorted(trazos) == ["esperando", "leyendo", "listo"], trazos)
+
+            # De vez en cuando hace alguno. Se espera lo suficiente para
+            # que le toque al menos uno: parpadea cada 5 a 9 segundos.
+            vistos = pagina.evaluate("""() => new Promise(listo => {
+                const cara = document.querySelector('#rentai-abrir .marca-cara');
+                const vistos = new Set([cara.getAttribute('d')]);
+                const ojo = new MutationObserver(
+                    () => vistos.add(cara.getAttribute('d')));
+                ojo.observe(cara, {attributes: true, attributeFilter: ['d']});
+                setTimeout(() => { ojo.disconnect();
+                                   listo([...vistos].length); }, 12000);
+            })""")
+            revisar("y de vez en cuando se mueve solo",
+                    vistos > 1, "%d trazos distintos en 12 s" % vistos)
+
+            # Cuando está pensando de verdad, el logo lo muestra y late.
+            pagina.evaluate(
+                "() => document.getElementById('rentai')"
+                ".classList.add('rentai-pensando-boton')")
+            pagina.wait_for_timeout(200)
+            late = boton.locator(".marca-logo").evaluate(
+                "e => getComputedStyle(e).animationName")
+            revisar("mientras piensa, el logo late",
+                    late == "rentai-respira", late)
+            pagina.evaluate(
+                "() => document.getElementById('rentai')"
+                ".classList.remove('rentai-pensando-boton')")
 
             # No tapa el contenido: la esquina de abajo a la derecha,
             # fuera de la columna donde el contador está trabajando.
@@ -655,6 +698,10 @@ def main():
             revisar("respeta a quien pidió menos movimiento",
                     all(float(d.rstrip("s")) == 0
                         for d in sin_motor.split(", ")), sin_motor)
+            quieto = pagina.locator("#rentai-abrir .marca-logo").evaluate(
+                "e => getComputedStyle(e).animationName")
+            revisar("y entonces el logo tampoco late",
+                    quieto == "none", quieto)
             pagina.emulate_media(reduced_motion="no-preference")
 
             # ---------- La pantalla de cuenta ----------

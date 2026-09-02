@@ -2244,8 +2244,8 @@ input[type="text"].celda-campo:focus {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 44px;
-  height: 44px;
+  width: 52px;
+  height: 52px;
   padding: 0;
   background: #141715;
   border: 1px solid #2C312E;
@@ -2267,8 +2267,25 @@ input[type="text"].celda-campo:focus {
    Cuando RentAI está apagada se pone gris, y así se ve de lejos que no
    está disponible sin tener que abrirla. */
 .rentai-boton .marca-logo {
-  width: 24px;
-  height: 24px;
+  width: 28px;
+  height: 28px;
+  /* Los gestos del logo son cambios de trazo, no de tamaño, así que el
+     movimiento es dentro del dibujo y el botón no se mueve de sitio.
+     Ver static/rentai.js. */
+  transition: transform 200ms ease;
+}
+
+/* Mientras RentAI contesta, el logo respira. Es un latido lento y
+   pequeño: dice que está trabajando sin pedir que lo miren. Se apaga
+   solo cuando termina, y no existe si el sistema pidió menos
+   movimiento. */
+.rentai-pensando-boton .rentai-boton .marca-logo {
+  animation: rentai-respira 1600ms ease-in-out infinite;
+}
+
+@keyframes rentai-respira {
+  0%, 100% { transform: scale(1);    opacity: 1; }
+  50%      { transform: scale(0.92); opacity: 0.75; }
 }
 
 .rentai-boton .marca-cara    { fill: var(--riel-verde); }
@@ -2302,7 +2319,7 @@ input[type="text"].celda-campo:focus {
 .rentai-panel {
   position: absolute;
   right: 0;
-  bottom: calc(44px + 10px);
+  bottom: calc(52px + 10px);
   display: flex;
   flex-direction: column;
   width: min(400px, calc(100vw - 48px));
@@ -2335,6 +2352,10 @@ input[type="text"].celda-campo:focus {
   }
   .rentai-cerrada .rentai-panel {
     transform: none;
+  }
+  .rentai-boton .marca-logo {
+    transition: none;
+    animation: none;
   }
 }
 
