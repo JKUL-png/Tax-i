@@ -191,13 +191,23 @@ def contexto(cliente_id):
     if carga:
         cuenta = {}
         nombres = {}
+        detalles = {}
         for fila in db.listar_filas_exogena(carga["id"]):
             nit = _solo_digitos(fila["nit_reporta"])
             if not nit or nit == propia:
                 continue
             nombres[nit] = fila["nombre_reporta"]
-            for renglon in fila["renglones"]:
-                codigo = renglon["codigo"][1:]
+            codigos_de_la_fila = [r["codigo"][1:] for r in fila["renglones"]]
+            if codigos_de_la_fila:
+                # El detalle de cada fila dice QUÉ reportó: «Pagos por
+                # salarios», «Saldo cuentas bancarias». Sirve para elegir
+                # bien cuando un mismo tercero reporta varias cosas.
+                detalles.setdefault(nit, []).append({
+                    "detalle": fila["detalle"],
+                    "palabras": lectura.palabras_utiles(fila["detalle"]),
+                    "codigos": codigos_de_la_fila,
+                })
+            for codigo in codigos_de_la_fila:
                 cuenta.setdefault(nit, {})
                 cuenta[nit][codigo] = cuenta[nit].get(codigo, 0) + 1
 
@@ -224,6 +234,7 @@ def contexto(cliente_id):
                 # Los demás renglones de ese tercero, del que más veces
                 # reporta al que menos. Se ofrecen como secundarios.
                 "otros_codigos": [c for c, _ in mejor[1:]],
+                "filas": detalles.get(nit, []),
             })
 
     _repartir_palabras_propias(terceros)
@@ -400,6 +411,71 @@ def _tercero_por_palabras(contexto_cliente, texto):
 # ----------------------------------------------------------
 
 
+def afinar_con_el_detalle(tercero, texto, contexto_cliente):
+    """Elige cuál de los renglones del tercero le corresponde a ESTE papel.
+
+    Un empleador le reporta a la DIAN media docena de cosas: los
+    salarios, las cesantías, los aportes a salud, la retención. Todas van
+    a renglones distintos, y quedarse con «el que más veces reporta»
+    manda el certificado de ingresos al renglón equivocado.
+
+    Así que se compara el texto del documento con el DETALLE de cada
+    fila de la exógena de ese tercero: «Pagos por salarios» contra un
+    documento que habla de salarios gana, y ese detalle ya trae su
+    renglón puesto por la DIAN.
+
+    Devuelve una lista, la mejor primero, o vacía si ninguna fila se
+    parece lo suficiente. No inventa nada: elige entre lo que la DIAN ya
+    dijo de ese tercero.
+    """
+    filas = (tercero or {}).get("filas") or []
+    if not filas or not texto:
+        return None
+
+    del_documento = lectura.palabras_utiles(texto)
+    if not del_documento:
+        return None
+
+    puntajes = []
+    for fila in filas:
+        comunes = del_documento & fila["palabras"]
+        if len(comunes) >= 2:
+            puntajes.append((len(comunes), fila))
+
+    if not puntajes:
+        return []
+    puntajes.sort(key=lambda par: par[0], reverse=True)
+
+    # Si varias filas coinciden, es porque el documento soporta varias
+    # cosas — y eso pasa de verdad: un certificado de ingresos y
+    # retenciones lleva el ingreso a un renglón y la retención a otro.
+    # La primera va de principal y las demás de secundarias. El contador
+    # confirma o quita cada una; no se le obliga a elegir una sola.
+    hay_empate = len(puntajes) > 1 and puntajes[1][0] == puntajes[0][0]
+
+    salida = []
+    vistos = set()
+    for posicion, (_puntos, fila) in enumerate(
+            puntajes[: SECUNDARIOS_MAXIMOS + 1]):
+        codigo = fila["codigos"][0]
+        if codigo in vistos:
+            continue
+        renglon = contexto_cliente["por_codigo"].get(codigo)
+        if renglon is None:
+            continue
+        vistos.add(codigo)
+        # Menos certeza cuando esa fila proponía varios renglones —ahí la
+        # decisión sigue siendo del contador— o cuando hubo empate.
+        clara = len(fila["codigos"]) == 1 and not hay_empate
+        salida.append({
+            "renglon": renglon,
+            "codigo": codigo,
+            "certeza": ALTA if (clara and posicion == 0) else MEDIA,
+            "detalle": fila["detalle"],
+        })
+    return salida
+
+
 def _sugerencia(tercero, origen, porque, certeza=None):
     return {
         "renglon_id": tercero["renglon"]["id"],
@@ -494,10 +570,25 @@ def sugerir_todas(nombre_archivo, contenido, contexto_cliente):
     if texto:
         tercero = _tercero_por_nit(contexto_cliente, nits_del_texto(texto))
         if tercero is not None:
-            agregar(_sugerencia(
-                tercero, POR_EXOGENA,
-                "El documento trae el NIT %s, que es el de %s en la"
-                " exógena." % (tercero["nit"], tercero["nombre"])))
+            afinadas = afinar_con_el_detalle(tercero, texto, contexto_cliente)
+            for afinada in afinadas:
+                agregar({
+                    "renglon_id": afinada["renglon"]["id"],
+                    "titulo": afinada["renglon"]["titulo"],
+                    "codigo": afinada["codigo"],
+                    "origen": POR_EXOGENA,
+                    "certeza": afinada["certeza"],
+                    "porque": "El documento trae el NIT %s, que es el de %s,"
+                              " y se parece a lo que ese tercero le reportó"
+                              " como «%s»."
+                              % (tercero["nit"], tercero["nombre"],
+                                 afinada["detalle"][:70]),
+                })
+            if not afinadas:
+                agregar(_sugerencia(
+                    tercero, POR_EXOGENA,
+                    "El documento trae el NIT %s, que es el de %s en la"
+                    " exógena." % (tercero["nit"], tercero["nombre"])))
 
         tercero = _tercero_por_nombre(contexto_cliente, texto_normal)
         if tercero is not None:
@@ -557,7 +648,21 @@ def sugerir_todas(nombre_archivo, contenido, contexto_cliente):
     # Con certeza baja no se propone nada: sin asignar es mejor que mal
     # asignado. La puerta queda cerrada aquí, en un solo sitio, y no en
     # cada fuente por separado.
-    return [s for s in encontradas if s["certeza"] in (ALTA, MEDIA)]
+    sirven = [s for s in encontradas if s["certeza"] in (ALTA, MEDIA)]
+
+    # Y un renglón, una sola vez. Es normal que varias fuentes lleguen
+    # al mismo sitio —el NIT está en el texto Y el nombre del archivo lo
+    # dice— y mostrar tres veces el mismo renglón no es más información,
+    # es ruido. Se queda la primera, que por el orden de arriba es la de
+    # la fuente más fuerte.
+    unicas = []
+    puestos = set()
+    for sugerencia in sirven:
+        if sugerencia["renglon_id"] in puestos:
+            continue
+        puestos.add(sugerencia["renglon_id"])
+        unicas.append(sugerencia)
+    return unicas
 
 
 # ----------------------------------------------------------

@@ -144,8 +144,14 @@ revisar("el nombre del archivo también sirve cuando dice algo",
 todas = clasificacion.sugerir_todas(
     "Certificado Bancolombia 2025.pdf",
     por_nombre["Certificado Bancolombia 2025.pdf"]["contenido"], ctx)
-revisar("y cuando varias fuentes coinciden, se guardan todas",
-        len(todas) >= 2, [x["origen"] for x in todas])
+revisar("cuando varias fuentes llegan al mismo renglón, se muestra una",
+        len({x["renglon_id"] for x in todas}) == len(todas),
+        [x["origen"] for x in todas])
+revisar("y gana la fuente más fuerte",
+        todas[0]["origen"] in (clasificacion.POR_REGLA,
+                               clasificacion.POR_EXOGENA,
+                               clasificacion.POR_XML),
+        todas[0]["origen"])
 
 s = sugerencia_de("20260228_0001.pdf")
 revisar("un PDF con candado pero sin clave sí se lee y se clasifica",

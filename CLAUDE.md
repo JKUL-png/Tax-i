@@ -339,6 +339,15 @@ consentimiento al desarrollador.
     .venv/bin/python pruebas/probar_exogena.py       # el lector de la exógena
     .venv/bin/python pruebas/probar_clasificacion.py # clasificar y aprender
 
+Y para dejar un cliente cargado con todo y probarlo a mano:
+
+    .venv/bin/python pruebas/cargar_para_probar.py
+
+Le arma a un cliente una exógena inventada y un montón de documentos —unos
+bien nombrados, otros con nombre de cámara, una foto, un escaneado sin texto
+y un PDF con contraseña— y después imprime un paso a paso. Ningún dato es de
+nadie. ESCRIBE en la base de este computador.
+
 `probar_pantallas.py` abre Chromium de verdad y falla si el JavaScript revienta.
 Hace falta porque un error de JavaScript no se ve desde el servidor: la página
 carga con código 200 y el botón simplemente no hace nada.
