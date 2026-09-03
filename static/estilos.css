@@ -1465,6 +1465,43 @@ a.boton-secundario {
   white-space: nowrap;
 }
 
+/* Escoger en cuál casilla del 210 va una cifra.
+
+   Antes esto era un window.prompt con una lista numerada: «1) G113 —
+   Ingresos brutos…, 2) H113 — Ingresos brutos…» y había que escribir un
+   número. Las dos opciones se veían iguales, y encima ninguna de las
+   dos servía. */
+.elegir-casilla-fondo {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--e4);
+  background: rgba(19, 26, 22, 0.45);
+}
+
+.elegir-casilla {
+  width: min(34rem, 100%);
+  background: var(--superficie);
+  border: 1px solid var(--borde-fuerte);
+  border-radius: var(--radio);
+  box-shadow: var(--sombra-media);
+  padding: var(--e4);
+}
+
+.elegir-casilla h3 { margin: 0 0 var(--e2); }
+.elegir-casilla .ayuda { margin: 0 0 var(--e3); }
+
+.elegir-casilla-acciones {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: var(--e3);
+  margin-top: var(--e4);
+}
+
 /* Los documentos van en dos grupos: los que falta mirar arriba y los
    ya asignados abajo. */
 .documentos-grupo {

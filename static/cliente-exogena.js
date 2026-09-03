@@ -528,56 +528,145 @@
   }
 
   /* Llevar un valor al 210. Uno por uno y con aprobación explícita:
-     nunca en lote, nunca automático. */
+     nunca en lote, nunca automático.
+
+     La casilla la propone el programa cuando puede saberla, y eso NO
+     contradice la regla de no decidir: el renglón ya está decidido —lo
+     decidió la DIAN en la exógena, o lo eligió él— y lo que falta es en
+     cuál fila de SU hoja de trabajo va. Eso se resuelve leyendo la
+     etiqueta de la fila, no interpretando la ley.
+
+     Cuando de verdad hay que escoger, se abre un selector con el nombre
+     de cada fila. Nunca más una lista numerada en un cuadro del
+     navegador. */
   async function llevarAl210(fila) {
-    var casillas;
+    let datos;
     try {
       const respuesta = await fetch("/api/exogena/filas/" + fila.id + "/casillas");
-      const cuerpo = await respuesta.json();
+      datos = await respuesta.json();
       if (!respuesta.ok) {
-        avisarEn($("aviso-exogena"), cuerpo.detalle || "No se pudo consultar"
-                 + " la plantilla.", "error");
+        avisarEn($("aviso-exogena"), datos.detalle
+                 || "No se pudo consultar la plantilla.", "error");
         return;
       }
-      casillas = cuerpo.casillas || [];
     } catch (e) {
       avisarEn($("aviso-exogena"), "No se pudo consultar la plantilla.", "error");
       return;
     }
 
+    const casillas = datos.casillas || [];
     if (!casillas.length) {
       avisarEn($("aviso-exogena"),
-        "La plantilla no tiene una casilla de captura para ese renglón."
+        "La plantilla no tiene ninguna casilla conectada para ese renglón."
         + " Puede que ese renglón sea de los que la plantilla calcula sola.",
         "error");
       return;
     }
 
-    var casilla = casillas[0];
-    if (casillas.length > 1) {
-      var opciones = casillas.map(function (c, i) {
-        return (i + 1) + ") " + c.celda + " — " + (c.descripcion || "");
-      }).join("\n");
-      var cual = window.prompt(
-        "Ese renglón tiene varias casillas en la plantilla.\n\n" + opciones
-        + "\n\nEscriba el número de la que corresponde:", "1");
-      if (cual === null) return;
-      casilla = casillas[parseInt(cual, 10) - 1];
-      if (!casilla) return;
+    if (datos.recomendada) {
+      confirmarYEscribir(fila, datos.recomendada, datos.motivo, casillas);
+    } else {
+      abrirElegirCasilla(fila, casillas, "");
     }
+  }
 
-    var confirmado = window.confirm(
-      "¿Escribir " + enPesos(fila.valor) + " en la casilla " + casilla.celda
-      + " del Formulario 210 de este cliente?\n\n"
-      + fila.detalle + "\nReportado por " + fila.nombre_reporta + "."
-      + "\n\nQueda anotado en el historial y lo puede cambiar después.");
-    if (!confirmado) return;
+  function confirmarYEscribir(fila, casilla, motivo, casillas) {
+    const seguro = window.confirm(
+      "¿Escribir " + enPesos(fila.valor) + " en la casilla "
+      + casilla.celda + " del Formulario 210?\n\n"
+      + (casilla.descripcion || "") + "\n"
+      + (motivo ? "\n" + motivo + "\n" : "")
+      + "\n" + fila.detalle
+      + "\nReportado por " + fila.nombre_reporta + "."
+      + "\n\nQueda anotado en el historial y lo puede cambiar después."
+      + "\n\n(Cancele si prefiere escoger otra casilla.)");
+    if (seguro) {
+      escribirEn(fila, casilla.celda);
+    } else if (casillas && casillas.length > 1) {
+      abrirElegirCasilla(fila, casillas, casilla.celda);
+    }
+  }
 
+  /* El selector de casilla. Es el mismo campo con búsqueda de los
+     renglones, que ya sabe buscar escribiendo, moverse con las flechas
+     y cerrarse con Escape. */
+  function abrirElegirCasilla(fila, casillas, puesta) {
+    const fondo = document.createElement("div");
+    fondo.className = "elegir-casilla-fondo";
+
+    const caja = document.createElement("div");
+    caja.className = "elegir-casilla";
+
+    const titulo = document.createElement("h3");
+    titulo.textContent = "¿En cuál casilla va " + enPesos(fila.valor) + "?";
+    caja.appendChild(titulo);
+
+    const ayuda = document.createElement("p");
+    ayuda.className = "ayuda";
+    ayuda.textContent = fila.detalle + " — reportado por "
+                      + fila.nombre_reporta + ". Estas son las casillas de"
+                      + " ese renglón que la plantilla sí lee.";
+    caja.appendChild(ayuda);
+
+    let escogida = puesta || "";
+    const selector = SelectorRenglon.crear({
+      renglones: casillas.map(function (c) {
+        return { id: c.celda, titulo: c.celda + " — " + (c.descripcion || "") };
+      }),
+      elegido: escogida || null,
+      vacio: "— escoja la casilla —",
+      etiqueta: "Casilla del Formulario 210",
+      alElegir: function (id) { escogida = id; }
+    });
+    caja.appendChild(selector.elemento);
+
+    const acciones = document.createElement("div");
+    acciones.className = "elegir-casilla-acciones";
+
+    const cancelar = document.createElement("button");
+    cancelar.type = "button";
+    cancelar.className = "boton-texto";
+    cancelar.textContent = "Cancelar";
+    cancelar.addEventListener("click", cerrar);
+
+    const anotar = document.createElement("button");
+    anotar.type = "button";
+    anotar.className = "boton";
+    anotar.textContent = "Anotar";
+    anotar.addEventListener("click", function () {
+      if (!escogida) {
+        ayuda.textContent = "Escoja una casilla primero.";
+        return;
+      }
+      cerrar();
+      escribirEn(fila, escogida);
+    });
+
+    acciones.appendChild(cancelar);
+    acciones.appendChild(anotar);
+    caja.appendChild(acciones);
+    fondo.appendChild(caja);
+    document.body.appendChild(fondo);
+
+    function cerrar() {
+      document.removeEventListener("keydown", conEscape);
+      fondo.remove();
+    }
+    function conEscape(evento) {
+      if (evento.key === "Escape") cerrar();
+    }
+    document.addEventListener("keydown", conEscape);
+    fondo.addEventListener("click", function (evento) {
+      if (evento.target === fondo) cerrar();
+    });
+  }
+
+  async function escribirEn(fila, celda) {
     try {
       const respuesta = await fetch("/api/exogena/filas/" + fila.id + "/al-210", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ celda: casilla.celda })
+        body: JSON.stringify({ celda: celda })
       });
       const cuerpo = await respuesta.json();
       if (!respuesta.ok) {
@@ -586,7 +675,7 @@
         return;
       }
       avisarEn($("aviso-exogena"),
-        "Listo: " + enPesos(fila.valor) + " quedó en " + casilla.celda + ".",
+        "Listo: " + enPesos(fila.valor) + " quedó en " + celda + ".",
         "exito");
     } catch (e) {
       avisarEn($("aviso-exogena"), "No se pudo escribir el valor.", "error");

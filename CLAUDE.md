@@ -196,6 +196,23 @@ pestaña se llama **Exógena**, que es la palabra que él usa: ni "reporte", ni
   las dos cosas las decide el contador.
 - **Al 210, uno por uno y con aprobación explícita.** Nunca en lote, nunca
   automático, y nunca un valor que todavía requiera decisión.
+- **Solo se ofrecen casillas que alguna fórmula de la plantilla LEE.** La
+  plantilla trae tres columnas de valor en cada fila —Subparcial, Parcial y
+  Totales— pero en cada renglón solo una está cableada a las sumas: de 1.317
+  casillas donde se puede escribir, unas 300 están conectadas. Ofrecer una de
+  las otras es ofrecer un error silencioso: la cifra queda escrita, parece
+  anotada, y el renglón se queda en cero. Se comprueba en
+  `formulario.celdas_que_alguien_lee`, mirando el nombre de la hoja: hay
+  fórmulas en OTRAS hojas del libro que mencionan las mismas coordenadas.
+- **Y las casillas de un renglón están en su BLOQUE, no en su fila.** La fila
+  que lleva el número del renglón es un título; la cifra va en las filas de
+  detalle de abajo («Salarios», «Cesantías e intereses»).
+- **Escoger la casilla dentro de un renglón NO es una decisión tributaria** y
+  por eso el programa sí la puede tomar: el renglón ya está decidido —lo
+  decidió la DIAN o lo eligió el contador— y lo que falta es en cuál fila de
+  su hoja de trabajo va, que se resuelve leyendo la etiqueta. Si dos filas
+  empatan, se le pregunta; y lo que él escoja se recuerda por plantilla y
+  renglón, para no volvérselo a preguntar.
 
 Cómo se escriben los textos de esa pantalla, que es lo que define el producto:
 

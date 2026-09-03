@@ -476,6 +476,43 @@ def main():
                     filtro.click()
                     pagina.wait_for_timeout(300)
 
+                # Llevar al 210: ya no es un cuadro del navegador con
+                # una lista numerada. Es un selector con el nombre de
+                # cada casilla, y solo aparece cuando de verdad hay que
+                # escoger.
+                # Un window.prompt con una lista numerada era la forma
+                # vieja de preguntar en cuál casilla iba la cifra. No
+                # puede volver.
+                fuente = pagina.evaluate(
+                    "() => fetch('/static/cliente-exogena.js')"
+                    ".then(r => r.text())")
+                revisar("no queda ningún window.prompt en la pestaña",
+                        "window.prompt" not in fuente)
+
+                boton210 = pagina.locator(".exogena-al-210").first
+                if boton210.count():
+                    boton210.click()
+                    pagina.wait_for_timeout(900)
+                    # O escribió de una (con confirmación) o abrió el
+                    # selector. Las dos son correctas; lo que no puede
+                    # pasar es un prompt del navegador.
+                    modal = pagina.locator(".elegir-casilla")
+                    if modal.count():
+                        revisar("el selector de casilla muestra el nombre de"
+                                " cada una, no un número",
+                                "—" in modal.inner_text(),
+                                modal.inner_text()[:80])
+                        opciones = modal.locator(".selector-boton")
+                        revisar("y trae el campo con búsqueda",
+                                opciones.count() == 1)
+                        pagina.keyboard.press("Escape")
+                        pagina.wait_for_timeout(300)
+                        revisar("Escape lo cierra",
+                                pagina.locator(".elegir-casilla").count() == 0)
+                    else:
+                        revisar("llevar al 210 no abrió ningún cuadro raro",
+                                True)
+
                 revisar("sin errores de JavaScript en toda la pestaña",
                         not errores, errores[:3])
 

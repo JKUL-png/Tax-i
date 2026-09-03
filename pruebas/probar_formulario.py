@@ -233,7 +233,65 @@ def main():
                   any(f["es_nota"] for f in hoja["filas"]))
 
         # --------------------------------------------------------------
-        print("\nH. Subir otra plantilla")
+        print("\nH. Las casillas de un renglón: solo las que la plantilla LEE")
+        # --------------------------------------------------------------
+        #
+        # Este bloque existe por un error que no rompía nada, que es lo
+        # peor que puede pasar: «Llevar al Formulario 210» ofrecía G113 y
+        # H113 para el renglón 32, y ninguna fórmula las lee. El contador
+        # habría escrito los 84 millones ahí, habría visto que quedó
+        # anotado, y el renglón 32 se habría quedado en cero.
+        leidas = formulario.celdas_que_alguien_lee()
+        comprobar("se sabe qué casillas lee alguna fórmula", len(leidas) > 100,
+                  "%d casillas" % len(leidas))
+
+        del32 = formulario.celdas_de_renglon("32")
+        celdas32 = [c["celda"] for c in del32]
+        # La fórmula que engañaba estaba en OTRA hoja del libro.
+        comprobar("el renglón 32 ya no ofrece G113 ni H113",
+                  "G113" not in celdas32 and "H113" not in celdas32,
+                  celdas32[:6])
+        comprobar("y sí ofrece la fila donde de verdad va el salario",
+                  "G115" in celdas32, celdas32[:6])
+        comprobar("todas las que ofrece las lee alguna fórmula",
+                  all(c in leidas for c in celdas32))
+
+        # El bloque se encuentra igual esté como esté la plantilla: con
+        # el número del renglón repetido en todas sus filas o una sola vez.
+        for numero in ("29", "30", "32", "132"):
+            comprobar("el renglón %s tiene dónde escribir" % numero,
+                      len(formulario.celdas_de_renglon(numero)) > 0, numero)
+
+        # Escoger la casilla NO es una decisión tributaria: el renglón ya
+        # está decidido y lo que falta es leer la etiqueta de la fila.
+        recomendada, motivo, todas = formulario.elegir_casilla(
+            "32", "Pagos por salarios (Concepto: 2276)")
+        comprobar("«Pagos por salarios» cae solo en la fila «Salarios»",
+                  recomendada and recomendada["celda"] == "G115",
+                  recomendada and recomendada["celda"])
+        comprobar("y dice por qué la escogió", bool(motivo), motivo)
+
+        # Donde de verdad hay que decidir, no se adivina.
+        recomendada, _m, todas = formulario.elegir_casilla(
+            "29", "Saldo cuentas bancarias (Titular Principal)")
+        comprobar("con muchas cuentas parecidas, le pregunta al contador",
+                  recomendada is None, recomendada)
+        comprobar("pero le muestra todas las opciones", len(todas) > 1,
+                  len(todas))
+
+        # Y lo que él escoja se recuerda, para no volvérselo a preguntar.
+        formulario.recordar_casilla("29", todas[3]["celda"])
+        recomendada, motivo, _t = formulario.elegir_casilla(
+            "29", "Saldo cuentas bancarias (Titular Principal)")
+        comprobar("la próxima vez propone la que él escogió",
+                  recomendada and recomendada["celda"] == todas[3]["celda"],
+                  recomendada and recomendada["celda"])
+        comprobar("y le dice que fue la que usó antes",
+                  "vez pasada" in motivo, motivo)
+        db.guardar_ajuste(formulario._clave_de_recordada("29"), "")
+
+        # --------------------------------------------------------------
+        print("\nI. Subir otra plantilla")
         # --------------------------------------------------------------
         antes = formulario.ruta_plantilla()
         subidas = []

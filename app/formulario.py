@@ -29,6 +29,7 @@ Cada cliente tiene su carpeta en datos/formularios/cliente-N/, y ahí queda
 su archivo con su bitácora. El de un cliente nunca se mezcla con el de otro.
 """
 
+import re
 import shutil
 import threading
 import unicodedata
@@ -38,6 +39,7 @@ from io import BytesIO
 from pathlib import Path
 
 from openpyxl import load_workbook
+from openpyxl.utils import get_column_letter, range_boundaries
 
 from app import db
 from app.documentos import sanitizar_nombre
@@ -200,6 +202,12 @@ def guardar_plantilla_subida(nombre_original, contenido):
 # propio hilo. Sin él, dos hilos pueden estar armando el mapa a la vez y
 # uno puede leer el diccionario cuando el otro lo dejó a medio actualizar.
 _mapa_guardado = {"ruta": None, "modificado": None, "mapa": None, "indice": None}
+
+# Y lo mismo para las celdas que alguna fórmula lee: recorrer todas las
+# fórmulas de la plantilla se demora, y no cambia hasta que cambie el
+# archivo.
+_leidas_guardadas = {"ruta": None, "modificado": None, "celdas": set()}
+_candado_leidas = threading.Lock()
 _candado_mapa = threading.Lock()
 
 
@@ -239,22 +247,245 @@ def _mapa_e_indice():
         return _mapa_guardado["mapa"], _mapa_guardado["indice"]
 
 
-def celdas_de_renglon(numero):
-    """Las casillas de captura que la plantilla tiene para un renglón.
+# Para encontrar las celdas que menciona una fórmula: G115, $H$114,
+# G115:G120, 'Otra hoja'!G12.
+#
+# El nombre de la hoja importa y no es un detalle: la plantilla tiene
+# varias hojas y en otra hay un =SUM(G113:G124) que no tiene nada que
+# ver con la hoja de captura. Sin distinguirlas, esa suma hacía parecer
+# «conectada» una casilla que no lo está.
+_REFERENCIA = re.compile(
+    r"(?:(?:'([^']+)'|([A-Za-z0-9_.\u00C0-\u024F]+))!)?"
+    r"\$?([A-Z]{1,3})\$?(\d{1,7})"
+    r"(?::\$?([A-Z]{1,3})\$?(\d{1,7}))?")
 
-    'numero' es el del formulario 210 sin la R: "32" para R32. Devuelve
-    solo casillas donde SÍ se puede escribir; las que tienen fórmula
-    quedan fuera, porque escribir encima de una fórmula rompe el
-    archivo del contador.
+# Un rango más grande que esto es una barrida de toda la hoja, no una
+# suma de renglones: no se expande, gastaría memoria sin aportar nada.
+_RANGO_MAXIMO = 20000
+
+
+def celdas_que_alguien_lee():
+    """Las casillas que alguna fórmula de la plantilla SÍ lee.
+
+    Esto no es un detalle técnico: es la diferencia entre anotar una
+    cifra y creer que se anotó.
+
+    La plantilla del contador ofrece tres columnas de valor en cada
+    fila —Subparcial, Parcial y Totales— pero en cada renglón solo UNA
+    está cableada a las sumas. El renglón 32, por ejemplo, saca su
+    total de `H114+H123`, que a su vez suman la columna G de las filas
+    de detalle. Las casillas G113 y H113, que están justo al lado del
+    título «Ingresos brutos por rentas de trabajo», no las lee ninguna
+    fórmula: escribir ahí deja el número quieto y el renglón en cero.
+
+    De 1.317 casillas donde se puede escribir, solo unas 318 están
+    conectadas. Ofrecer las otras es ofrecer un error silencioso.
+    """
+    ruta = ruta_plantilla()
+    if ruta is None:
+        raise SinPlantilla(
+            "No hay ninguna plantilla en la carpeta plantillas/."
+        )
+
+    modificado = ruta.stat().st_mtime_ns
+    with _candado_leidas:
+        if (_leidas_guardadas["ruta"] == ruta
+                and _leidas_guardadas["modificado"] == modificado):
+            return _leidas_guardadas["celdas"]
+
+        libro = load_workbook(ruta, data_only=False)
+        leidas = set()
+        for hoja in libro.worksheets:
+            for fila in hoja.iter_rows():
+                for celda in fila:
+                    valor = celda.value
+                    if not (isinstance(valor, str) and valor.startswith("=")):
+                        continue
+                    for encontrada in _REFERENCIA.finditer(valor):
+                        _sumar_referencia(leidas, encontrada, hoja.title)
+        libro.close()
+
+        _leidas_guardadas.update(ruta=ruta, modificado=modificado,
+                                 celdas=leidas)
+        return leidas
+
+
+def _sumar_referencia(leidas, encontrada, hoja_de_la_formula):
+    """Agrega una celda suelta, o todas las de un rango.
+
+    Solo cuentan las de la hoja de captura. Una referencia sin nombre de
+    hoja es de la hoja donde está la fórmula.
+    """
+    entrecomillada, suelta, col1, fila1, col2, fila2 = encontrada.groups()
+    nombre_hoja = entrecomillada or suelta or hoja_de_la_formula
+    if nombre_hoja != HOJA_CAPTURA:
+        return
+    if col2 is None:
+        leidas.add(col1 + fila1)
+        return
+    try:
+        min_col, min_fila, max_col, max_fila = range_boundaries(
+            "%s%s:%s%s" % (col1, fila1, col2, fila2))
+    except Exception:
+        return
+    if (max_col - min_col + 1) * (max_fila - min_fila + 1) > _RANGO_MAXIMO:
+        return
+    for columna in range(min_col, max_col + 1):
+        for fila in range(min_fila, max_fila + 1):
+            leidas.add(get_column_letter(columna) + str(fila))
+
+
+def _clave_de_recordada(numero):
+    """Con qué llave se recuerda la casilla que el contador escogió.
+
+    Lleva el nombre de la plantilla adentro: si él cambia de plantilla,
+    las casillas de la anterior no significan lo mismo y no se le pueden
+    volver a proponer.
+    """
+    ruta = ruta_plantilla()
+    return "casilla_renglon_%s_%s" % (ruta.name if ruta else "", numero)
+
+
+def recordar_casilla(numero, celda):
+    """Se acuerda de en qué casilla puso él este renglón la vez pasada.
+
+    Es lo mismo que hace el programa con las correcciones de
+    clasificación: la decisión es suya, y una vez tomada no hay por qué
+    volver a preguntársela cada vez.
+    """
+    if numero and celda:
+        db.guardar_ajuste(_clave_de_recordada(numero), celda)
+
+
+def casilla_recordada(numero):
+    """La casilla que él escogió antes para este renglón, o ''."""
+    if not numero:
+        return ""
+    return db.leer_ajuste(_clave_de_recordada(numero), "")
+
+
+def elegir_casilla(numero, texto=""):
+    """Cuál casilla del renglón le corresponde a este dato.
+
+    Devuelve (recomendada, motivo, todas). `recomendada` puede ser None,
+    y entonces le toca escoger al contador.
+
+    Esto NO es una decisión tributaria y por eso el programa sí la
+    puede tomar: el renglón ya está decidido: lo decidió la DIAN en la
+    exógena o lo decidió él. Lo que falta es en cuál fila de SU hoja de
+    trabajo va, y eso se resuelve leyendo la etiqueta de la fila:
+    «Pagos por salarios» contra una fila que dice «Salarios».
+
+    Tres caminos, en este orden:
+      1. La que él ya escogió antes para este renglón.
+      2. La única que hay, si solo hay una.
+      3. La fila cuya descripción se parece al concepto del documento.
+    """
+    todas = celdas_de_renglon(numero)
+    if not todas:
+        return None, "", []
+
+    recordada = casilla_recordada(numero)
+    for celda in todas:
+        if celda["celda"] == recordada:
+            return celda, "Es la que usted usó la vez pasada.", todas
+
+    if len(todas) == 1:
+        return todas[0], "Es la única casilla de ese renglón.", todas
+
+    if texto:
+        parecida = _la_mas_parecida(texto, todas)
+        if parecida is not None:
+            return parecida, ("La fila de la plantilla dice «%s»."
+                              % (parecida["descripcion"] or "")[:60]), todas
+
+    return None, "", todas
+
+
+def _la_mas_parecida(texto, casillas):
+    """La casilla cuya descripción se parece más al texto. None si empatan."""
+    from app import lectura
+
+    del_dato = lectura.palabras_utiles(texto)
+    if not del_dato:
+        return None
+
+    puntajes = []
+    for casilla in casillas:
+        comunes = del_dato & lectura.palabras_utiles(casilla["descripcion"])
+        if comunes:
+            puntajes.append((len(comunes), casilla))
+    if not puntajes:
+        return None
+    puntajes.sort(key=lambda par: par[0], reverse=True)
+    # Empate: no hay forma de saber cuál, y adivinar aquí es escribir una
+    # cifra en el sitio equivocado de su declaración.
+    if len(puntajes) > 1 and puntajes[1][0] == puntajes[0][0]:
+        return None
+    return puntajes[0][1]
+
+
+def celdas_de_renglon(numero):
+    """Las casillas donde de verdad se escribe un renglón del 210.
+
+    'numero' es el del formulario sin la R: "32" para R32.
+
+    Dos cosas que antes no hacía, y las dos eran errores:
+
+    1. Busca en TODO el bloque del renglón, no solo en la fila que
+       lleva su número. En la plantilla del contador esa fila es un
+       título y la cifra se escribe en las filas de detalle de abajo:
+       «Salarios», «Cesantías e intereses», «Empresa 1, NIT…».
+
+    2. Deja fuera las casillas que ninguna fórmula lee. Escribir en una
+       de esas no rompe nada, y eso es lo peligroso: parece que quedó
+       anotado y el renglón se queda en cero.
+
+    Devuelve las casillas en el orden en que están en la hoja, que es
+    el orden en que el contador las lee.
     """
     numero = str(numero).strip()
     if not numero:
         return []
-    encontradas = []
-    for celda in mapa()["celdas"]:
-        if celda.get("renglon") != numero:
+
+    celdas = mapa()["celdas"]
+    leidas = celdas_que_alguien_lee()
+
+    # El bloque va desde la fila del renglón hasta la del SIGUIENTE
+    # renglón distinto.
+    #
+    # Se mira «distinto» y no «cualquiera» porque la plantilla es
+    # inconsistente: en unos bloques la casilla del número está
+    # combinada y todas sus filas repiten el mismo renglón (el 29 lo
+    # repite en sesenta filas), y en otros el número aparece una sola
+    # vez y las filas de abajo van en blanco (el 32). Con esta regla los
+    # dos casos salen bien.
+    fila_inicio = None
+    fila_fin = None
+    for celda in celdas:
+        suyo = celda.get("renglon") or ""
+        if fila_inicio is None:
+            if suyo == numero:
+                fila_inicio = celda["fila"]
             continue
+        if celda["fila"] <= fila_inicio:
+            continue
+        if suyo and suyo != numero:
+            fila_fin = celda["fila"]
+            break
+    if fila_inicio is None:
+        return []
+
+    encontradas = []
+    for celda in celdas:
         if celda["tipo"] != TIPO_CAPTURA:
+            continue
+        if celda["fila"] < fila_inicio:
+            continue
+        if fila_fin is not None and celda["fila"] >= fila_fin:
+            continue
+        if celda["celda"] not in leidas:
+            # Nadie la lee: ofrecerla sería ofrecer un error silencioso.
             continue
         encontradas.append(_para_pantalla(celda))
     return encontradas

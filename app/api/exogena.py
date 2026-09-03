@@ -166,13 +166,25 @@ def api_casillas_de_la_fila(peticion, id_fila):
         codigo = fila["renglones"][0]["codigo"]
 
     if not codigo:
-        return {"codigo": "", "requiere_decision": True, "casillas": []}
+        return {"codigo": "", "requiere_decision": True, "casillas": [],
+                "recomendada": None, "motivo": ""}
 
     try:
-        casillas = formulario.celdas_de_renglon(codigo[1:])
+        recomendada, motivo, casillas = formulario.elegir_casilla(
+            codigo[1:], fila["detalle"])
     except formulario.SinPlantilla as error:
         raise ErrorHttp(409, str(error))
-    return {"codigo": codigo, "requiere_decision": False, "casillas": casillas}
+
+    return {
+        "codigo": codigo,
+        "requiere_decision": False,
+        # La casilla que le corresponde, cuando se puede saber. Elegirla
+        # NO es una decisión tributaria: el renglón ya está decidido, y
+        # lo que falta es en cuál fila de la hoja de trabajo va.
+        "recomendada": recomendada,
+        "motivo": motivo,
+        "casillas": casillas,
+    }
 
 
 @app.post("/api/exogena/filas/{id_fila}/al-210")
@@ -213,6 +225,13 @@ def api_llevar_al_210(peticion, id_fila):
         raise ErrorHttp(409, str(error))
     except EscrituraBloqueada as error:
         raise ErrorHttp(400, str(error))
+
+    # Se recuerda en qué casilla la puso, para no volvérsela a
+    # preguntar la próxima vez que llegue algo de ese renglón.
+    codigo = fila["renglon_elegido"] or (
+        fila["renglones"][0]["codigo"] if fila["renglones"] else "")
+    if codigo:
+        formulario.recordar_casilla(codigo[1:], celda)
 
     bitacora.anotar(fila["cliente_id"], bitacora.EXOGENA_AL_210,
                     "%s → %s" % (fila["detalle"][:100], celda))
