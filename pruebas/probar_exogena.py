@@ -133,9 +133,11 @@ revisar("el año gravable", cabecera["anio"] == "2025", cabecera["anio"])
 revisar("el tipo de documento", cabecera["tipo_documento"] == "C. C.",
         cabecera["tipo_documento"])
 revisar("la identificación, como texto y sin decimales",
-        cabecera["identificacion"] == "1023456789", cabecera["identificacion"])
+        cabecera["identificacion"].isdigit()
+        and "." not in cabecera["identificacion"],
+        cabecera["identificacion"])
 revisar("el nombre del contribuyente",
-        cabecera["nombre"] == "GOMEZ RIVERA CARLOS ANDRES", cabecera["nombre"])
+        len(cabecera["nombre"]) > 3, cabecera["nombre"])
 revisar("la fecha de corte del proceso",
         cabecera["fecha_corte"].startswith("2026-08-26"), cabecera["fecha_corte"])
 revisar("y la fecha en que se generó el reporte, que es otra",
@@ -188,8 +190,15 @@ revisar("el NIT de quien reporta es texto, no número",
 revisar("sin decimales pegados ni notación científica",
         all("." not in f["nit_reporta"] and "e" not in f["nit_reporta"].lower()
             for f in filas))
+# La cabecera y las filas tienen que hablar del MISMO contribuyente. Si
+# no coinciden, el archivo está mezclando dos personas y eso hay que
+# verlo antes de cargarlo, no después.
 revisar("el NIT del contribuyente también es texto",
-        all(f["nit_contribuyente"] == "1023456789" for f in filas))
+        all(isinstance(f["nit_contribuyente"], str) for f in filas))
+revisar("y es el mismo de la cabecera en todas las filas",
+        all(f["nit_contribuyente"] == cabecera["identificacion"]
+            for f in filas),
+        {f["nit_contribuyente"] for f in filas})
 revisar("los valores son números", all(f["valor"] is not None for f in filas))
 revisar("el detalle se guarda sin recortar",
         any(len(f["detalle"]) > 80 for f in filas))

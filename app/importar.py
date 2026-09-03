@@ -108,7 +108,7 @@ def texto_de_casilla(valor):
     """Convierte lo que venga en la casilla en texto limpio.
 
     Excel a veces devuelve números donde uno esperaría texto: una cédula
-    puede llegar como 1023456789.0 en vez de "1023456789".
+    puede llegar como 1000000001.0 en vez de "1000000001".
     """
     if valor is None:
         return ""

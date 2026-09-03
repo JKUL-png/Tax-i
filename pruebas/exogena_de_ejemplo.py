@@ -5,8 +5,10 @@ Sirve para dos cosas: para probar el programa de punta a punta sin usar
 el archivo de nadie, y para que el contador vea cómo se comporta Tax-i
 antes de cargarle el de un cliente de verdad.
 
-TODO lo de aquí es inventado: el contribuyente, las cifras, los números
-de cuenta y las empresas pequeñas. Los NIT de los bancos y de la DIAN sí
+TODO lo de aquí es inventado. El contribuyente se llama «CONTRIBUYENTE
+DE EJEMPLO» y su cédula es 1000000001, a propósito: así nadie puede
+confundirlo con una persona. También son inventadas las cifras, los
+números de cuenta y las empresas pequeñas. Los NIT de los bancos y de la DIAN sí
 son los públicos de esas instituciones, porque si no el cruce no se
 parecería en nada al de verdad.
 
@@ -156,7 +158,7 @@ FILAS = (
 )
 
 
-def escribir(ruta, nombre="PEDRO RUIZ MARTINEZ", cedula="79845641",
+def escribir(ruta, nombre="CONTRIBUYENTE DE EJEMPLO", cedula="1000000001",
              anio="2025", corte=None):
     """Escribe el reporte inventado y devuelve la ruta.
 

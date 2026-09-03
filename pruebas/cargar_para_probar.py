@@ -5,8 +5,11 @@ Se corre así, desde la carpeta del proyecto:
 
     .venv/bin/python pruebas/cargar_para_probar.py
 
-Le carga al cliente su reporte de exógena y un montón de documentos, y
-después imprime un paso a paso para ir viendo cada cosa en pantalla.
+    .venv/bin/python pruebas/cargar_para_probar.py "Pedro Ruiz"
+
+Le carga a ese cliente —o al «Cliente de ejemplo», si no se dice cuál—
+su reporte de exógena y un montón de documentos, y después imprime un
+paso a paso para ir viendo cada cosa en pantalla.
 
 TODO lo que carga es INVENTADO. Los documentos son los que llegan de
 verdad —unos con nombre que dice qué son y otros con el nombre que les
@@ -29,9 +32,18 @@ import exogena_de_ejemplo as reporte  # noqa: E402
 
 from app import clasificacion, db, documentos, exogena_cliente  # noqa: E402
 
-NOMBRE_CLIENTE = "Pedro Ruiz"
-TITULAR = "PEDRO RUIZ MARTINEZ"
-CEDULA = "79845641"
+# A qué cliente se le carga todo. Se puede cambiar al correrlo:
+#
+#     .venv/bin/python pruebas/cargar_para_probar.py "Pedro Ruiz"
+#
+# Si no existe, se crea.
+NOMBRE_CLIENTE = sys.argv[1] if len(sys.argv) > 1 else "Cliente de ejemplo"
+
+# El titular que aparece DENTRO de los documentos inventados. Se llama
+# así a propósito: nadie puede confundir estos papeles con los de una
+# persona de verdad.
+TITULAR = "CONTRIBUYENTE DE EJEMPLO"
+CEDULA = "1000000001"
 
 
 def _cert(entidad, nit, lineas):

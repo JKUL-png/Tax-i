@@ -847,7 +847,7 @@ def probar_exogena(identificador):
             "CERTIFICADO PARA DECLARACION DE RENTA 2025",
             "BANCO DAVIVIENDA S.A.",
             "NIT 860.034.313-7",
-            "Senor(a): GOMEZ RIVERA CARLOS ANDRES",
+            "Senor(a): CONTRIBUYENTE DE EJEMPLO",
             "Saldo a 31 de diciembre de 2025: 3.839.996",
         ]))])
     comprobar("sube un documento con nombre de escáner", codigo == 200,

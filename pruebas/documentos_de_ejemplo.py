@@ -11,9 +11,14 @@ que manda:
      día que alguien ponga ahí el de un cliente de verdad —«total, es
      igual que el que ya está»— no habría marcha atrás.
 
-Todo lo de aquí es INVENTADO: el contribuyente, los NIT de las empresas
-pequeñas, las cifras y los números de cuenta. Coincide a propósito con
-el reporte de exógena de ejemplo, porque de eso se trata el cruce.
+Todo lo de aquí es INVENTADO. El contribuyente se llama «CONTRIBUYENTE
+DE EJEMPLO» y su cédula es 1000000001, a propósito: así nadie puede
+confundir estos papeles con los de una persona. Los NIT de los bancos y
+de la DIAN sí son los públicos de esas instituciones, porque si no el
+cruce no se parecería en nada al de verdad.
+
+Coincide con el reporte de exógena de ejemplo, porque de eso se trata
+el cruce.
 
 Cómo llegan los archivos de verdad
 ----------------------------------
@@ -152,7 +157,7 @@ def xml_de_factura(nit_emisor, emisor, receptor, numero, fecha, total):
             '  </cac:PartyTaxScheme></cac:Party></cac:AccountingSupplierParty>\n'
             '  <cac:AccountingCustomerParty><cac:Party><cac:PartyTaxScheme>\n'
             '    <cbc:RegistrationName>%s</cbc:RegistrationName>\n'
-            '    <cbc:CompanyID>1023456789</cbc:CompanyID>\n'
+            '    <cbc:CompanyID>1000000001</cbc:CompanyID>\n'
             '  </cac:PartyTaxScheme></cac:Party></cac:AccountingCustomerParty>\n'
             '  <cac:LegalMonetaryTotal>\n'
             '    <cbc:PayableAmount currencyID="COP">%s</cbc:PayableAmount>\n'
@@ -179,8 +184,8 @@ def _cir(empresa, nit):
         "Año gravable 2025 - Formulario 220",
         "Nombre o razon social del agente retenedor: %s" % empresa,
         "NIT del agente retenedor: %s" % nit,
-        "Apellidos y nombres del empleado: GOMEZ RIVERA CARLOS ANDRES",
-        "Cedula de ciudadania: 1023456789",
+        "Apellidos y nombres del empleado: CONTRIBUYENTE DE EJEMPLO",
+        "Cedula de ciudadania: 1000000001",
         "Pagos por salarios: 29.044.349",
         "Cesantias e intereses de cesantias: 2.460.998",
         "Aportes obligatorios a salud: 1.201.119",
@@ -193,7 +198,7 @@ def _certificado_banco(banco, nit, cuenta):
         "CERTIFICADO PARA DECLARACION DE RENTA 2025",
         "%s" % banco,
         "NIT %s" % nit,
-        "Senor(a): GOMEZ RIVERA CARLOS ANDRES  C.C. 1023456789",
+        "Senor(a): CONTRIBUYENTE DE EJEMPLO  C.C. 1000000001",
         "Numero de cuenta: %s" % cuenta,
         "Saldo a 31 de diciembre de 2025: 8.000.514",
         "Rendimientos financieros del periodo: 106.246",
@@ -223,7 +228,7 @@ DOCUMENTOS = [
          "FONDO DE CESANTIAS PORVENIR",
          "NIT 800.170.043-1",
          "CERTIFICADO DE CESANTIAS E INTERESES 2025",
-         "Afiliado: GOMEZ RIVERA CARLOS ANDRES  C.C. 1023456789",
+         "Afiliado: CONTRIBUYENTE DE EJEMPLO  C.C. 1000000001",
          "Valor total de las cesantias abonadas: 2.460.907",
      ]),
      "renglones": ["29", "32", "36", "51", "67", "84"]},
@@ -233,7 +238,7 @@ DOCUMENTOS = [
          "MUNICIPIO DE PALMIRA - SECRETARIA DE HACIENDA",
          "NIT 890.100.200-5",
          "IMPUESTO PREDIAL UNIFICADO VIGENCIA 2025",
-         "Propietario: GOMEZ RIVERA CARLOS ANDRES",
+         "Propietario: CONTRIBUYENTE DE EJEMPLO",
          "Avaluo catastral: 60.512.304",
      ]),
      "renglones": ["29"]},
@@ -246,7 +251,7 @@ DOCUMENTOS = [
     {"nombre": "factura_taller_metalico.xml",
      "hacer": lambda: xml_de_factura(
          "901234567", "TALLER METALICO ANDINO S.A.S.",
-         "GOMEZ RIVERA CARLOS ANDRES", "DSE0042", "2025-08-14", "114465.00"),
+         "CONTRIBUYENTE DE EJEMPLO", "DSE0042", "2025-08-14", "114465.00"),
      "renglones": ["74"]},
 
     {"nombre": "Retencion notaria Bogota.pdf",
@@ -254,7 +259,7 @@ DOCUMENTOS = [
          "BOGOTA DISTRITO CAPITAL",
          "NIT 899.999.061-9",
          "CERTIFICADO DE RETENCION POR VENTA ANTE NOTARIOS",
-         "Vendedor: GOMEZ RIVERA CARLOS ANDRES  C.C. 1023456789",
+         "Vendedor: CONTRIBUYENTE DE EJEMPLO  C.C. 1000000001",
          "Retencion practicada: 334.238",
      ]),
      "renglones": ["132"]},
@@ -264,7 +269,7 @@ DOCUMENTOS = [
          "NU COLOMBIA COMPANIA DE FINANCIAMIENTO S.A.",
          "NIT 901.658.107-2",
          "EXTRACTO DICIEMBRE 2025",
-         "Titular: GOMEZ RIVERA CARLOS ANDRES",
+         "Titular: CONTRIBUYENTE DE EJEMPLO",
          "Saldo cuenta de ahorros: 447.221",
          "Rendimientos CDT pagados: 106.246",
      ]),
@@ -275,7 +280,7 @@ DOCUMENTOS = [
          "PLATAFORMA DIGITAL ANDINA S.A.S.",
          "NIT 901.345.678-1",
          "CERTIFICADO DE INGRESOS DISTRIBUIDOS 2025",
-         "Tercero: GOMEZ RIVERA CARLOS ANDRES",
+         "Tercero: CONTRIBUYENTE DE EJEMPLO",
          "Ingreso distribuido: 1.212.729",
      ]),
      "renglones": ["74"]},
@@ -319,7 +324,7 @@ DOCUMENTOS = [
     {"nombre": "f9a2c1.xml",
      "hacer": lambda: xml_de_factura(
          "901345678", "PLATAFORMA DIGITAL ANDINA S.A.S.",
-         "GOMEZ RIVERA CARLOS ANDRES", "FE-8891", "2025-11-03", "1212729.00"),
+         "CONTRIBUYENTE DE EJEMPLO", "FE-8891", "2025-11-03", "1212729.00"),
      "renglones": ["74"]},
 
     {"nombre": "Escaneado_20260301.pdf",
@@ -327,7 +332,7 @@ DOCUMENTOS = [
          "FONDO DE CESANTIAS PORVENIR",
          "NIT 800.170.043-1",
          "CERTIFICADO DE CESANTIAS 2025",
-         "Afiliado: GOMEZ RIVERA CARLOS ANDRES",
+         "Afiliado: CONTRIBUYENTE DE EJEMPLO",
          "Valor abonado: 2.460.907",
      ]),
      "renglones": ["29", "32", "36", "51", "67", "84"]},
@@ -351,7 +356,7 @@ DOCUMENTOS = [
          "CAJA DE COMPENSACION FAMILIAR COMFANDI",
          "NIT 890.303.093-2",
          "CERTIFICADO DE APORTES 2025",
-         "Afiliado: GOMEZ RIVERA CARLOS ANDRES",
+         "Afiliado: CONTRIBUYENTE DE EJEMPLO",
      ]),
      "renglones": []},
 ]
