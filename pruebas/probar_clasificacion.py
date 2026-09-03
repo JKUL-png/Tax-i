@@ -33,13 +33,18 @@ RAIZ = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(RAIZ))
 sys.path.insert(0, str(RAIZ / "pruebas"))
 
-# La capa 1 tiene que funcionar con la IA apagada. Se apaga antes de
-# importar nada, para que ningún módulo la lea prendida.
-os.environ["IA_PROVEEDOR"] = "ninguno"
-
 import documentos_de_ejemplo as ejemplos  # noqa: E402
 
 from app import clasificacion, db, exogena_cliente  # noqa: E402
+from app.configuracion import CONFIG  # noqa: E402
+
+# TODO lo de esta prueba corre con la IA apagada, que es el modo de
+# fábrica. Se fuerza aquí y no con una variable de entorno porque la
+# configuración sale del archivo .env del computador: si el
+# desarrollador tiene la IA prendida, la prueba tiene que apagarla
+# igual, o estaría midiendo otra cosa.
+CONFIG._aplicar({"IA_PROVEEDOR": "ninguno"})
+os.environ["IA_PROVEEDOR"] = "ninguno"
 
 EJEMPLO_EXOGENA = RAIZ / "pruebas" / "ejemplos" / "reporteExogena2025_EJEMPLO.xlsx"
 
@@ -178,7 +183,157 @@ revisar("y ahí el nombre del archivo sigue sirviendo",
             "vehiculo soportes.pdf", b"%PDF-1.4", ctx_vacio) is not None)
 
 # ----------------------------------------------------------
-print("\nE. El número: cuántos resuelve la capa 1 sola")
+print("\nE. La capa 2 no puede salirse de la lista del cliente")
+# ----------------------------------------------------------
+#
+# Esto es lo que hace que la promesa se cumpla. Al modelo se le PIDE que
+# elija de la lista, pero además se le IMPIDE en código: lo que conteste
+# fuera de la lista se descarta sin más. Pedir por favor no es lo mismo
+# que impedir.
+
+sus_renglones = ctx["renglones"]
+uno = sus_renglones[0]["id"]
+otro = sus_renglones[1]["id"]
+
+def validar(respuesta):
+    return clasificacion._validar(respuesta, sus_renglones)
+
+revisar("acepta un renglón que sí está en la lista",
+        validar({"renglon": uno, "certeza": "alta"})[0] == uno)
+
+revisar("un id inventado se descarta",
+        validar({"renglon": 999999, "certeza": "alta"})[0] is None)
+revisar("un renglón de OTRO cliente se descarta",
+        validar({"renglon": -1, "certeza": "alta"})[0] is None)
+revisar("un nombre de renglón inventado se descarta",
+        validar({"renglon": "Certificado que yo me inventé"})[0] is None)
+revisar("una respuesta que no es un objeto se descarta",
+        validar(["R32"])[0] is None)
+revisar("y una respuesta que ni siquiera era JSON se descarta",
+        clasificacion._json_de_la_respuesta("perdón, no entendí") is None)
+
+# «No sé» es una respuesta correcta y esperada.
+revisar("«no sé» deja el documento sin asignar",
+        validar({"renglon": None, "certeza": "alta"})[0] is None)
+revisar("y una respuesta vacía también",
+        validar({})[0] is None)
+
+# La certeza baja no se muestra.
+principal, _, certeza = validar({"renglon": uno, "certeza": "baja"})
+revisar("con certeza baja el renglón se lee pero no se propone",
+        principal == uno and certeza == clasificacion.BAJA)
+revisar("si no dice la certeza, no se le regala la más alta",
+        validar({"renglon": uno})[2] == clasificacion.MEDIA)
+
+# Los secundarios pasan por el mismo filtro.
+_, secundarios, _ = validar(
+    {"renglon": uno, "tambien": [otro, 999999, uno], "certeza": "alta"})
+revisar("los renglones secundarios se validan igual que el principal",
+        secundarios == [otro], secundarios)
+
+revisar("el JSON envuelto en ``` se entiende igual",
+        clasificacion._json_de_la_respuesta(
+            '```json\n{"renglon": 3}\n```') == {"renglon": 3})
+
+# Y con la IA apagada, la capa 2 simplemente no corre.
+revisar("con IA_PROVEEDOR=ninguno la capa 2 no corre",
+        not clasificacion.hay_ia(), CONFIG.proveedor)
+revisar("y no rompe nada: devuelve vacío y ya",
+        clasificacion.sugerir_con_ia("x.pdf", b"%PDF", ctx) == [])
+
+# ----------------------------------------------------------
+print("\nF. Aprender de las correcciones")
+# ----------------------------------------------------------
+#
+# Lo más valioso que pasa en el programa: el contador corrige y el
+# programa no vuelve a equivocarse igual.
+
+# Un documento de un tercero que la exógena NO menciona: la capa 1 se
+# queda callada, y eso está bien.
+docu = por_nombre["0001.pdf"]
+revisar("antes de enseñarle, no propone nada para este tercero",
+        clasificacion.sugerir(docu["nombre"], docu["contenido"], ctx) is None)
+
+# El contador lo asigna a mano. Eso es la corrección.
+guardado, tamano = __import__("app.documentos", fromlist=["x"]).guardar_contenido(
+    cliente["id"], docu["nombre"], docu["contenido"])
+fila = db.crear_documento(cliente["id"], docu["nombre"], guardado, "pdf", tamano)
+destino = next(r for r in ctx["renglones"] if r["codigo_renglon"] == "33")
+regla = clasificacion.aprender_de_la_correccion(fila, destino["id"], ctx)
+revisar("la corrección queda guardada como regla", regla is not None, regla)
+revisar("y la regla NO guarda el nombre del archivo ni su contenido",
+        regla and "0001" not in str(regla) and "COMFANDI" not in str(regla).upper())
+
+# Y ahora sí la propone. El contexto se vuelve a armar porque las
+# reglas se cargan con él.
+ctx2 = clasificacion.contexto(cliente["id"])
+propuesta = clasificacion.sugerir(docu["nombre"], docu["contenido"], ctx2)
+revisar("la próxima vez propone lo que él decidió",
+        propuesta and propuesta["codigo"] == "33", propuesta)
+revisar("y dice que salió de una corrección suya",
+        propuesta and propuesta["origen"] == clasificacion.POR_REGLA)
+revisar("con certeza alta: su decisión le gana a cualquier deducción",
+        propuesta and propuesta["certeza"] == clasificacion.ALTA)
+
+# Y sirve en OTRO cliente, porque la regla va por código de renglón.
+tercer = db.crear_cliente("Otro cliente", "44", None)
+db.crear_renglon(tercer["id"], "R33 — Trabajo", codigo_renglon="33",
+                 origen="dian")
+ctx3 = clasificacion.contexto(tercer["id"])
+otra = clasificacion.sugerir(docu["nombre"], docu["contenido"], ctx3)
+revisar("y la misma regla sirve en otro cliente distinto",
+        otra and otra["codigo"] == "33", otra)
+
+# Si el otro cliente no tiene ese renglón, no se le inventa.
+cuarto = db.crear_cliente("Cliente sin ese renglón", "55", None)
+db.crear_renglones(cuarto["id"], ["Soportes de vehículos"])
+ctx4 = clasificacion.contexto(cuarto["id"])
+revisar("pero a un cliente que no tiene ese renglón no se le inventa",
+        clasificacion.sugerir(docu["nombre"], docu["contenido"], ctx4) is None)
+
+# La corrección se puede cambiar: manda la última palabra.
+otro_destino = next(r for r in ctx["renglones"] if r["codigo_renglon"] == "74")
+clasificacion.aprender_de_la_correccion(fila, otro_destino["id"], ctx)
+ctx5 = clasificacion.contexto(cliente["id"])
+cambiada = clasificacion.sugerir(docu["nombre"], docu["contenido"], ctx5)
+revisar("si vuelve a corregir, manda su última palabra",
+        cambiada and cambiada["codigo"] == "74", cambiada)
+
+revisar("y las reglas se pueden ver y borrar: son suyas",
+        len(db.listar_reglas()) >= 1
+        and db.eliminar_regla(db.listar_reglas()[0]["id"]))
+
+# ----------------------------------------------------------
+print("\nG. Varios renglones para un mismo documento")
+# ----------------------------------------------------------
+# Un certificado de ingresos y retenciones soporta el ingreso en un
+# renglón y la retención en otro. Obligar a elegir uno solo sería
+# obligar a subir el mismo papel dos veces.
+
+r_uno = ctx["renglones"][0]["id"]
+r_dos = ctx["renglones"][1]["id"]
+db.asignar_documento(fila["id"], r_uno)
+db.agregar_renglon_a_documento(fila["id"], r_dos)
+puestos_ahora = db.renglones_del_documento(fila["id"])
+revisar("un documento puede ir a dos renglones",
+        len(puestos_ahora) == 2, [r["renglon_id"] for r in puestos_ahora])
+revisar("uno de los dos es el principal",
+        sum(1 for r in puestos_ahora if r["principal"]) == 1)
+revisar("y el principal es el que ve el resto del programa",
+        db.obtener_documento(fila["id"])["renglon_id"] == r_uno)
+
+conteos = db.contar_documentos_por_renglon(cliente["id"])
+revisar("el checklist lo cuenta en los dos renglones",
+        conteos.get(r_uno) == 1 and conteos.get(r_dos) == 1, conteos)
+
+db.quitar_renglon_de_documento(fila["id"], r_uno)
+revisar("quitarle uno deja el otro",
+        len(db.renglones_del_documento(fila["id"])) == 1)
+revisar("y el principal se rehace solo",
+        db.obtener_documento(fila["id"])["renglon_id"] == r_dos)
+
+# ----------------------------------------------------------
+print("\nH. El número: cuántos resuelve la capa 1 sola")
 # ----------------------------------------------------------
 aciertos = 0
 callados_bien = 0

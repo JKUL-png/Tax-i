@@ -1433,6 +1433,87 @@ a.boton-secundario {
   background: var(--superficie);
 }
 
+/* Lo que el programa aprendió corrigiendo. Se ve todo y se borra
+   cualquiera: son reglas del contador, no del programa. */
+.lista-reglas {
+  list-style: none;
+  margin: var(--e3) 0 0;
+  padding: 0;
+}
+
+.regla {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--e3);
+  padding: var(--e3) 0;
+  border-bottom: 1px solid var(--raya);
+}
+
+.regla:last-child { border-bottom: 0; }
+
+.regla-texto {
+  flex: 1 1 20rem;
+  font-size: var(--t-celda);
+  color: var(--texto);
+}
+
+.regla-detalle {
+  flex: 0 0 auto;
+  font-size: var(--t-meta);
+  color: var(--texto-tenue);
+  white-space: nowrap;
+}
+
+/* Los documentos van en dos grupos: los que falta mirar arriba y los
+   ya asignados abajo. */
+.documentos-grupo {
+  margin: var(--e4) 0 var(--e2);
+  font-size: var(--t-rotulo);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--texto-tenue);
+  font-weight: var(--p-fuerte);
+}
+
+.documentos-grupo:first-child { margin-top: 0; }
+
+/* Aceptar de un golpe las propuestas claras. Antes de confirmar se ve
+   la lista entera: aceptar veinte a ciegas es justo el error que este
+   programa no debe dejar cometer. */
+.sugerencias-barra {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--e3);
+  padding: var(--e3);
+  margin-bottom: var(--e3);
+  border: 1px solid var(--primary);
+  border-radius: var(--radio);
+  background: var(--primary-tenue);
+}
+
+/* Cuando lo único que hay es la nota de que la IA está apagada, la
+   barra baja el tono: es información, no una alerta. */
+.sugerencias-barra-tenue {
+  border-color: var(--borde);
+  background: var(--superficie);
+}
+
+.sugerencias-nota {
+  flex: 1 1 100%;
+  margin: 0;
+  font-size: var(--t-meta);
+  color: var(--texto-tenue);
+}
+
+.sugerencias-frase {
+  margin: 0;
+  flex: 1 1 auto;
+  font-size: var(--t-meta);
+  color: var(--texto-secundario);
+}
+
 /* Cuando la pista es fuerte —el NIT del tercero salió del documento y
    está en la exógena— el borde se cierra. Sigue siendo una propuesta:
    la línea punteada se vuelve entera, no se vuelve un botón lleno. */

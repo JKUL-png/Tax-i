@@ -324,6 +324,13 @@ async function cargarConfiguracion() {
     caja.className = config.ia_disponible
       ? "aviso-modo aviso-modo-ia"
       : "aviso-modo";
+
+    /* La lista de documentos lo necesita para decir, sin alarma, que la
+       lectura automática está apagada. */
+    window.hayIA = !!config.ia_disponible;
+    if (typeof cargarDocumentos === "function" && documentosDelCliente) {
+      dibujarDocumentos(documentosDelCliente);
+    }
   } catch (e) {
     // Si no se puede leer, no se muestra nada. No es crítico.
   }

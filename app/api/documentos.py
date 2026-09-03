@@ -8,6 +8,7 @@ from app import (
     importar, lectura,
 )
 from app.api.base import app, campo_lista_de_numeros, cliente_o_404
+from app.configuracion import CONFIG
 from app.servidor import ErrorHttp, Respuesta
 
 
@@ -419,7 +420,114 @@ def api_asignar_documento(peticion, id_documento):
     if renglon_id is not None:
         bitacora.anotar(documento["cliente_id"], bitacora.DOCUMENTO_ASIGNADO,
                         documento["nombre_original"])
+        # Lo más valioso que pasa en el programa: el contador acaba de
+        # enseñar dónde va este tipo de documento. Se guarda para no
+        # volver a proponerle lo mismo mal, y sirve en todos sus
+        # clientes. Ver app/clasificacion.py.
+        try:
+            clasificacion.aprender_de_la_correccion(documento, renglon_id)
+        except Exception:
+            # Aprender es una mejora, no un requisito: si falla, la
+            # asignación que él pidió ya quedó hecha y eso es lo que
+            # importa.
+            pass
+    asignado["renglones"] = db.renglones_del_documento(id_documento)
     return asignado
+
+
+@app.post("/api/documentos/{id_documento}/renglones", codigo=201)
+def api_agregar_renglon(peticion, id_documento):
+    """Le suma un renglón a un documento SIN quitarle los que ya tenía.
+
+    Un certificado de ingresos y retenciones soporta el ingreso en un
+    renglón y la retención en otro. Obligar a elegir uno solo sería
+    obligar a subir el mismo papel dos veces.
+    """
+    documento = db.obtener_documento(id_documento)
+    if documento is None:
+        raise ErrorHttp(404, "Ese documento no existe.")
+
+    renglon_id = peticion.diccionario().get("renglon_id")
+    if not isinstance(renglon_id, int) or isinstance(renglon_id, bool):
+        raise ErrorHttp(400, "El renglón tiene que ser un número.")
+    renglon = db.obtener_renglon(renglon_id)
+    if renglon is None:
+        raise ErrorHttp(404, "Ese renglón no existe.")
+    if renglon["cliente_id"] != documento["cliente_id"]:
+        raise ErrorHttp(400, "Ese renglón es de otro cliente.")
+
+    db.actualizar_renglon(renglon_id, estado=checklist.RECIBIDO)
+    renglones = db.agregar_renglon_a_documento(id_documento, renglon_id)
+    bitacora.anotar(documento["cliente_id"], bitacora.DOCUMENTO_ASIGNADO,
+                    documento["nombre_original"])
+    return {"renglones": renglones}
+
+
+@app.delete("/api/documentos/{id_documento}/renglones/{id_renglon}")
+def api_quitar_renglon(peticion, id_documento, id_renglon):
+    """Le quita UN renglón a un documento. Los otros se quedan."""
+    documento = db.obtener_documento(id_documento)
+    if documento is None:
+        raise ErrorHttp(404, "Ese documento no existe.")
+    db.quitar_renglon_de_documento(id_documento, int(id_renglon))
+
+
+@app.post("/api/clientes/{id_cliente}/documentos/aceptar-sugerencias")
+def api_aceptar_sugerencias(peticion, id_cliente):
+    """Acepta de un golpe las sugerencias de certeza alta.
+
+    El contador ve la lista ANTES de confirmar —la pantalla se la
+    muestra— y manda aquí los documentos que aprobó. No se acepta nada
+    que él no haya mirado: por eso van los ids y no un «acepte todas».
+    """
+    cliente_o_404(id_cliente)
+    ids = campo_lista_de_numeros(peticion.diccionario(), "ids")
+    if not ids:
+        raise ErrorHttp(400, "No llegó ningún documento que aceptar.")
+
+    guardadas = db.sugerencias_del_cliente(id_cliente)
+    aceptados = 0
+
+    for id_documento in ids:
+        documento = db.obtener_documento(id_documento)
+        if documento is None or documento["cliente_id"] != id_cliente:
+            continue
+        if documento["renglon_id"] is not None:
+            continue
+        propuestas = [s for s in guardadas.get(id_documento, [])
+                      if s["certeza"] == clasificacion.ALTA]
+        if not propuestas:
+            continue
+        renglon_id = propuestas[0]["renglon_id"]
+        if db.obtener_renglon(renglon_id) is None:
+            continue
+        db.actualizar_renglon(renglon_id, estado=checklist.RECIBIDO)
+        db.asignar_documento(id_documento, renglon_id)
+        aceptados += 1
+
+    if aceptados:
+        bitacora.anotar(id_cliente, bitacora.DOCUMENTO_ASIGNADO, "", aceptados)
+    return {"aceptados": aceptados}
+
+
+@app.post("/api/clientes/{id_cliente}/documentos/clasificar")
+def api_clasificar(peticion, id_cliente):
+    """Vuelve a mirar los documentos sin asignar.
+
+    Con con_ia=true corre además la capa 2, que es la que cuesta. Sin
+    eso corre solo la capa 1, que es gratis y local.
+    """
+    cliente_o_404(id_cliente)
+    datos = peticion.diccionario()
+    con_ia = bool(datos.get("con_ia"))
+
+    if con_ia and not clasificacion.hay_ia():
+        raise ErrorHttp(409, CONFIG.motivo or "La IA está apagada.")
+
+    db.marcar_para_clasificar(id_cliente)
+    arrancó = clasificacion.arrancar(id_cliente, con_ia=con_ia)
+    return {"arrancó": arrancó, "con_ia": con_ia,
+            "hay_ia": clasificacion.hay_ia()}
 
 
 # ----------------------------------------------------------

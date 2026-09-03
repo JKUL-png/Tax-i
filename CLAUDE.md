@@ -60,7 +60,7 @@ asistente-renta/
 │   ├── extraccion.py     # leerle los datos a un documento UNA vez
 │   ├── exogena.py        # leer el reporte de la DIAN. Solo parseo, sin IA
 │   ├── exogena_cliente.py # los renglones y la tabla de cada cliente
-│   ├── clasificacion.py  # a qué renglón se parece cada documento, sin IA
+│   ├── clasificacion.py  # a qué renglón va cada documento, y lo aprendido
 │   ├── cola.py           # la fila de documentos por leer, en otro hilo
 │   ├── respaldo.py       # llevarse todo en un ZIP, y traerlo de vuelta
 │   ├── demostracion.py   # el cliente inventado, para mostrar el programa
@@ -223,8 +223,28 @@ abrir uno por uno. `app/clasificacion.py` le propone dónde va cada uno.
   dice nada, se queda callado. Callarse es una respuesta correcta y frecuente.
 - **Clasificar arranca solo; leer con IA no.** Es la regla de la casa: lo que
   es gratis y pasa en este computador ocurre sin pedir permiso; lo que cuesta
-  plata lo pide el contador. Por eso la clasificación corre al confirmar la
-  carga y la cola de lectura espera a que él la arranque.
+  plata lo pide el contador. Por eso la capa 1 corre al confirmar la carga y
+  la capa 2 —y la cola de lectura— esperan a que él las arranque.
+- **La capa 2 elige de una lista cerrada, y se valida en código.** Solo los
+  renglones que ese cliente ya tiene. Pedirle al modelo que no invente no es
+  lo mismo que impedírselo: la respuesta se compara contra la lista y lo que
+  no esté se descarta. **«No sé» es una respuesta correcta y esperada**, y no
+  se le empuja a contestar. Nunca se le piden cifras: eso lo hace
+  `app/extraccion.py`, una sola vez por documento.
+- **Un documento puede ir a varios renglones.** Un certificado de ingresos y
+  retenciones soporta el ingreso en uno y la retención en otro.
+  `documentos.renglon_id` guarda el principal —es donde el resto del programa
+  ya sabe buscarlo— y `documento_renglones` guarda todos.
+- **Cuando el contador corrige, el programa aprende.** Se guarda qué tercero,
+  qué clase de papel y a qué renglón lo mandó él, **por código de renglón del
+  210 y nunca por id**: así una corrección hecha en un cliente sirve en todos.
+  Las reglas se ven y se borran en Cuenta y ajustes: un programa que aprende
+  sin que se pueda ver qué aprendió es un programa en el que no se puede
+  confiar. Las reglas no guardan ni el nombre de un cliente, ni el de un
+  archivo, ni una letra de su contenido.
+- **Aceptar varias de un golpe muestra la lista antes de confirmar.** Aceptar
+  veinte propuestas a ciegas es justo el error que este programa no debe
+  dejar cometer.
 - La mitad de los archivos llega con nombre de cámara o de escáner
   (`IMG_20260315.jpg`, `scan0001.pdf`). Por eso el nombre del archivo es la
   fuente más débil: la que trabaja de verdad es el texto cruzado con la
@@ -317,7 +337,7 @@ consentimiento al desarrollador.
     .venv/bin/python pruebas/probar_respaldo.py      # llevarse todo y devolverlo
     .venv/bin/python pruebas/probar_demostracion.py  # el modo demostración
     .venv/bin/python pruebas/probar_exogena.py       # el lector de la exógena
-    .venv/bin/python pruebas/probar_clasificacion.py # clasificar sin IA
+    .venv/bin/python pruebas/probar_clasificacion.py # clasificar y aprender
 
 `probar_pantallas.py` abre Chromium de verdad y falla si el JavaScript revienta.
 Hace falta porque un error de JavaScript no se ve desde el servidor: la página

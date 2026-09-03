@@ -601,3 +601,96 @@ if (demoInterruptor) {
 
 cargarRevision(false);
 cargarDemostracion();
+
+
+/* ==========================================================
+   Lo que el programa aprendió corrigiendo
+
+   Cada vez que el contador cambia a qué renglón va un documento, eso
+   queda anotado. Aquí las ve todas y borra la que no le sirva.
+
+   Un programa que aprende sin que se pueda ver qué aprendió es un
+   programa en el que no se puede confiar.
+   ========================================================== */
+
+(function () {
+  "use strict";
+
+  const lista = document.getElementById("lista-reglas");
+  const aviso = document.getElementById("aviso-reglas");
+  if (!lista) return;
+
+  async function cargar() {
+    try {
+      const respuesta = await fetch("/api/reglas");
+      if (!respuesta.ok) throw new Error();
+      pintar(await respuesta.json());
+    } catch (e) {
+      lista.innerHTML =
+        '<li class="vacio">No se pudieron cargar las reglas.</li>';
+    }
+  }
+
+  function pintar(reglas) {
+    lista.innerHTML = "";
+
+    if (!reglas.length) {
+      const vacio = document.createElement("li");
+      vacio.className = "vacio";
+      vacio.textContent =
+        "Todavía no ha corregido ninguna sugerencia, así que no hay nada"
+        + " aprendido. Cuando cambie a qué renglón va un documento,"
+        + " aparecerá aquí.";
+      lista.appendChild(vacio);
+      return;
+    }
+
+    reglas.forEach(function (regla) {
+      const fila = document.createElement("li");
+      fila.className = "regla";
+
+      const texto = document.createElement("div");
+      texto.className = "regla-texto";
+      texto.textContent = regla.frase;
+      fila.appendChild(texto);
+
+      const detalle = document.createElement("div");
+      detalle.className = "regla-detalle";
+      detalle.textContent = regla.veces === 1
+        ? "La confirmó 1 vez"
+        : "La confirmó " + regla.veces + " veces";
+      fila.appendChild(detalle);
+
+      const borrar = document.createElement("button");
+      borrar.type = "button";
+      borrar.className = "boton-texto peligro";
+      borrar.textContent = "Borrar";
+      borrar.addEventListener("click", function () {
+        quitar(regla);
+      });
+      fila.appendChild(borrar);
+
+      lista.appendChild(fila);
+    });
+  }
+
+  async function quitar(regla) {
+    const seguro = window.confirm(
+      "¿Borrar esta regla?\n\n" + regla.frase
+      + "\n\nEl programa deja de proponer eso. Los documentos que ya"
+      + " asignó NO se tocan."
+    );
+    if (!seguro) return;
+
+    try {
+      const respuesta = await fetch("/api/reglas/" + regla.id,
+                                    { method: "DELETE" });
+      if (!respuesta.ok) throw new Error();
+      await cargar();
+    } catch (e) {
+      avisarEn(aviso, "No se pudo borrar la regla.", "error");
+    }
+  }
+
+  cargar();
+})();

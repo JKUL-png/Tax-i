@@ -97,10 +97,138 @@ function dibujarDocumentos(documentos) {
   }
 
   barraDocumentos.className = "revision-barra";
-  documentos.forEach(function (documento) {
-    contenedorLista.appendChild(dibujarDocumento(documento));
-  });
+
+  /* Los que todavía no están asignados van arriba y juntos: son los
+     que le falta mirar. Los que ya asignó quedan abajo, que es donde
+     se dejan las cosas hechas. */
+  const sinAsignar = documentos.filter(function (d) { return !d.renglon_id; });
+  const asignados = documentos.filter(function (d) { return d.renglon_id; });
+
+  if (sinAsignar.length) {
+    contenedorLista.appendChild(
+      barraDeSugerencias(sinAsignar));
+    contenedorLista.appendChild(
+      encabezadoDeGrupo("Sin asignar", sinAsignar.length));
+    sinAsignar.forEach(function (documento) {
+      contenedorLista.appendChild(dibujarDocumento(documento));
+    });
+  }
+
+  if (asignados.length) {
+    contenedorLista.appendChild(
+      encabezadoDeGrupo("Ya asignados", asignados.length));
+    asignados.forEach(function (documento) {
+      contenedorLista.appendChild(dibujarDocumento(documento));
+    });
+  }
+
   refrescarSeleccionDocs();
+}
+
+function encabezadoDeGrupo(texto, cuantos) {
+  const titulo = document.createElement("h3");
+  titulo.className = "documentos-grupo";
+  titulo.textContent = texto + " (" + cuantos + ")";
+  return titulo;
+}
+
+/* La barra de aceptar todas las de certeza alta.
+
+   Antes de confirmar se ve LA LISTA: cuáles documentos y a qué renglón
+   va cada uno. Aceptar a ciegas veinte propuestas es exactamente el
+   error que este programa no debe dejar cometer. */
+function barraDeSugerencias(sinAsignar) {
+  const caja = document.createElement("div");
+  caja.className = "sugerencias-barra";
+
+  const altas = sinAsignar.filter(function (d) {
+    return (d.sugerencias || []).some(function (s) {
+      return s.certeza === "alta";
+    });
+  });
+
+  const sinPropuesta = sinAsignar.filter(function (d) {
+    return !(d.sugerencias || []).length;
+  });
+
+  if (!altas.length && !sinPropuesta.length) {
+    caja.classList.add("oculto");
+    return caja;
+  }
+
+  if (altas.length) {
+    const frase = document.createElement("p");
+    frase.className = "sugerencias-frase";
+    frase.textContent = altas.length === 1
+      ? "Hay 1 documento con una propuesta clara."
+      : "Hay " + altas.length + " documentos con una propuesta clara.";
+    caja.appendChild(frase);
+
+    const boton = document.createElement("button");
+    boton.type = "button";
+    boton.className = "boton-texto";
+    boton.textContent = "Verlas y aceptarlas todas";
+    boton.addEventListener("click", function () {
+      aceptarLasClaras(altas);
+    });
+    caja.appendChild(boton);
+  }
+
+  /* Sin IA configurada, Tax-i sigue proponiendo: lo hace con el NIT y
+     el nombre del tercero, con la exógena y con lo que usted le enseñó
+     corrigiendo. Lo único que falta es la lectura automática, y se dice
+     así, sin alarma: no está roto, está apagado. */
+  if (sinPropuesta.length && !window.hayIA) {
+    const nota = document.createElement("p");
+    nota.className = "sugerencias-nota";
+    nota.textContent =
+      sinPropuesta.length + " quedaron sin propuesta. La lectura"
+      + " automática está apagada; con ella prendida, Tax-i podría"
+      + " proponer algo para varios de estos. Se prende en Cuenta y"
+      + " ajustes.";
+    caja.appendChild(nota);
+    if (!altas.length) caja.classList.add("sugerencias-barra-tenue");
+  }
+
+  return caja;
+}
+
+async function aceptarLasClaras(documentos) {
+  /* La lista, entera, antes de tocar nada. */
+  const lineas = documentos.map(function (documento) {
+    const propuesta = documento.sugerencias.find(function (s) {
+      return s.certeza === "alta";
+    });
+    const renglon = renglonesDelCliente.find(function (r) {
+      return r.id === propuesta.renglon_id;
+    });
+    return "· " + documento.nombre_original + "\n     → "
+           + (renglon ? renglon.titulo : "") + "  (" + propuesta.origen_texto + ")";
+  });
+
+  const seguro = window.confirm(
+    "Se van a asignar " + documentos.length + " documento(s):\n\n"
+    + lineas.join("\n") + "\n\n"
+    + "Puede cambiar cualquiera después, uno por uno."
+  );
+  if (!seguro) return;
+
+  try {
+    const respuesta = await fetch(
+      "/api/clientes/" + idCliente + "/documentos/aceptar-sugerencias", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ids: documentos.map(function (d) { return d.id; })
+        })
+      });
+    if (!respuesta.ok) throw new Error();
+    await cargarChecklist();
+    await cargarDocumentos();
+    cargarHistorial();
+  } catch (e) {
+    avisarEn(avisoDocumentos, "No se pudieron aceptar las propuestas.", "error");
+  }
 }
 
 function dibujarDocumento(documento) {

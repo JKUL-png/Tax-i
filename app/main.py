@@ -41,7 +41,7 @@ from app.api.base import app
 # El orden no importa: las direcciones no se pisan entre sí.
 from app.api import (
     checklist, chat, clientes, cuenta, documentos, exogena, formulario,
-    importar, paginas, respaldo, resumen, sistema,
+    importar, paginas, reglas, respaldo, resumen, sistema,
 )
 
 # Esta tupla no se usa para nada más que dejar constancia de que los
@@ -49,7 +49,7 @@ from app.api import (
 # importarse. Sin ella parecen imports olvidados y alguien los borraría.
 MODULOS = (
     paginas, clientes, documentos, importar, checklist, resumen,
-    formulario, exogena, chat, cuenta, respaldo, sistema,
+    formulario, exogena, reglas, chat, cuenta, respaldo, sistema,
 )
 
 

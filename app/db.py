@@ -470,6 +470,75 @@ def crear_tablas():
             " ON sugerencias (cliente_id)"
         )
 
+        # A qué renglones va un documento. Son VARIOS a propósito: un
+        # certificado de ingresos y retenciones soporta el ingreso en un
+        # renglón y la retención en otro, y obligar a elegir uno solo
+        # sería obligar a subir el mismo papel dos veces.
+        #
+        # documentos.renglon_id se queda como EL PRINCIPAL. No es otra
+        # verdad: es la misma, guardada donde el resto del programa ya
+        # sabe buscarla (el conteo del checklist, la columna «Soporte
+        # cargado» de la exógena). Esta capa las mantiene iguales.
+        conexion.execute(
+            """
+            CREATE TABLE IF NOT EXISTS documento_renglones (
+                id           INTEGER PRIMARY KEY AUTOINCREMENT,
+                documento_id INTEGER NOT NULL,
+                cliente_id   INTEGER NOT NULL,
+                renglon_id   INTEGER NOT NULL,
+                principal    INTEGER NOT NULL DEFAULT 0,
+                asignado_en  TEXT NOT NULL,
+                FOREIGN KEY (documento_id) REFERENCES documentos(id)
+                    ON DELETE CASCADE,
+                FOREIGN KEY (renglon_id) REFERENCES checklist(id)
+                    ON DELETE CASCADE
+            )
+            """
+        )
+        conexion.execute(
+            "CREATE UNIQUE INDEX IF NOT EXISTS idx_doc_renglon"
+            " ON documento_renglones (documento_id, renglon_id)"
+        )
+        conexion.execute(
+            "CREATE INDEX IF NOT EXISTS idx_doc_renglon_cliente"
+            " ON documento_renglones (cliente_id)"
+        )
+
+        # Lo que el contador corrigió, para no volver a proponerle lo
+        # mismo mal.
+        #
+        # Se guarda por CÓDIGO de renglón del 210 y por título, nunca por
+        # id: los ids son de cada cliente y los códigos no. Eso es lo que
+        # hace que una corrección hecha en un cliente sirva en todos los
+        # demás, que es de lo que se trata: el contador arregla una vez y
+        # el programa aprende para siempre.
+        conexion.execute(
+            """
+            CREATE TABLE IF NOT EXISTS reglas_aprendidas (
+                id             INTEGER PRIMARY KEY AUTOINCREMENT,
+                -- Quién emite el documento: su NIT si se pudo leer, y
+                -- si no, las palabras con que se le reconoce.
+                tercero        TEXT NOT NULL,
+                tercero_nombre TEXT NOT NULL DEFAULT '',
+                -- Qué clase de papel es: 'cesantias', 'predial'... Vacío
+                -- cuando no se pudo saber, y entonces la regla vale para
+                -- cualquier documento de ese tercero.
+                tipo           TEXT NOT NULL DEFAULT '',
+                codigo_renglon TEXT NOT NULL DEFAULT '',
+                titulo         TEXT NOT NULL DEFAULT '',
+                -- Cuántas veces la ha confirmado. Una regla que él
+                -- repitió cinco veces pesa más que una de una sola vez.
+                veces          INTEGER NOT NULL DEFAULT 1,
+                creada_en      TEXT NOT NULL,
+                actualizada_en TEXT NOT NULL
+            )
+            """
+        )
+        conexion.execute(
+            "CREATE UNIQUE INDEX IF NOT EXISTS idx_regla_llave"
+            " ON reglas_aprendidas (tercero, tipo)"
+        )
+
         # --- Cambios sobre bases que ya existían ---
         # Si la base se creó con una versión anterior del programa, le falta
         # la columna "notas". Se agrega aquí en vez de pedirle al contador
@@ -504,6 +573,20 @@ def crear_tablas():
         # formulario 210 ("32") y quedan marcados con su origen. Los que
         # ya existían los escribió el contador, así que 'contador' es el
         # valor correcto por defecto.
+        # Las asignaciones que ya existían pasan a la tabla nueva. Sin
+        # esto, un contador que actualiza el programa vería el checklist
+        # en ceros: los conteos ahora se sacan de documento_renglones.
+        ya_hay = conexion.execute(
+            "SELECT COUNT(*) AS cuantos FROM documento_renglones"
+        ).fetchone()["cuantos"]
+        if not ya_hay:
+            conexion.execute(
+                "INSERT OR IGNORE INTO documento_renglones (documento_id,"
+                " cliente_id, renglon_id, principal, asignado_en)"
+                " SELECT id, cliente_id, renglon_id, 1, subido_en"
+                " FROM documentos WHERE renglon_id IS NOT NULL"
+            )
+
         columnas_checklist = {
             fila["name"]
             for fila in conexion.execute("PRAGMA table_info(checklist)")
@@ -1079,6 +1162,27 @@ def asignar_documento(id_documento, renglon_id):
             "UPDATE documentos SET renglon_id = ? WHERE id = ?",
             (renglon_id, id_documento),
         )
+        # Y la tabla de varios renglones queda igual: asignar por esta
+        # puerta significa «este es EL renglón», así que reemplaza lo que
+        # hubiera. Para sumar uno sin quitar los otros está
+        # agregar_renglon_a_documento.
+        conexion.execute(
+            "DELETE FROM documento_renglones WHERE documento_id = ?",
+            (id_documento,),
+        )
+        if renglon_id is not None:
+            fila = conexion.execute(
+                "SELECT cliente_id FROM documentos WHERE id = ?",
+                (id_documento,),
+            ).fetchone()
+            if fila is not None:
+                conexion.execute(
+                    "INSERT OR IGNORE INTO documento_renglones (documento_id,"
+                    " cliente_id, renglon_id, principal, asignado_en)"
+                    " VALUES (?, ?, ?, 1, ?)",
+                    (id_documento, fila["cliente_id"], renglon_id,
+                     datetime.now().isoformat(timespec="seconds")),
+                )
     return obtener_documento(id_documento)
 
 
@@ -1093,15 +1197,19 @@ def desasignar_renglon(renglon_id):
             "UPDATE documentos SET renglon_id = NULL WHERE renglon_id = ?",
             (renglon_id,),
         )
+        conexion.execute(
+            "DELETE FROM documento_renglones WHERE renglon_id = ?",
+            (renglon_id,),
+        )
 
 
 def contar_documentos_por_renglon(cliente_id):
     """Cuántos documentos tiene asignado cada renglón: {renglon_id: cantidad}."""
     with conectar() as conexion:
         filas = conexion.execute(
-            "SELECT renglon_id, COUNT(*) AS cantidad FROM documentos"
-            " WHERE cliente_id = ? AND renglon_id IS NOT NULL"
-            " GROUP BY renglon_id",
+            "SELECT renglon_id, COUNT(*) AS cantidad"
+            " FROM documento_renglones"
+            " WHERE cliente_id = ? GROUP BY renglon_id",
             (cliente_id,),
         ).fetchall()
     return {fila["renglon_id"]: fila["cantidad"] for fila in filas}
@@ -1696,3 +1804,182 @@ def marcar_para_clasificar(cliente_id):
             (cliente_id,),
         )
     return cursor.rowcount
+
+
+# ----------------------------------------------------------
+# A qué renglones va un documento
+# ----------------------------------------------------------
+#
+# Un documento puede ir a varios: el certificado de ingresos y
+# retenciones soporta el ingreso en uno y la retención en otro.
+#
+# documentos.renglon_id guarda EL PRINCIPAL, y estas funciones lo
+# mantienen igual a lo que dice la tabla. No son dos verdades: es la
+# misma, en el sitio donde el resto del programa ya sabe buscarla.
+
+
+def _rehacer_principal(conexion, documento_id):
+    """Deja documentos.renglon_id igual a lo que diga la tabla."""
+    fila = conexion.execute(
+        "SELECT renglon_id FROM documento_renglones WHERE documento_id = ?"
+        " ORDER BY principal DESC, id LIMIT 1",
+        (documento_id,),
+    ).fetchone()
+    conexion.execute(
+        "UPDATE documentos SET renglon_id = ? WHERE id = ?",
+        (fila["renglon_id"] if fila else None, documento_id),
+    )
+
+
+def renglones_del_documento(documento_id):
+    """Todos los renglones de un documento, el principal primero."""
+    with conectar() as conexion:
+        filas = conexion.execute(
+            "SELECT r.*, c.titulo, c.codigo_renglon"
+            " FROM documento_renglones r"
+            " JOIN checklist c ON c.id = r.renglon_id"
+            " WHERE r.documento_id = ? ORDER BY r.principal DESC, r.id",
+            (documento_id,),
+        ).fetchall()
+    salida = []
+    for fila in filas:
+        dato = dict(fila)
+        dato["principal"] = bool(dato["principal"])
+        salida.append(dato)
+    return salida
+
+
+def renglones_por_documento(cliente_id):
+    """Lo mismo para todos los documentos de un cliente, de un viaje."""
+    with conectar() as conexion:
+        filas = conexion.execute(
+            "SELECT r.*, c.titulo, c.codigo_renglon"
+            " FROM documento_renglones r"
+            " JOIN checklist c ON c.id = r.renglon_id"
+            " WHERE r.cliente_id = ? ORDER BY r.documento_id,"
+            " r.principal DESC, r.id",
+            (cliente_id,),
+        ).fetchall()
+    agrupados = {}
+    for fila in filas:
+        dato = dict(fila)
+        dato["principal"] = bool(dato["principal"])
+        agrupados.setdefault(dato["documento_id"], []).append(dato)
+    return agrupados
+
+
+def agregar_renglon_a_documento(documento_id, renglon_id, principal=False):
+    """Le suma un renglón a un documento sin quitarle los que ya tenía."""
+    ahora = datetime.now().isoformat(timespec="seconds")
+    with conectar() as conexion:
+        documento = conexion.execute(
+            "SELECT cliente_id FROM documentos WHERE id = ?", (documento_id,)
+        ).fetchone()
+        if documento is None:
+            return None
+        if principal:
+            conexion.execute(
+                "UPDATE documento_renglones SET principal = 0"
+                " WHERE documento_id = ?", (documento_id,)
+            )
+        conexion.execute(
+            "INSERT OR IGNORE INTO documento_renglones"
+            " (documento_id, cliente_id, renglon_id, principal, asignado_en)"
+            " VALUES (?, ?, ?, ?, ?)",
+            (documento_id, documento["cliente_id"], renglon_id,
+             1 if principal else 0, ahora),
+        )
+        if principal:
+            conexion.execute(
+                "UPDATE documento_renglones SET principal = 1"
+                " WHERE documento_id = ? AND renglon_id = ?",
+                (documento_id, renglon_id),
+            )
+        _rehacer_principal(conexion, documento_id)
+    return renglones_del_documento(documento_id)
+
+
+def quitar_renglon_de_documento(documento_id, renglon_id):
+    """Le quita UN renglón. Los otros se quedan."""
+    with conectar() as conexion:
+        conexion.execute(
+            "DELETE FROM documento_renglones WHERE documento_id = ?"
+            " AND renglon_id = ?", (documento_id, renglon_id)
+        )
+        _rehacer_principal(conexion, documento_id)
+    return renglones_del_documento(documento_id)
+
+
+# ----------------------------------------------------------
+# Las reglas que el contador enseñó
+# ----------------------------------------------------------
+
+
+def guardar_regla(tercero, tipo, codigo_renglon, titulo, tercero_nombre=""):
+    """Aprende una corrección, o le suma una vez a la que ya existía."""
+    if not tercero or (not codigo_renglon and not titulo):
+        return None
+    ahora = datetime.now().isoformat(timespec="seconds")
+    with conectar() as conexion:
+        existente = conexion.execute(
+            "SELECT * FROM reglas_aprendidas WHERE tercero = ? AND tipo = ?",
+            (tercero, tipo or ""),
+        ).fetchone()
+        if existente:
+            # Si volvió a mandar el mismo documento al mismo renglón, la
+            # regla se refuerza. Si lo mandó a otro, manda lo último: la
+            # última palabra del contador es la que vale.
+            mismo = (existente["codigo_renglon"] == codigo_renglon
+                     and existente["titulo"] == titulo)
+            conexion.execute(
+                "UPDATE reglas_aprendidas SET codigo_renglon = ?, titulo = ?,"
+                " tercero_nombre = ?, veces = ?, actualizada_en = ?"
+                " WHERE id = ?",
+                (codigo_renglon, titulo, tercero_nombre or
+                 existente["tercero_nombre"],
+                 existente["veces"] + 1 if mismo else 1, ahora,
+                 existente["id"]),
+            )
+            id_regla = existente["id"]
+        else:
+            cursor = conexion.execute(
+                "INSERT INTO reglas_aprendidas (tercero, tercero_nombre,"
+                " tipo, codigo_renglon, titulo, veces, creada_en,"
+                " actualizada_en) VALUES (?, ?, ?, ?, ?, 1, ?, ?)",
+                (tercero, tercero_nombre, tipo or "", codigo_renglon, titulo,
+                 ahora, ahora),
+            )
+            id_regla = cursor.lastrowid
+    return obtener_regla(id_regla)
+
+
+def obtener_regla(id_regla):
+    with conectar() as conexion:
+        fila = conexion.execute(
+            "SELECT * FROM reglas_aprendidas WHERE id = ?", (id_regla,)
+        ).fetchone()
+    return dict(fila) if fila else None
+
+
+def listar_reglas():
+    """Todas las reglas aprendidas, las más usadas primero.
+
+    No llevan cliente: una corrección hecha en un cliente sirve en
+    todos. Y no guardan nada del documento, solo quién lo emite y a qué
+    renglón va.
+    """
+    with conectar() as conexion:
+        filas = conexion.execute(
+            "SELECT * FROM reglas_aprendidas"
+            " ORDER BY veces DESC, actualizada_en DESC"
+        ).fetchall()
+    return [dict(fila) for fila in filas]
+
+
+def eliminar_regla(id_regla):
+    """Borra una regla. Son del contador: él las quita cuando quiera."""
+    with conectar() as conexion:
+        cursor = conexion.execute(
+            "DELETE FROM reglas_aprendidas WHERE id = ?", (id_regla,)
+        )
+    return cursor.rowcount > 0

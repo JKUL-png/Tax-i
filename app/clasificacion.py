@@ -55,19 +55,41 @@ MEDIA = "media"
 BAJA = "baja"
 
 # De dónde salió cada sugerencia.
+POR_REGLA = "regla"
 POR_EXOGENA = "exogena"
 POR_XML = "xml"
 POR_TEXTO = "texto"
 POR_NOMBRE = "nombre"
+POR_IA = "ia"
 
 # Cómo se lee cada origen en pantalla. En este programa nada se muestra
 # sin decir de dónde salió.
 ORIGENES = {
+    POR_REGLA: "porque usted lo corrigió antes",
     POR_EXOGENA: "por la exógena",
     POR_XML: "por el XML de la factura",
     POR_TEXTO: "por el texto del documento",
     POR_NOMBRE: "por el nombre del archivo",
+    POR_IA: "lectura automática — verificar",
 }
+
+# Las clases de papel que se reconocen por una palabra. Sirven para que
+# una corrección sea específica: «los certificados de cesantías de
+# Porvenir van a R36» y no «todo lo de Porvenir va a R36».
+#
+# Es una lista corta y cerrada a propósito. No es una clasificación
+# tributaria: es una etiqueta para agrupar correcciones.
+TIPOS = (
+    ("cesantias", ("cesantia", "cesantias")),
+    ("ingresos_retenciones", ("retenciones", "ingresos y retenciones",
+                              "formulario 220")),
+    ("predial", ("predial", "avaluo", "catastral")),
+    ("extracto", ("extracto", "movimientos")),
+    ("factura", ("factura", "documento soporte")),
+    ("retencion", ("retencion", "retefuente")),
+    ("pension", ("pension", "pensiones")),
+    ("saldo", ("saldo", "certificado bancario", "declaracion de renta")),
+)
 
 # Palabras que van al final del nombre de casi toda empresa colombiana y
 # no distinguen a ninguna. Se quitan antes de comparar nombres.
@@ -95,6 +117,10 @@ PALABRAS_DE_TODOS = {
 
 # Una palabra más corta que esto no alcanza para reconocer a nadie.
 LARGO_MINIMO_DE_PALABRA = 5
+
+# Cuántos renglones de al lado se ofrecen como secundarios. Más de tres
+# deja de ser una ayuda y pasa a ser una lista para descartar a mano.
+SECUNDARIOS_MAXIMOS = 3
 
 # Los NIT colombianos de empresa tienen 9 dígitos y a veces vienen con
 # el dígito de verificación pegado. Se buscan tiras de 8 a 11 dígitos,
@@ -195,17 +221,93 @@ def contexto(cliente_id):
                 # propone el más frecuente, pero con menos certeza.
                 "certeza": MEDIA if hay_empate else ALTA,
                 "cuantos_renglones": len(codigos),
+                # Los demás renglones de ese tercero, del que más veces
+                # reporta al que menos. Se ofrecen como secundarios.
+                "otros_codigos": [c for c, _ in mejor[1:]],
             })
 
     _repartir_palabras_propias(terceros)
 
+    # Las reglas que el contador enseñó corrigiendo. No son de este
+    # cliente: valen para todos, porque van por código de renglón y no
+    # por id. Ver db.guardar_regla.
+    reglas = {}
+    for regla in db.listar_reglas():
+        reglas[(regla["tercero"], regla["tipo"])] = regla
+
     return {
         "cliente_id": cliente_id,
         "renglones": renglones,
+        "por_codigo": por_codigo,
+        "por_titulo": {lectura.normalizar(r["titulo"]): r for r in renglones},
         "terceros": terceros,
+        "reglas": reglas,
         "identificacion": propia,
         "hay_exogena": carga is not None,
     }
+
+
+def tipo_de_documento(nombre_archivo, texto):
+    """Qué clase de papel es, en una palabra. Vacío si no se sabe.
+
+    Es una etiqueta para agrupar correcciones, NO una clasificación
+    tributaria: el programa no dice qué es deducible ni cómo se declara.
+    """
+    donde = lectura.normalizar(nombre_archivo + " " + (texto or "")[:1500])
+    for etiqueta, palabras in TIPOS:
+        if any(palabra in donde for palabra in palabras):
+            return etiqueta
+    return ""
+
+
+def llave_del_tercero(tercero=None, texto="", nombre_archivo=""):
+    """Con qué se reconoce a quien emitió el documento.
+
+    Su NIT cuando se pudo leer, porque es el único que no cambia. Si no
+    hay NIT, las palabras con que se le reconoce, ordenadas para que la
+    misma entidad dé siempre la misma llave.
+    """
+    if tercero:
+        if tercero.get("nit"):
+            return "nit:" + tercero["nit"]
+        if tercero.get("palabras"):
+            return "nombre:" + " ".join(sorted(tercero["palabras"]))
+    nits = nits_del_texto(texto)
+    if nits:
+        # El más largo: el NIT completo antes que un pedazo suyo.
+        return "nit:" + sorted(nits, key=len, reverse=True)[0]
+    palabras = lectura.palabras_utiles(nombre_archivo)
+    palabras = {p for p in palabras if len(p) >= LARGO_MINIMO_DE_PALABRA
+                and p not in PALABRAS_DE_TODOS}
+    if palabras:
+        return "nombre:" + " ".join(sorted(palabras))
+    return ""
+
+
+def _renglon_de_la_regla(regla, contexto_cliente):
+    """El renglón de ESTE cliente que corresponde a una regla aprendida.
+
+    Primero por el código del 210, que es el que no cambia de cliente a
+    cliente. Si no, por el título. Si el cliente no tiene ese renglón,
+    la regla no aplica y no se propone nada: no se le inventa un renglón
+    que él no creó.
+    """
+    codigo = regla.get("codigo_renglon") or ""
+    if codigo and codigo in contexto_cliente["por_codigo"]:
+        return contexto_cliente["por_codigo"][codigo]
+    titulo = regla.get("titulo") or ""
+    return contexto_cliente["por_titulo"].get(titulo)
+
+
+def _regla_que_aplica(contexto_cliente, llave, tipo):
+    """La regla más específica que sirva: primero con tipo, después sin él."""
+    if not llave:
+        return None
+    for clave in ((llave, tipo), (llave, "")):
+        regla = contexto_cliente["reglas"].get(clave)
+        if regla is not None:
+            return regla
+    return None
 
 
 def _repartir_palabras_propias(terceros):
@@ -340,6 +442,37 @@ def sugerir_todas(nombre_archivo, contenido, contexto_cliente):
 
     nombre_normal = lectura.normalizar(nombre_archivo)
 
+    # El texto se saca UNA vez y se reparte: lo usan la regla aprendida,
+    # el cruce con la exógena y —cuando llegue— la capa 2.
+    texto, _motivo = lectura.texto_del_documento(nombre_archivo, contenido)
+    texto_normal = lectura.normalizar(texto)
+    tipo = tipo_de_documento(nombre_archivo, texto)
+
+    # Quién emite el documento, que es lo que la regla aprendida usa.
+    quien = (_tercero_por_nit(contexto_cliente, nits_del_texto(texto))
+             or _tercero_por_nombre(contexto_cliente, texto_normal)
+             or _tercero_por_palabras(contexto_cliente, nombre_archivo))
+    llave = llave_del_tercero(quien, texto, nombre_archivo)
+
+    # --- 0. Lo que el contador ya corrigió antes ---
+    # Va de primera y le gana a todo lo demás: si él ya dijo una vez que
+    # los certificados de este tercero van a este renglón, el programa no
+    # tiene nada que discutirle.
+    regla = _regla_que_aplica(contexto_cliente, llave, tipo)
+    if regla is not None:
+        renglon = _renglon_de_la_regla(regla, contexto_cliente)
+        if renglon is not None:
+            agregar({
+                "renglon_id": renglon["id"],
+                "titulo": renglon["titulo"],
+                "codigo": renglon.get("codigo_renglon") or "",
+                "origen": POR_REGLA,
+                "certeza": ALTA,
+                "porque": "Usted mandó a este renglón %s antes."
+                          % ("otro documento de %s" % regla["tercero_nombre"]
+                             if regla["tercero_nombre"] else "un documento así"),
+            })
+
     # --- 1. Si es una factura electrónica, el emisor viene con nombre ---
     if nombre_archivo.lower().endswith(".xml"):
         datos = lectura.leer_xml(contenido)
@@ -358,9 +491,6 @@ def sugerir_todas(nombre_archivo, contenido, contexto_cliente):
                     " este renglón." % tercero["nombre"]))
 
     # --- 2. El texto del documento ---
-    texto, _motivo = lectura.texto_del_documento(nombre_archivo, contenido)
-    texto_normal = lectura.normalizar(texto)
-
     if texto:
         tercero = _tercero_por_nit(contexto_cliente, nits_del_texto(texto))
         if tercero is not None:
@@ -404,9 +534,29 @@ def sugerir_todas(nombre_archivo, contenido, contexto_cliente):
                           " %s." % ", ".join(palabras),
             })
 
+    # --- 4. Los renglones de al lado ---
+    # Un certificado de ingresos y retenciones soporta el ingreso en un
+    # renglón Y la retención en otro. Cuando el tercero reporta cosas de
+    # varios renglones, los demás se ofrecen como secundarios, con menos
+    # certeza: el principal es una propuesta y estos, una posibilidad.
+    if quien is not None and quien.get("otros_codigos"):
+        for codigo in quien["otros_codigos"][:SECUNDARIOS_MAXIMOS]:
+            renglon = contexto_cliente["por_codigo"].get(codigo)
+            if renglon is None:
+                continue
+            agregar({
+                "renglon_id": renglon["id"],
+                "titulo": renglon["titulo"],
+                "codigo": codigo,
+                "origen": POR_EXOGENA,
+                "certeza": MEDIA,
+                "porque": "%s también le reporta a la DIAN en este renglón."
+                          % quien["nombre"],
+            })
+
     # Con certeza baja no se propone nada: sin asignar es mejor que mal
-    # asignado. Hoy ninguna fuente devuelve baja, pero la puerta queda
-    # cerrada aquí y no en cada fuente.
+    # asignado. La puerta queda cerrada aquí, en un solo sitio, y no en
+    # cada fuente por separado.
     return [s for s in encontradas if s["certeza"] in (ALTA, MEDIA)]
 
 
@@ -433,8 +583,11 @@ _hilo = None
 _candado = threading.Lock()
 
 
-def clasificar_documento(documento, contexto_cliente):
+def clasificar_documento(documento, contexto_cliente, con_ia=False):
     """Le propone renglón a un documento y lo guarda. Devuelve cuántas.
+
+    Con con_ia=False solo corre la capa 1, que es gratis. La capa 2 se
+    pide aparte, porque cuesta.
 
     Nunca lanza excepción: un archivo dañado no puede trabar la tanda.
     """
@@ -453,15 +606,25 @@ def clasificar_documento(documento, contexto_cliente):
         # documento, y eso no puede quedar en un registro.
         propuestas = []
 
+    # La capa 2 corre SOLO si la capa 1 no encontró nada. Si el NIT del
+    # banco estaba impreso en el certificado, no hay nada que preguntar
+    # ni por qué pagar.
+    if not propuestas and con_ia:
+        try:
+            propuestas = sugerir_con_ia(
+                documento["nombre_original"], contenido, contexto_cliente)
+        except Exception:
+            propuestas = []
+
     db.guardar_sugerencias(
         documento["cliente_id"], documento["id"], propuestas)
     return len(propuestas)
 
 
-def clasificar_pendientes(cliente_id=None):
+def clasificar_pendientes(cliente_id=None, con_ia=False):
     """Clasifica todo lo que esté esperando. Devuelve un informe."""
     pendientes = db.documentos_sin_clasificar(cliente_id)
-    informe = {"revisados": 0, "con_sugerencia": 0}
+    informe = {"revisados": 0, "con_sugerencia": 0, "con_ia": bool(con_ia)}
 
     # El contexto se arma una vez por cliente, no una por documento.
     contextos = {}
@@ -469,14 +632,14 @@ def clasificar_pendientes(cliente_id=None):
         suyo = documento["cliente_id"]
         if suyo not in contextos:
             contextos[suyo] = contexto(suyo)
-        cuantas = clasificar_documento(documento, contextos[suyo])
+        cuantas = clasificar_documento(documento, contextos[suyo], con_ia)
         informe["revisados"] += 1
         if cuantas:
             informe["con_sugerencia"] += 1
     return informe
 
 
-def arrancar(cliente_id=None):
+def arrancar(cliente_id=None, con_ia=False):
     """Pone a clasificar en otro hilo. Vuelve enseguida.
 
     Subir sigue siendo instantáneo: el contador confirma la carga y ya,
@@ -490,7 +653,7 @@ def arrancar(cliente_id=None):
 
         def trabajar():
             try:
-                clasificar_pendientes(cliente_id)
+                clasificar_pendientes(cliente_id, con_ia)
             except Exception:
                 # Nunca se registra el detalle: podría traer el nombre o
                 # el contenido de un documento de un cliente.
@@ -504,3 +667,289 @@ def arrancar(cliente_id=None):
 def trabajando():
     """¿Hay una tanda de clasificación andando?"""
     return _hilo is not None and _hilo.is_alive()
+
+
+# ----------------------------------------------------------
+# Capa 2: preguntarle al modelo, y SOLO lo que sobró
+# ----------------------------------------------------------
+#
+# Esta capa corre únicamente cuando la capa 1 no encontró nada. Si el
+# NIT del banco estaba impreso en el certificado, no hay nada que
+# preguntar: ya se sabe.
+#
+# Cinco reglas, y las cinco están puestas en código, no en el texto que
+# se le manda al modelo. Pedirle algo por favor no es lo mismo que
+# impedírselo:
+#
+#   1. LISTA CERRADA. Elige entre los renglones que ese cliente YA
+#      tiene. No puede inventar renglones ni proponer nombres nuevos.
+#      La respuesta se valida contra la lista y lo que no esté, se
+#      descarta sin más.
+#   2. «NO SÉ» ES UNA RESPUESTA CORRECTA. Si no está claro, devuelve
+#      nulo y el documento se queda sin asignar. Un documento sin
+#      asignar es mejor que uno mal asignado, y no se le empuja a
+#      contestar.
+#   3. CERTEZA. Con 'baja' no se propone nada.
+#   4. POCO TEXTO. Los primeros 1.500 caracteres y el nombre del
+#      archivo. Para saber qué clase de papel es, sobra.
+#   5. NI UNA CIFRA. Esta capa clasifica y nada más. Sacar los datos es
+#      otro trabajo y lo hace app/extraccion.py, una sola vez.
+#
+# Y todo lo anterior sigue funcionando con IA_PROVEEDOR=ninguno: esta
+# capa simplemente no corre, y se dice sin alarma.
+
+import json
+
+from app import proveedores
+from app.configuracion import CONFIG
+
+# Cuánto texto se le manda. Para identificar un tipo de documento
+# alcanza y sobra; con más se gasta cupo sin acertar más.
+LETRAS_PARA_CLASIFICAR = 1500
+
+INSTRUCCIONES = """\
+Tu único trabajo es decir a cuál renglón de una lista corresponde un
+documento. No eres un asesor tributario.
+
+Reglas:
+
+1. Elige SOLO de la lista que te doy. Si crees que va en algo que no
+   está en la lista, la respuesta es null.
+2. Si no estás seguro, responde null. Es la respuesta correcta y la
+   esperada muchas veces. NO adivines: un documento sin clasificar es
+   mejor que uno mal clasificado.
+3. No extraigas cifras, ni fechas, ni nombres. No los necesito.
+4. No expliques nada ni digas si algo es deducible o cómo declararlo.
+
+Responde SOLO un JSON, sin nada alrededor:
+
+  {"renglon": 12, "tambien": [15], "certeza": "alta"}
+
+  renglon   el número de la lista, o null si no sabes
+  tambien   otros renglones de la lista que este mismo documento
+            soporte, o [] si no aplica
+  certeza   "alta", "media" o "baja"
+"""
+
+
+def hay_ia():
+    """¿Está prendida la IA? Si no, la capa 2 no corre y punto."""
+    return bool(CONFIG.ia_disponible)
+
+
+def _lista_para_el_modelo(renglones):
+    return "\n".join("%d: %s" % (r["id"], r["titulo"]) for r in renglones)
+
+
+def _json_de_la_respuesta(contenido):
+    """Saca el JSON de lo que contestó, aunque venga envuelto en ```."""
+    limpio = (contenido or "").strip()
+    if limpio.startswith("```"):
+        limpio = limpio.split("```")[1] if "```" in limpio[3:] else limpio[3:]
+        if limpio.lstrip().lower().startswith("json"):
+            limpio = limpio.lstrip()[4:]
+    try:
+        return json.loads(limpio.strip())
+    except ValueError:
+        # Contestó algo que no era JSON. No es motivo para tumbar nada:
+        # se trata como «no sé».
+        return None
+
+
+def _validar(respuesta, renglones):
+    """Deja pasar SOLO lo que está en la lista del cliente.
+
+    Esta función es la que hace que la promesa se cumpla. Se lo pedimos
+    en el texto, pero se lo impedimos aquí: un modelo puede devolver un
+    id inventado, el id de otro cliente o una frase, y nada de eso pasa.
+
+    Devuelve (principal, secundarios, certeza). Con «no sé» devuelve
+    (None, [], "").
+    """
+    if not isinstance(respuesta, dict):
+        return None, [], ""
+
+    permitidos = {r["id"]: r for r in renglones}
+
+    def id_valido(valor):
+        if isinstance(valor, bool) or not isinstance(valor, (int, str)):
+            return None
+        try:
+            numero = int(valor)
+        except (TypeError, ValueError):
+            return None
+        return numero if numero in permitidos else None
+
+    principal = id_valido(respuesta.get("renglon"))
+    if principal is None:
+        return None, [], ""
+
+    certeza = str(respuesta.get("certeza", "")).strip().lower()
+    if certeza not in (ALTA, MEDIA, BAJA):
+        # Si no dijo con cuánta certeza, se toma la más baja que se
+        # muestra. Nunca se le regala certeza a una respuesta.
+        certeza = MEDIA
+
+    secundarios = []
+    crudos = respuesta.get("tambien")
+    if isinstance(crudos, list):
+        for valor in crudos[:SECUNDARIOS_MAXIMOS]:
+            otro = id_valido(valor)
+            if otro is not None and otro != principal and otro not in secundarios:
+                secundarios.append(otro)
+
+    return principal, secundarios, certeza
+
+
+def sugerir_con_ia(nombre_archivo, contenido, contexto_cliente):
+    """Le pregunta al modelo. Devuelve una lista de sugerencias, o [].
+
+    Devuelve [] cuando la IA está apagada, cuando el documento no tiene
+    texto, cuando el modelo dijo que no sabe, cuando contestó algo que
+    no estaba en la lista y cuando la certeza fue baja. Las cinco son
+    respuestas correctas.
+    """
+    if not hay_ia():
+        return []
+
+    renglones = contexto_cliente["renglones"]
+    if not renglones:
+        return []
+
+    texto, _motivo = lectura.texto_del_documento(nombre_archivo, contenido)
+    if not texto.strip():
+        # De una foto o de un PDF con contraseña no hay texto que
+        # mandar. No se manda el archivo: nunca sale del computador.
+        return []
+
+    try:
+        contenido_modelo = proveedores.conversar(CONFIG, [
+            {"role": "system", "content": INSTRUCCIONES},
+            {"role": "user", "content":
+             "Renglones disponibles:\n%s\n\nNombre del archivo: %s\n\n"
+             "Documento:\n%s" % (_lista_para_el_modelo(renglones),
+                                 nombre_archivo,
+                                 texto[:LETRAS_PARA_CLASIFICAR])},
+        ])
+    except proveedores.ErrorDeProveedor:
+        # El servicio falló. No es un fallo del documento: se queda sin
+        # sugerencia y ya.
+        return []
+
+    principal, secundarios, certeza = _validar(
+        _json_de_la_respuesta(contenido_modelo), renglones)
+
+    if principal is None or certeza == BAJA:
+        return []
+
+    por_id = {r["id"]: r for r in renglones}
+    salida = [{
+        "renglon_id": principal,
+        "titulo": por_id[principal]["titulo"],
+        "codigo": por_id[principal].get("codigo_renglon") or "",
+        "origen": POR_IA,
+        "certeza": certeza,
+        "porque": "Lectura automática del texto del documento. Verifique.",
+    }]
+    for otro in secundarios:
+        salida.append({
+            "renglon_id": otro,
+            "titulo": por_id[otro]["titulo"],
+            "codigo": por_id[otro].get("codigo_renglon") or "",
+            "origen": POR_IA,
+            "certeza": MEDIA,
+            "porque": "Lectura automática: este documento también podría"
+                      " soportar este renglón. Verifique.",
+        })
+    return salida
+
+
+# ----------------------------------------------------------
+# Aprender de las correcciones
+# ----------------------------------------------------------
+#
+# Cuando el contador cambia una sugerencia, eso es lo más valioso que
+# pasa en todo el programa: acaba de enseñar algo que ninguna regla
+# sabía. Se guarda qué tercero, qué clase de papel y a qué renglón lo
+# mandó él.
+#
+# La próxima vez que llegue un documento parecido, se propone lo que él
+# decidió. Y vale para TODOS sus clientes, no solo para ese: la regla se
+# guarda por código de renglón del 210, que es el mismo en todas partes.
+#
+# Con el uso, la capa determinista crece y la IA se necesita menos.
+#
+# Lo que NO se guarda: ni el nombre del cliente, ni el del archivo, ni
+# una letra de su contenido. Solo quién emite y a qué renglón va.
+
+
+def aprender_de_la_correccion(documento, renglon_id, contexto_cliente=None):
+    """Guarda lo que el contador acaba de enseñar. Devuelve la regla.
+
+    Se llama cuando él asigna un documento a mano, haya habido
+    sugerencia o no: si acertamos, la regla refuerza; si nos
+    equivocamos, la corrige.
+    """
+    renglon = db.obtener_renglon(renglon_id)
+    if renglon is None:
+        return None
+
+    if contexto_cliente is None:
+        contexto_cliente = contexto(documento["cliente_id"])
+
+    try:
+        ruta = archivos.ruta_del_documento(
+            documento["cliente_id"], documento["nombre_guardado"])
+        contenido = ruta.read_bytes() if ruta and ruta.exists() else b""
+    except Exception:
+        contenido = b""
+
+    nombre = documento["nombre_original"]
+    try:
+        texto, _motivo = lectura.texto_del_documento(nombre, contenido)
+    except Exception:
+        texto = ""
+
+    quien = (_tercero_por_nit(contexto_cliente, nits_del_texto(texto))
+             or _tercero_por_nombre(
+                 contexto_cliente, lectura.normalizar(texto))
+             or _tercero_por_palabras(contexto_cliente, nombre))
+    llave = llave_del_tercero(quien, texto, nombre)
+    if not llave:
+        # No se pudo saber quién lo emite. Sin eso no hay regla que
+        # guardar: una regla sin tercero se aplicaría a todo.
+        return None
+
+    return db.guardar_regla(
+        tercero=llave,
+        tipo=tipo_de_documento(nombre, texto),
+        codigo_renglon=renglon.get("codigo_renglon") or "",
+        titulo=lectura.normalizar(renglon["titulo"]),
+        tercero_nombre=quien["nombre"] if quien else "",
+    )
+
+
+def descripcion_de_regla(regla):
+    """La regla escrita en una frase, para mostrarla en pantalla."""
+    quien = regla.get("tercero_nombre") or ""
+    if not quien:
+        llave = regla.get("tercero") or ""
+        quien = llave.split(":", 1)[-1] if ":" in llave else llave
+        if llave.startswith("nit:"):
+            quien = "el NIT " + quien
+    clase = {
+        "cesantias": "los certificados de cesantías",
+        "ingresos_retenciones": "los certificados de ingresos y retenciones",
+        "predial": "los recibos de predial",
+        "extracto": "los extractos",
+        "factura": "las facturas",
+        "retencion": "los certificados de retención",
+        "pension": "los certificados de pensión",
+        "saldo": "los certificados de saldos",
+    }.get(regla.get("tipo") or "", "los documentos")
+
+    return "%s de %s van al renglón %s." % (
+        clase.capitalize(), quien,
+        ("R" + regla["codigo_renglon"]) if regla.get("codigo_renglon")
+        else regla.get("titulo", ""),
+    )
