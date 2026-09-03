@@ -805,37 +805,12 @@ def trabajando():
 
 import json
 
-from app import proveedores
+from app import instrucciones, proveedores
 from app.configuracion import CONFIG
 
 # Cuánto texto se le manda. Para identificar un tipo de documento
 # alcanza y sobra; con más se gasta cupo sin acertar más.
 LETRAS_PARA_CLASIFICAR = 1500
-
-INSTRUCCIONES = """\
-Tu único trabajo es decir a cuál renglón de una lista corresponde un
-documento. No eres un asesor tributario.
-
-Reglas:
-
-1. Elige SOLO de la lista que te doy. Si crees que va en algo que no
-   está en la lista, la respuesta es null.
-2. Si no estás seguro, responde null. Es la respuesta correcta y la
-   esperada muchas veces. NO adivines: un documento sin clasificar es
-   mejor que uno mal clasificado.
-3. No extraigas cifras, ni fechas, ni nombres. No los necesito.
-4. No expliques nada ni digas si algo es deducible o cómo declararlo.
-
-Responde SOLO un JSON, sin nada alrededor:
-
-  {"renglon": 12, "tambien": [15], "certeza": "alta"}
-
-  renglon   el número de la lista, o null si no sabes
-  tambien   otros renglones de la lista que este mismo documento
-            soporte, o [] si no aplica
-  certeza   "alta", "media" o "baja"
-"""
-
 
 def hay_ia():
     """¿Está prendida la IA? Si no, la capa 2 no corre y punto."""
@@ -927,22 +902,34 @@ def sugerir_con_ia(nombre_archivo, contenido, contexto_cliente):
         # mandar. No se manda el archivo: nunca sale del computador.
         return []
 
-    try:
-        contenido_modelo = proveedores.conversar(CONFIG, [
-            {"role": "system", "content": INSTRUCCIONES},
-            {"role": "user", "content":
-             "Renglones disponibles:\n%s\n\nNombre del archivo: %s\n\n"
-             "Documento:\n%s" % (_lista_para_el_modelo(renglones),
-                                 nombre_archivo,
-                                 texto[:LETRAS_PARA_CLASIFICAR])},
-        ])
-    except proveedores.ErrorDeProveedor:
-        # El servicio falló. No es un fallo del documento: se queda sin
-        # sugerencia y ya.
-        return []
+    pregunta = [
+        {"role": "system", "content": instrucciones.CLASIFICAR},
+        {"role": "user", "content":
+         "Renglones disponibles:\n%s\n\nNombre del archivo: %s\n\n"
+         "Documento:\n%s" % (_lista_para_el_modelo(renglones),
+                             nombre_archivo,
+                             texto[:LETRAS_PARA_CLASIFICAR])},
+    ]
 
-    principal, secundarios, certeza = _validar(
-        _json_de_la_respuesta(contenido_modelo), renglones)
+    # Se intenta dos veces como mucho. Si contesta algo que no es el
+    # JSON pedido, se reintenta UNA vez; si vuelve a fallar, el
+    # documento se queda sin propuesta, que es una salida honesta. Una
+    # respuesta a medias no se acepta nunca.
+    principal, secundarios, certeza = None, [], ""
+    for intento in range(2):
+        try:
+            contenido_modelo = proveedores.conversar(CONFIG, pregunta)
+        except proveedores.ErrorDeProveedor:
+            # El servicio falló. No es un fallo del documento: se queda
+            # sin sugerencia y ya.
+            return []
+
+        entendido = _json_de_la_respuesta(contenido_modelo)
+        if entendido is not None:
+            principal, secundarios, certeza = _validar(entendido, renglones)
+            break
+        if intento == 1:
+            return []
 
     if principal is None or certeza == BAJA:
         return []

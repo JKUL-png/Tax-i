@@ -48,7 +48,7 @@ fechas. Se le pide una sola cosa: qué dice el documento.
 
 import json
 
-from app import db, documentos, lectura, proveedores
+from app import db, documentos, instrucciones, lectura, proveedores
 from app.configuracion import CONFIG
 
 # Cuánto texto de un documento se le manda al modelo. Un certificado de
@@ -62,37 +62,6 @@ DATOS_MAXIMOS = 25
 
 class SinIA(Exception):
     """Hacía falta la IA para leer este documento y está apagada."""
-
-
-INSTRUCCIONES = """\
-Eres un lector de documentos. Tu único trabajo es decir QUÉ DICE el
-documento que te pasan. No eres un asesor tributario.
-
-Devuelve SOLO un JSON con esta forma, sin nada más alrededor:
-
-{"datos": [{"concepto": "...", "valor": "...", "detalle": "..."}]}
-
-  concepto  qué es el dato, en las palabras del documento.
-            Por ejemplo: "Salarios", "Retención en la fuente practicada",
-            "Aportes obligatorios a salud", "NIT del emisor".
-  valor     la cifra, copiada TAL CUAL aparece. Si el dato no es una
-            cifra, deja este campo vacío.
-  detalle   lo demás que ayude a identificarlo: el periodo, el nombre de
-            la empresa, el número del documento. Vacío si no aplica.
-
-REGLAS QUE NO SE ROMPEN:
-
-1. COPIA, NO CALCULES. Nunca sumes, restes, conviertas ni redondees.
-   Si el documento dice 45.000.000, escribe 45.000.000. Si un total no
-   está escrito en el documento, NO lo calcules: no lo incluyas.
-2. NO INVENTES. Si un dato no está, no va. Es mejor devolver tres datos
-   ciertos que diez inventados. Si el documento no se entiende, devuelve
-   {"datos": []}.
-3. NO OPINES. No digas si algo es deducible, ni en qué casilla va, ni si
-   la persona debe declarar, ni cuánto le toca pagar. Eso no es tuyo:
-   lo decide el contador.
-4. NADA DE TEXTO FUERA DEL JSON. Ni saludos, ni explicaciones.
-"""
 
 
 def _texto_del_archivo(documento):
@@ -147,13 +116,16 @@ def _datos_del_xml(documento):
     return datos
 
 
-def _datos_con_ia(texto):
-    """Le pregunta al modelo qué dice el texto. Devuelve una lista."""
-    if not CONFIG.ia_disponible:
-        raise SinIA(CONFIG.motivo)
+def _pedirle_al_modelo(texto):
+    """Una llamada al modelo. Devuelve la lista de datos crudos, o None.
 
+    None significa «contestó algo que no era el JSON que se le pidió».
+    Es distinto de [], que significa «leyó el documento y no encontró
+    nada», y esa diferencia importa: lo primero se reintenta, lo
+    segundo no.
+    """
     contenido = proveedores.conversar(CONFIG, [
-        {"role": "system", "content": INSTRUCCIONES},
+        {"role": "system", "content": instrucciones.EXTRAER},
         {"role": "user",
          "content": "Documento:\n\n" + texto[:LETRAS_QUE_SE_MANDAN]},
     ])
@@ -168,13 +140,11 @@ def _datos_con_ia(texto):
     try:
         entendido = json.loads(limpio.strip())
     except ValueError:
-        # Contestó algo que no era JSON. No es motivo para tumbar nada:
-        # se trata como "no se pudo leer".
-        return []
+        return None
 
     crudos = entendido.get("datos") if isinstance(entendido, dict) else entendido
     if not isinstance(crudos, list):
-        return []
+        return None
 
     limpios = []
     for dato in crudos[:DATOS_MAXIMOS]:
@@ -187,8 +157,42 @@ def _datos_con_ia(texto):
             "concepto": concepto,
             "valor": str(dato.get("valor", "") or "").strip(),
             "detalle": str(dato.get("detalle", "") or "").strip(),
+            # La frase del documento de donde salió. Es lo que después
+            # se busca en el texto para saber si el dato es de verdad.
+            "cita": str(dato.get("cita", "") or "").strip(),
         })
     return limpios
+
+
+def _datos_con_ia(texto):
+    """Le pregunta al modelo qué dice el texto y VERIFICA lo que conteste.
+
+    Devuelve (verificados, sin_verificar, hubo_respuesta).
+
+    Dos cosas pasan aquí, y las dos son defensas:
+
+    1. Si contesta algo que no es el JSON pedido, se reintenta UNA vez.
+       Una respuesta a medias no se acepta nunca: o sale bien, o el
+       documento queda para que lo revise el contador.
+
+    2. De cada dato se exige la frase exacta del documento de donde
+       salió, y esa frase se busca en el texto. La que no aparece, no se
+       guarda. El modelo puede inventarse un número; no puede
+       inventarse una frase y que además esté en el papel.
+    """
+    if not CONFIG.ia_disponible:
+        raise SinIA(CONFIG.motivo)
+
+    crudos = _pedirle_al_modelo(texto)
+    if crudos is None:
+        # Segundo y último intento. Si vuelve a contestar cualquier
+        # cosa, no se insiste: se gastaría cupo sin ganar nada.
+        crudos = _pedirle_al_modelo(texto)
+    if crudos is None:
+        return [], [], False
+
+    verificados, sin_verificar = instrucciones.revisar_datos(crudos, texto)
+    return verificados, sin_verificar, True
 
 
 def extraer(documento):
@@ -232,12 +236,39 @@ def extraer(documento):
             informe["motivo"] = motivo or "No se pudo sacar texto del archivo."
             return informe
 
-        datos = _datos_con_ia(texto)
+        verificados, sin_verificar, contesto = _datos_con_ia(texto)
+
+        if not contesto:
+            # Contestó dos veces algo que no era lo que se le pidió. No
+            # se acepta a medias: queda para revisión manual.
+            motivo = ("El modelo contestó algo que no se pudo entender, dos"
+                      " veces. Revise este documento a mano.")
+            db.marcar_lectura(id_documento, "fallo", motivo)
+            informe["motivo"] = motivo
+            return informe
+
+        if sin_verificar and not verificados:
+            # Todo lo que dijo que leyó, lo dijo sin poder mostrar dónde
+            # lo vio. Eso NO se guarda: es exactamente el caso que la
+            # cita textual existe para atrapar.
+            motivo = ("Lo que el modelo dijo haber leído no aparece en el"
+                      " documento, así que no se guardó nada. Revíselo a"
+                      " mano.")
+            db.marcar_lectura(id_documento, "fallo", motivo)
+            informe["motivo"] = motivo
+            informe["sin_verificar"] = len(sin_verificar)
+            return informe
+
         db.guardar_datos_extraidos(
-            documento["cliente_id"], id_documento, datos, "ia"
+            documento["cliente_id"], id_documento, verificados, "ia"
         )
-        db.marcar_lectura(id_documento, "listo")
-        informe.update(estado="listo", cuantos=len(datos), origen="ia")
+        aviso = ""
+        if sin_verificar:
+            aviso = ("%d dato(s) no se pudieron verificar contra el"
+                     " documento y no se guardaron." % len(sin_verificar))
+        db.marcar_lectura(id_documento, "listo", aviso)
+        informe.update(estado="listo", cuantos=len(verificados), origen="ia",
+                       motivo=aviso, sin_verificar=len(sin_verificar))
         return informe
 
     except SinIA as error:

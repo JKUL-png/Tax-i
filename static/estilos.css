@@ -2624,6 +2624,19 @@ input[type="text"].celda-campo:focus {
   color: var(--texto-tenue);
 }
 
+/* Una propuesta cuya cita no se pudo encontrar en el documento. No se
+   esconde: se muestra con la advertencia encima, porque el contador
+   tiene que poder distinguir lo verificado de lo que no. */
+.propuesta-sin-verificar {
+  margin: 0 0 var(--e2);
+  padding: var(--e2);
+  border-left: 3px solid var(--alerta-texto);
+  background: var(--n1);
+  font-size: var(--t-meta);
+  color: var(--alerta-texto);
+  line-height: 1.4;
+}
+
 .propuesta-porque {
   margin: 6px 0 0;
   font-size: var(--t-celda);

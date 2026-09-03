@@ -73,11 +73,20 @@ class _ServicioFalso(BaseHTTPRequestHandler):
             "utf-8", "replace"
         )
 
+        # El servicio de mentiras contesta como se le pide de verdad:
+        # cada dato con la frase del documento de donde salió.
+        #
+        # El primero SÍ está en el certificado y el segundo NO: es un
+        # dato inventado con una cita inventada. Así se comprueba que la
+        # verificación lo atrapa, que es para lo que existe.
+        # Ver app/instrucciones.py.
         contestacion = json.dumps({"datos": [
             {"concepto": "Salarios", "valor": "45.000.000",
-             "detalle": "Enero a diciembre"},
+             "detalle": "Enero a diciembre",
+             "cita": "Salarios 45.000.000"},
             {"concepto": "Retención practicada", "valor": "1.200.000",
-             "detalle": ""},
+             "detalle": "",
+             "cita": "Retención en la fuente practicada 1.200.000"},
         ]})
         cuerpo = json.dumps(
             {"choices": [{"message": {"content": contestacion}}]}
@@ -199,6 +208,19 @@ def main():
                   informe["estado"] == "listo", informe["motivo"])
         comprobar("queda marcado como lectura automática",
                   informe["origen"] == "ia")
+        filas_ia = db.listar_datos_extraidos(
+            cliente_id, documento_id=documento_txt["id"]
+        )
+        comprobar("solo se guardó el dato que SÍ está en el documento",
+                  len(filas_ia) == 1
+                  and filas_ia[0]["concepto"] == "Salarios",
+                  [f["concepto"] for f in filas_ia])
+        comprobar("el inventado se descartó, aunque traía cita",
+                  not any("Retención" in f["concepto"] for f in filas_ia))
+        comprobar("y se avisa que hubo uno sin verificar",
+                  informe.get("sin_verificar") == 1,
+                  informe.get("sin_verificar"))
+
         comprobar("se llamó a la IA exactamente una vez",
                   LLAMADAS["cuantas"] == 1, "%d" % LLAMADAS["cuantas"])
         comprobar("salió el TEXTO, no el archivo",
@@ -267,9 +289,27 @@ def main():
         comprobar("el motivo del fallo se le puede mostrar al contador",
                   bool(por_nombre.get("roto.zzz", {}).get("motivo")))
 
+        # «suelto.txt» dice «algo sin estructura», y el modelo de mentiras
+        # contestó que ahí decía «Salarios 45.000.000». Ninguna de sus dos
+        # citas aparece en ese texto, así que NADA se guardó y el
+        # documento quedó para que lo revise el contador. Eso es
+        # exactamente para lo que existe la cita textual: atrapar al
+        # modelo diciendo que leyó algo que no está.
+        suelto_ahora = db.obtener_documento(suelto["id"])
+        comprobar("un documento del que el modelo inventó todo NO queda listo",
+                  suelto_ahora["estado_lectura"] == "fallo",
+                  suelto_ahora["estado_lectura"])
+        comprobar("y el motivo dice que no se pudo verificar",
+                  "no aparece en el documento"
+                  in (suelto_ahora["motivo_lectura"] or ""),
+                  suelto_ahora["motivo_lectura"])
+        comprobar("no se le guardó ni un dato inventado",
+                  db.listar_datos_extraidos(
+                      cliente_id, documento_id=suelto["id"]) == [])
+
         estado = extraccion.resumen(cliente_id)
-        comprobar("el resumen cuenta bien lo que falló",
-                  estado["estados"]["fallo"] == 1, str(estado["estados"]))
+        comprobar("el resumen cuenta los dos que fallaron",
+                  estado["estados"]["fallo"] == 2, str(estado["estados"]))
         comprobar("un fallo NO se reintenta solo",
                   extraccion.resumen(cliente_id)["sin_leer"] == 0,
                   "sin leer: %d" % estado["sin_leer"])

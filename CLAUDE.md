@@ -61,6 +61,7 @@ asistente-renta/
 │   ├── exogena.py        # leer el reporte de la DIAN. Solo parseo, sin IA
 │   ├── exogena_cliente.py # los renglones y la tabla de cada cliente
 │   ├── clasificacion.py  # a qué renglón va cada documento, y lo aprendido
+│   ├── instrucciones.py  # TODO lo que se le dice a un modelo, en un sitio
 │   ├── cola.py           # la fila de documentos por leer, en otro hilo
 │   ├── respaldo.py       # llevarse todo en un ZIP, y traerlo de vuelta
 │   ├── demostracion.py   # el cliente inventado, para mostrar el programa
@@ -259,6 +260,49 @@ entra a un repositorio público, ni siquiera uno inventado.
 
 ---
 
+## Lo que se le dice al modelo
+
+**Todas las instrucciones viven en `app/instrucciones.py`, y solo ahí.** Antes
+estaban repartidas en tres módulos y decían lo mismo de tres formas distintas,
+que es como se le escapa una regla a uno de los tres sin que nadie lo note.
+Cambiar cómo se comporta el modelo es editar ese archivo.
+
+- **Archivista, no asesor.** El modelo organiza, busca y lee. Cuando le
+  preguntan algo tributario, dice que esa decisión es del contador y ofrece
+  buscarle el documento. **Nunca da la respuesta "a modo informativo"**: esa
+  frase es exactamente con la que se cruza la línea.
+- **Cita textual obligatoria.** Cada dato que saque de un documento viene con
+  la frase exacta de donde salió, y el código comprueba que esa frase esté en
+  el texto (`instrucciones.verificar_cita`). Lo que no se verifica **no se
+  guarda**: el documento queda para revisión manual.
+
+  No es una súplica, es mecánica. Un modelo puede inventarse un número sin
+  despeinarse; lo que no puede es inventarse una frase Y que además esté en el
+  papel. Pidiendo las dos cosas juntas, la invención se vuelve detectable.
+- **«No sé» es la respuesta correcta y esperada**, dicho así en cada
+  instrucción. Las instrucciones que obligan a contestar son las que provocan
+  que se inventen cosas.
+- **Nunca calcular.** No suma, no resta, no saca porcentajes, no convierte de
+  UVT a pesos, no redondea. Las cuentas las hace el código o la plantilla del
+  contador, que es donde él puede verlas.
+- **El vocabulario del contador colombiano**: renglón (no "casilla"), cédula,
+  NIT, exógena, retención en la fuente, certificado de ingresos y retenciones,
+  UVT, año gravable. No se traduce a términos genéricos ni de otro país.
+- **Salida estructurada, validada y con un reintento.** Si la respuesta no
+  valida, se reintenta UNA vez; si vuelve a fallar, queda para revisión
+  manual. Nunca se acepta a medias.
+- **Contexto mínimo.** Para clasificar, el texto corto y la lista de renglones.
+  Para conversar, las filas de `datos_extraidos`, nunca los documentos otra
+  vez.
+
+`pruebas/probar_instrucciones.py` comprueba las reglas sin modelo, y con un
+modelo conectado comprueba cómo se COMPORTA de verdad: que ante una pregunta
+tributaria remite al contador, que de un texto ilegible no inventa, que sus
+citas están en el papel y que nunca devuelve un renglón fuera de la lista. Esa
+parte se salta sola con `IA_PROVEEDOR=ninguno`, y saltarse no es fallar.
+
+---
+
 ## Reglas innegociables
 
 ### Línea legal
@@ -338,6 +382,7 @@ consentimiento al desarrollador.
     .venv/bin/python pruebas/probar_demostracion.py  # el modo demostración
     .venv/bin/python pruebas/probar_exogena.py       # el lector de la exógena
     .venv/bin/python pruebas/probar_clasificacion.py # clasificar y aprender
+    .venv/bin/python pruebas/probar_instrucciones.py # lo que se le dice al modelo
 
 Y para dejar un cliente cargado con todo y probarlo a mano:
 

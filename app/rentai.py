@@ -44,7 +44,7 @@ app/proveedores.py; aquí no se sabe con cuál se está hablando.
 
 import json
 
-from app import db, formulario, proveedores
+from app import db, formulario, instrucciones, proveedores
 from app.configuracion import CONFIG
 from app.plantilla_210 import TIPO_CAPTURA
 
@@ -89,66 +89,6 @@ class RentaiFallo(Exception):
 # trabaja, y se le repiten las prohibiciones más de una vez a propósito:
 # es lo que más importa que no se le olvide.
 # ---------------------------------------------------------------------------
-
-INSTRUCCIONES = """\
-Eres RentAI, la asistente de un contador colombiano. Trabajas dentro de un
-programa que vive en el computador de él y que organiza los documentos de
-sus clientes para la declaración de renta de personas naturales (Formulario
-210, año gravable 2025).
-
-TU TRABAJO
-Leer lo que dicen los documentos del cliente y proponerle al contador qué
-cifra anotar en cuál casilla de su plantilla de Excel. También contestarle
-preguntas sobre qué llegó, qué falta y qué dice cada documento.
-
-LO QUE NUNCA HACES
-- No calculas el impuesto a cargo, ni el anticipo, ni el saldo a pagar, ni
-  el saldo a favor. Esos los calcula la plantilla del contador, no tú.
-- No dices qué es deducible y qué no.
-- No sugieres cómo declarar ni cómo pagar menos.
-- No afirmas que alguien está o no está obligado a declarar.
-- No sumas, restas ni promedias cifras para inventar un total. Si el
-  documento dice una cifra, propones esa cifra tal cual. Si hay que sumar
-  varias, lo hace la plantilla con sus fórmulas.
-- No escribes nada en el archivo. Solo propones; el contador decide.
-
-Si te preguntan algo de eso, dices con naturalidad que no es lo tuyo y que
-eso lo decide él. No te disculpas cinco veces ni das sermones: una frase.
-
-CÓMO PROPONES
-Cada propuesta lleva:
-- celda: el código exacto de una casilla del catálogo que te dieron. Si la
-  casilla que necesitas no está en el catálogo, NO te la inventes: dilo en
-  la respuesta y no propongas nada.
-- valor: un número entero en pesos, sin puntos, sin comas y sin el signo
-  $. Ejemplo: 45000000.
-- documento: el nombre exacto del documento de donde sacaste la cifra, tal
-  como aparece en la lista. Si la cifra te la dictó el contador en el chat,
-  escribe "dictado por el contador".
-- por_que: una línea corta diciendo dónde lo viste. Ejemplo: "el
-  certificado dice 'total ingresos laborales 45.000.000'".
-
-Nunca propongas una cifra que no viste. Si el documento está borroso, si
-es una foto sin texto o si dice algo distinto de lo que se necesita, dilo.
-Es mejor decir "no lo encontré" que adivinar: el contador confía en que lo
-que le muestras está en el papel.
-
-CÓMO HABLAS
-En español, corto y directo, sin jerga y sin adornos. Tuteas o ustedeas
-según como te hablen. Si el contador te dice "anota 3 millones en caja",
-propones esa anotación sin pedirle que lo repita de otra forma.
-
-FORMATO DE RESPUESTA
-Contestas SIEMPRE con un objeto JSON, sin texto por fuera:
-
-{"respuesta": "lo que le dices al contador",
- "propuestas": [{"celda": "G115", "valor": 45000000,
-                 "documento": "certificado_laboral.pdf",
-                 "por_que": "dice 'total devengado 45.000.000'"}]}
-
-Si no hay nada que proponer, "propuestas" va vacío: [].
-"""
-
 
 # ---------------------------------------------------------------------------
 # Lo que RentAI sabe del cliente
@@ -363,7 +303,7 @@ def _entender_respuesta(texto):
     return respuesta, crudas
 
 
-def revisar_propuestas(crudas):
+def revisar_propuestas(crudas, contexto=""):
     """Se queda solo con las propuestas que se pueden anotar de verdad.
 
     El modelo puede inventarse una casilla, mandar un texto donde va un
@@ -397,11 +337,23 @@ def revisar_propuestas(crudas):
         if valor != valor:   # NaN
             continue
 
+        # La frase de donde dice haber sacado la cifra. Si se le pasó
+        # el contexto que se le mandó, se comprueba que esa frase esté
+        # de verdad ahí. La propuesta igual se muestra —el contador
+        # puede querer verla— pero marcada como sin verificar, y eso se
+        # ve en pantalla.
+        cita = str(cruda.get("cita") or cruda.get("por_que") or "").strip()[:300]
+        verificada = None
+        if contexto:
+            verificada = instrucciones.verificar_cita(cita, contexto)
+
         buenas.append({
             "celda": celda,
             "valor": int(valor) if float(valor).is_integer() else float(valor),
             "documento": str(cruda.get("documento") or "").strip()[:200],
-            "por_que": str(cruda.get("por_que") or "").strip()[:300],
+            "por_que": cita,
+            "cita": cita,
+            "verificada": verificada,
             "descripcion": informacion["descripcion"],
             "renglon": informacion["renglon"],
             "contexto": formulario._rastro(informacion.get("contexto")),
@@ -428,11 +380,14 @@ def hablar(cliente, mensaje):
     # llamada falla, su mensaje no se pierde.
     db.guardar_mensaje(cliente_id, "contador", mensaje)
 
-    conversacion = [{"role": "system", "content": INSTRUCCIONES}]
-    conversacion.append({
-        "role": "system",
-        "content": contexto_del_cliente(cliente),
-    })
+    # El contexto es lo ÚNICO que RentAI sabe del cliente: son las filas
+    # de la base de datos, no los documentos. Se guarda aparte porque
+    # después se usa para comprobar que las citas que devuelva estén
+    # de verdad ahí y no salgan de su imaginación.
+    contexto = contexto_del_cliente(cliente)
+
+    conversacion = [{"role": "system", "content": instrucciones.CONVERSAR}]
+    conversacion.append({"role": "system", "content": contexto})
     for anterior in db.listar_mensajes(cliente_id, MENSAJES_QUE_RECUERDA):
         conversacion.append({
             "role": "user" if anterior["papel"] == "contador" else "assistant",
@@ -441,7 +396,7 @@ def hablar(cliente, mensaje):
 
     contenido = _llamar_al_servicio(conversacion)
     respuesta, crudas = _entender_respuesta(contenido)
-    propuestas = revisar_propuestas(crudas)
+    propuestas = revisar_propuestas(crudas, contexto)
 
     if not respuesta:
         respuesta = ("Listo." if propuestas

@@ -272,6 +272,18 @@ function dibujarPropuesta(propuesta) {
   detalle.textContent = partes.join(" · ");
   tarjeta.appendChild(detalle);
 
+  /* Si RentAI no pudo mostrar dónde vio la cifra, se dice. La propuesta
+     igual se muestra —el contador puede querer verla— pero marcada:
+     una cifra que no se pudo verificar contra el papel no es lo mismo
+     que una que sí. Ver app/instrucciones.py. */
+  if (propuesta.verificada === false) {
+    const alerta = document.createElement("p");
+    alerta.className = "propuesta-sin-verificar";
+    alerta.textContent = "No se pudo encontrar esa frase en lo que dice el"
+                       + " documento. Ábralo y compruébelo antes de anotar.";
+    tarjeta.appendChild(alerta);
+  }
+
   if (propuesta.por_que) {
     const porque = document.createElement("p");
     porque.className = "propuesta-porque";
