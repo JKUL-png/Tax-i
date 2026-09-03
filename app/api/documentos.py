@@ -4,7 +4,8 @@ import mimetypes
 from pathlib import Path
 
 from app import (
-    bitacora, checklist, cola, db, documentos, extraccion, importar, lectura,
+    bitacora, checklist, clasificacion, cola, db, documentos, extraccion,
+    importar, lectura,
 )
 from app.api.base import app, campo_lista_de_numeros, cliente_o_404
 from app.servidor import ErrorHttp, Respuesta
@@ -47,20 +48,53 @@ def api_listar_documentos(peticion, id_cliente):
         raise ErrorHttp(404, "Ese cliente no existe.")
 
     renglones = db.listar_checklist(id_cliente)
+    guardadas = db.sugerencias_del_cliente(id_cliente)
     salida = []
 
     for documento in db.listar_documentos(id_cliente):
         documento = con_tipo(documento)
 
-        # A los que todavía nadie asignó se les propone un renglón, mirando
-        # las palabras del nombre del archivo. Es una sugerencia hecha con
-        # código, no con IA, y la pantalla la muestra marcada como tal.
+        # A los que todavía nadie asignó se les PROPONE un renglón. La
+        # propuesta la hizo el código, no la IA, y sale con el origen a
+        # la vista: por la exógena, por el XML, por el texto o por el
+        # nombre del archivo. Aceptar es un clic; cambiarla también.
+        #
+        # 'sugerencia' se queda como el id a secas porque es lo que la
+        # pantalla ya sabía leer, y 'sugerencias' trae el detalle.
         documento["sugerencia"] = None
+        documento["sugerencias"] = []
+
         if documento["renglon_id"] is None:
-            sugerido, _ = lectura.sugerir_renglon(
-                documento["nombre_original"], renglones
-            )
-            documento["sugerencia"] = sugerido
+            propuestas = guardadas.get(documento["id"], [])
+            if not propuestas:
+                # Todavía no le ha tocado el turno en la fila de
+                # clasificación —o viene de una versión anterior del
+                # programa—, así que por lo menos se mira el nombre.
+                sugerido, palabras = lectura.sugerir_renglon(
+                    documento["nombre_original"], renglones
+                )
+                if sugerido is not None:
+                    propuestas = [{
+                        "renglon_id": sugerido,
+                        "origen": clasificacion.POR_NOMBRE,
+                        "certeza": clasificacion.MEDIA,
+                        "porque": "El nombre del archivo y el del renglón"
+                                  " comparten: %s." % ", ".join(palabras),
+                        "principal": True,
+                    }]
+
+            for propuesta in propuestas:
+                documento["sugerencias"].append({
+                    "renglon_id": propuesta["renglon_id"],
+                    "origen": propuesta["origen"],
+                    "origen_texto": clasificacion.ORIGENES.get(
+                        propuesta["origen"], propuesta["origen"]),
+                    "certeza": propuesta["certeza"],
+                    "porque": propuesta["porque"],
+                })
+            if documento["sugerencias"]:
+                documento["sugerencia"] = documento["sugerencias"][0][
+                    "renglon_id"]
 
         salida.append(documento)
 
@@ -166,6 +200,13 @@ def api_subir_documentos(peticion, id_cliente):
     arrancó = False
     if guardados and cola.procesar_automaticamente():
         arrancó = cola.arrancar()
+
+    # La clasificación SÍ arranca sola, siempre, y esto no contradice lo
+    # de arriba: clasificar es gratis y pasa entero en este computador,
+    # así que no hay ninguna razón para hacérselo pedir. Lo que se le
+    # pide es gastar plata, no trabajar.
+    if guardados:
+        clasificacion.arrancar(id_cliente)
 
     return {
         "guardados": guardados,

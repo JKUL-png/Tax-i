@@ -60,6 +60,7 @@ asistente-renta/
 │   ├── extraccion.py     # leerle los datos a un documento UNA vez
 │   ├── exogena.py        # leer el reporte de la DIAN. Solo parseo, sin IA
 │   ├── exogena_cliente.py # los renglones y la tabla de cada cliente
+│   ├── clasificacion.py  # a qué renglón se parece cada documento, sin IA
 │   ├── cola.py           # la fila de documentos por leer, en otro hilo
 │   ├── respaldo.py       # llevarse todo en un ZIP, y traerlo de vuelta
 │   ├── demostracion.py   # el cliente inventado, para mostrar el programa
@@ -203,6 +204,41 @@ Cómo se escriben los textos de esa pantalla, que es lo que define el producto:
 
 ---
 
+## Clasificar los documentos
+
+Repartir los documentos es el trabajo que más tiempo le quita al contador:
+le llegan cuarenta archivos revueltos por WhatsApp y por correo y tiene que
+abrir uno por uno. `app/clasificacion.py` le propone dónde va cada uno.
+
+- **Sugiere, nunca asigna.** El documento entra sin asignar, con la propuesta
+  al lado. `documentos.renglon_id` es la única verdad sobre dónde está cada
+  documento, y ahí solo escribe el contador. Equivocarse al proponer cuesta
+  un clic; equivocarse al decidir cuesta un soporte perdido.
+- **Toda sugerencia dice de dónde salió** —por la exógena, por el XML, por el
+  texto o por el nombre del archivo— y con cuánta certeza. Una sugerencia sin
+  origen a la vista es una en la que no se puede confiar.
+- **Con certeza baja no se propone nada.** Sin asignar es mejor que mal
+  asignado.
+- **Nunca se inventa un tercero.** Si la exógena no lo menciona y el nombre no
+  dice nada, se queda callado. Callarse es una respuesta correcta y frecuente.
+- **Clasificar arranca solo; leer con IA no.** Es la regla de la casa: lo que
+  es gratis y pasa en este computador ocurre sin pedir permiso; lo que cuesta
+  plata lo pide el contador. Por eso la clasificación corre al confirmar la
+  carga y la cola de lectura espera a que él la arranque.
+- La mitad de los archivos llega con nombre de cámara o de escáner
+  (`IMG_20260315.jpg`, `scan0001.pdf`). Por eso el nombre del archivo es la
+  fuente más débil: la que trabaja de verdad es el texto cruzado con la
+  exógena.
+- Hay documentos que no se pueden leer y punto: las fotos, los PDF que son una
+  foto escaneada y los que traen contraseña. De esos no sale sugerencia, y eso
+  se dice sin alarma.
+
+Los documentos con que se mide esto **no están en el repositorio**: se arman
+con código en `pruebas/documentos_de_ejemplo.py`. Ningún documento tributario
+entra a un repositorio público, ni siquiera uno inventado.
+
+---
+
 ## Reglas innegociables
 
 ### Línea legal
@@ -281,6 +317,7 @@ consentimiento al desarrollador.
     .venv/bin/python pruebas/probar_respaldo.py      # llevarse todo y devolverlo
     .venv/bin/python pruebas/probar_demostracion.py  # el modo demostración
     .venv/bin/python pruebas/probar_exogena.py       # el lector de la exógena
+    .venv/bin/python pruebas/probar_clasificacion.py # clasificar sin IA
 
 `probar_pantallas.py` abre Chromium de verdad y falla si el JavaScript revienta.
 Hace falta porque un error de JavaScript no se ve desde el servidor: la página

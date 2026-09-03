@@ -203,6 +203,14 @@ def cargar(cliente_id, ruta_archivo, nombre_archivo=""):
         nombre_archivo, len(lectura["filas"]),
     )
 
+    # Ahora hay con qué cruzar los documentos: la exógena trae el NIT y
+    # el nombre de cada tercero, con su renglón. Los que estaban sin
+    # asignar se vuelven a mirar. Los que el contador ya asignó a mano
+    # no se tocan: su decisión manda sobre cualquier sugerencia.
+    from app import clasificacion
+    db.marcar_para_clasificar(cliente_id)
+    clasificacion.arrancar(cliente_id)
+
     return {
         "carga": carga,
         "resumen": exogena.resumen(lectura),

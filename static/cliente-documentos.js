@@ -170,22 +170,42 @@ function dibujarDocumento(documento) {
 
   asignacion.appendChild(selector.elemento);
 
-  // Si el programa cree saber a qué renglón va, lo propone. La sugerencia
-  // sale del nombre del archivo, con código: no la hizo ninguna IA.
+  /* Si el programa cree saber a qué renglón va, lo PROPONE. Aceptar es
+     un clic; cambiarla, abrir el selector de al lado.
+
+     La propuesta la hizo el código, no la IA, y sale diciendo de dónde
+     salió: por la exógena, por el XML de la factura, por el texto del
+     documento o por el nombre del archivo. Una sugerencia sin origen a
+     la vista es una en la que no se puede confiar. */
   if (!documento.renglon_id && documento.sugerencia) {
     const sugerido = renglonesDelCliente.find(function (r) {
       return r.id === documento.sugerencia;
     });
+    const detalle = (documento.sugerencias || [])[0] || null;
+
     if (sugerido) {
       const propuesta = document.createElement("button");
       propuesta.type = "button";
       propuesta.className = "sugerencia";
+      if (detalle && detalle.certeza === "alta") {
+        propuesta.classList.add("sugerencia-alta");
+      }
       propuesta.textContent = "¿Es \"" + sugerido.titulo + "\"?";
-      propuesta.title = "Sugerencia por el nombre del archivo. Confirme usted.";
+      propuesta.title = detalle
+        ? detalle.porque + " Confirme usted."
+        : "Sugerencia hecha con código. Confirme usted.";
       propuesta.addEventListener("click", function () {
         asignarDocumento(documento.id, sugerido.id);
       });
       asignacion.appendChild(propuesta);
+
+      if (detalle) {
+        const origen = document.createElement("span");
+        origen.className = "sugerencia-origen";
+        origen.textContent = detalle.origen_texto;
+        origen.title = detalle.porque;
+        asignacion.appendChild(origen);
+      }
     }
   }
 

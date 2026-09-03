@@ -40,6 +40,10 @@ from pathlib import Path
 RAIZ = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(RAIZ))
 
+sys.path.insert(0, str(RAIZ / "pruebas"))
+
+import documentos_de_ejemplo as ejemplos  # noqa: E402
+
 from app import configuracion  # noqa: E402
 
 resultados = []
@@ -832,6 +836,57 @@ def probar_exogena(identificador):
                              "/api/clientes/%d/exogena" % identificador)
     comprobar("no se duplicaron los registros",
               len(tabla["filas"]) == 36, len(tabla["filas"]))
+
+    # --- Con la exógena cargada, los documentos se clasifican solos ---
+    # Es gratis y pasa entero en este computador, así que arranca sin
+    # que nadie lo pida. Lo que se le pide al contador es gastar plata,
+    # no trabajar.
+    codigo, subidos, _ = subir(
+        "/api/clientes/%d/documentos" % identificador, "archivos",
+        [("scan0001.pdf", ejemplos.pdf_con_texto([
+            "CERTIFICADO PARA DECLARACION DE RENTA 2025",
+            "BANCO DAVIVIENDA S.A.",
+            "NIT 860.034.313-7",
+            "Senor(a): GOMEZ RIVERA CARLOS ANDRES",
+            "Saldo a 31 de diciembre de 2025: 3.839.996",
+        ]))])
+    comprobar("sube un documento con nombre de escáner", codigo == 200,
+              "código %s" % codigo)
+
+    # La clasificación corre en otro hilo: se espera a que termine.
+    propuesta = None
+    for _ in range(40):
+        _, lista, _ = pedir(
+            "GET", "/api/clientes/%d/documentos" % identificador)
+        for documento in lista or []:
+            if documento["nombre_original"] == "scan0001.pdf":
+                if documento.get("sugerencias"):
+                    propuesta = documento["sugerencias"][0]
+                break
+        if propuesta:
+            break
+        time.sleep(0.25)
+
+    comprobar("y le propone renglón aunque el nombre no diga nada",
+              propuesta is not None, propuesta)
+    if propuesta:
+        comprobar("la propuesta dice de dónde salió",
+                  propuesta["origen"] == "exogena"
+                  and "exógena" in propuesta["origen_texto"],
+                  propuesta)
+        comprobar("y explica por qué, en palabras del contador",
+                  "860034313" in propuesta["porque"]
+                  and "DAVIVIENDA" in propuesta["porque"].upper(),
+                  propuesta["porque"][:70])
+        comprobar("con certeza alta, porque el NIT es el NIT",
+                  propuesta["certeza"] == "alta", propuesta["certeza"])
+
+    # Y es una PROPUESTA: el documento sigue sin asignar hasta que él
+    # la acepte. Tax-i no decide dónde va nada.
+    _, lista, _ = pedir("GET", "/api/clientes/%d/documentos" % identificador)
+    subido = next(d for d in lista if d["nombre_original"] == "scan0001.pdf")
+    comprobar("pero NO lo asigna: eso lo decide el contador",
+              subido["renglon_id"] is None, subido["renglon_id"])
 
     # --- Quitar la exógena no toca los renglones ---
     codigo, _, _ = pedir("DELETE",

@@ -252,7 +252,21 @@ def leer_pdf(contenido):
         return "", "No se pudo abrir el PDF. Puede estar dañado o con clave."
 
     if getattr(lector, "is_encrypted", False):
-        return "", "El PDF tiene contraseña, así que no se puede leer."
+        # Muchos certificados de banco vienen "protegidos" pero con la
+        # clave vacía: traen el candado para que nadie los edite, no
+        # para que nadie los lea. Se intenta abrirlos así antes de
+        # rendirse, porque son de los que más llegan.
+        abierto = False
+        try:
+            abierto = bool(lector.decrypt(""))
+        except Exception:
+            abierto = False
+        if not abierto:
+            return "", (
+                "El PDF tiene contraseña, así que no se puede leer. Ábralo"
+                " usted y vuélvalo a guardar sin clave, o dígale al cliente"
+                " que lo mande sin ella."
+            )
 
     partes = []
     for pagina in lector.pages[:PAGINAS_QUE_SE_LEEN]:

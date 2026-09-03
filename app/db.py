@@ -425,6 +425,51 @@ def crear_tablas():
             " ON exogena_filas (carga_id)"
         )
 
+        # Lo que el programa cree que es cada documento.
+        #
+        # Se guardan en vez de calcularse cada vez que se abre la
+        # pantalla porque leer cuarenta PDF para pintar una lista la
+        # dejaría en blanco varios segundos, y porque la capa 2 —cuando
+        # llegue— cuesta plata: recalcularla al abrir la pantalla sería
+        # pagar el mismo documento diez veces.
+        #
+        # SUGERENCIAS, no asignaciones. La columna renglon_id de
+        # documentos sigue siendo la única verdad sobre dónde está cada
+        # documento, y ahí solo escribe el contador.
+        conexion.execute(
+            """
+            CREATE TABLE IF NOT EXISTS sugerencias (
+                id           INTEGER PRIMARY KEY AUTOINCREMENT,
+                documento_id INTEGER NOT NULL,
+                cliente_id   INTEGER NOT NULL,
+                renglon_id   INTEGER NOT NULL,
+                -- De dónde salió: 'exogena', 'xml', 'texto' o 'nombre'.
+                -- Se muestra en pantalla: una sugerencia sin origen
+                -- visible es una en la que no se puede confiar.
+                origen       TEXT NOT NULL,
+                -- 'alta' o 'media'. Con 'baja' no se guarda ninguna.
+                certeza      TEXT NOT NULL,
+                -- La frase que explica por qué, en palabras del contador.
+                porque       TEXT NOT NULL DEFAULT '',
+                -- La mejor de todas, que es la que se propone.
+                principal    INTEGER NOT NULL DEFAULT 0,
+                creada_en    TEXT NOT NULL,
+                FOREIGN KEY (documento_id) REFERENCES documentos(id)
+                    ON DELETE CASCADE,
+                FOREIGN KEY (cliente_id) REFERENCES clientes(id)
+                    ON DELETE CASCADE
+            )
+            """
+        )
+        conexion.execute(
+            "CREATE INDEX IF NOT EXISTS idx_sugerencias_documento"
+            " ON sugerencias (documento_id)"
+        )
+        conexion.execute(
+            "CREATE INDEX IF NOT EXISTS idx_sugerencias_cliente"
+            " ON sugerencias (cliente_id)"
+        )
+
         # --- Cambios sobre bases que ya existían ---
         # Si la base se creó con una versión anterior del programa, le falta
         # la columna "notas". Se agrega aquí en vez de pedirle al contador
@@ -486,6 +531,14 @@ def crear_tablas():
         # lea UNA sola vez: si ya está 'listo', no se vuelve a leer ni a
         # pagar. Los cuatro valores posibles son 'pendiente', 'leyendo',
         # 'listo' y 'fallo'.
+        # En qué va la clasificación. Es distinta de estado_lectura:
+        # clasificar es gratis y local, leer con IA cuesta. Por eso
+        # clasificar arranca solo al subir y leer lo pide el contador.
+        if "estado_clasificacion" not in columnas_doc:
+            conexion.execute(
+                "ALTER TABLE documentos ADD COLUMN estado_clasificacion TEXT"
+                " NOT NULL DEFAULT 'pendiente'"
+            )
         if "estado_lectura" not in columnas_doc:
             conexion.execute(
                 "ALTER TABLE documentos ADD COLUMN estado_lectura TEXT"
@@ -1562,3 +1615,84 @@ def borrar_exogena(cliente_id, anio):
             (cliente_id, anio),
         )
     return cursor.rowcount > 0
+
+
+# ----------------------------------------------------------
+# Operaciones sobre las sugerencias
+# ----------------------------------------------------------
+#
+# Son propuestas, no asignaciones: dónde está de verdad cada documento lo
+# dice documentos.renglon_id, y ahí solo escribe el contador.
+
+
+def guardar_sugerencias(cliente_id, documento_id, sugerencias):
+    """Reemplaza las sugerencias de un documento por estas.
+
+    Reemplaza y no acumula: si se vuelve a clasificar —porque se cargó
+    la exógena y ahora hay con qué cruzar— las de antes ya no valen.
+    """
+    ahora = datetime.now().isoformat(timespec="seconds")
+    with conectar() as conexion:
+        conexion.execute(
+            "DELETE FROM sugerencias WHERE documento_id = ?", (documento_id,)
+        )
+        for posicion, sugerencia in enumerate(sugerencias):
+            conexion.execute(
+                "INSERT INTO sugerencias (documento_id, cliente_id,"
+                " renglon_id, origen, certeza, porque, principal, creada_en)"
+                " VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                (documento_id, cliente_id, sugerencia["renglon_id"],
+                 sugerencia["origen"], sugerencia["certeza"],
+                 sugerencia.get("porque", ""), 1 if posicion == 0 else 0,
+                 ahora),
+            )
+        conexion.execute(
+            "UPDATE documentos SET estado_clasificacion = 'listo'"
+            " WHERE id = ?", (documento_id,)
+        )
+
+
+def sugerencias_del_cliente(cliente_id):
+    """Las sugerencias de todos sus documentos: {documento_id: [...]}."""
+    with conectar() as conexion:
+        filas = conexion.execute(
+            "SELECT * FROM sugerencias WHERE cliente_id = ?"
+            " ORDER BY documento_id, principal DESC, id",
+            (cliente_id,),
+        ).fetchall()
+    agrupadas = {}
+    for fila in filas:
+        dato = dict(fila)
+        dato["principal"] = bool(dato["principal"])
+        agrupadas.setdefault(dato["documento_id"], []).append(dato)
+    return agrupadas
+
+
+def documentos_sin_clasificar(cliente_id=None):
+    """Los documentos a los que todavía no se les ha propuesto nada."""
+    consulta = ("SELECT * FROM documentos WHERE estado_clasificacion ="
+                " 'pendiente'")
+    parametros = []
+    if cliente_id is not None:
+        consulta += " AND cliente_id = ?"
+        parametros.append(cliente_id)
+    consulta += " ORDER BY id"
+    with conectar() as conexion:
+        filas = conexion.execute(consulta, parametros).fetchall()
+    return [dict(fila) for fila in filas]
+
+
+def marcar_para_clasificar(cliente_id):
+    """Vuelve a poner en la fila todos los documentos de un cliente.
+
+    Se llama al cargar la exógena: hasta ese momento no había terceros
+    con qué cruzar, y ahora sí. Los que el contador ya asignó a mano no
+    se tocan: su decisión manda sobre cualquier sugerencia.
+    """
+    with conectar() as conexion:
+        cursor = conexion.execute(
+            "UPDATE documentos SET estado_clasificacion = 'pendiente'"
+            " WHERE cliente_id = ? AND renglon_id IS NULL",
+            (cliente_id,),
+        )
+    return cursor.rowcount

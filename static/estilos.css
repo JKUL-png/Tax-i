@@ -1433,6 +1433,25 @@ a.boton-secundario {
   background: var(--superficie);
 }
 
+/* Cuando la pista es fuerte —el NIT del tercero salió del documento y
+   está en la exógena— el borde se cierra. Sigue siendo una propuesta:
+   la línea punteada se vuelve entera, no se vuelve un botón lleno. */
+.sugerencia-alta {
+  border-style: solid;
+  border-color: var(--primary);
+  color: var(--primary-hover);
+}
+
+/* De dónde salió la sugerencia. Va al lado y en pequeño, pero va
+   siempre: una sugerencia sin origen a la vista es una en la que no se
+   puede confiar. */
+.sugerencia-origen {
+  flex: 0 0 auto;
+  font-size: var(--t-rotulo);
+  color: var(--texto-tenue);
+  white-space: nowrap;
+}
+
 .renglon-archivos {
   flex: 0 0 auto;
   font-size: var(--t-meta);
