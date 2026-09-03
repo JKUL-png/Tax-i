@@ -3,7 +3,10 @@ Deja un cliente cargado con todo, para probar el programa de punta a punta.
 
 Se corre así, desde la carpeta del proyecto:
 
-    .venv/bin/python pruebas/cargar_para_probar.py
+    .venv/bin/python pruebas/cargar_para_probar.py                   (Mac)
+    .venv\\Scripts\\python.exe pruebas\\cargar_para_probar.py         (Windows)
+
+Y para cargárselo a un cliente que ya existe, se le pasa su nombre:
 
     .venv/bin/python pruebas/cargar_para_probar.py "Pedro Ruiz"
 
