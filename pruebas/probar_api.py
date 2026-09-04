@@ -607,6 +607,58 @@ def probar_rentai(identificador):
               codigo in (400, 409), "código %s: %s" % (codigo, cuerpo))
 
 
+def probar_pasada(identificador):
+    """Las direcciones de la propuesta del formulario.
+
+    Con IA_PROVEEDOR=ninguno no se puede correr una pasada de
+    verdad —y no se intenta: gastaría plata—, pero todo lo que
+    la rodea sí tiene que contestar bien y decir por qué está
+    apagada, sin alarma.
+    """
+    titulo("H2. La propuesta del formulario")
+
+    codigo, propuesta, _ = pedir(
+        "GET", "/api/clientes/%d/pasada" % identificador)
+    comprobar("un cliente sin pasada no arranca con nada inventado",
+              codigo == 200 and propuesta["hay_pasada"] is False
+              and propuesta["renglones"] == [],
+              "código %s: %s" % (codigo, propuesta))
+    comprobar("y dice si la propuesta está disponible, y por qué no",
+              "ia_disponible" in propuesta and bool(propuesta["motivo"]),
+              propuesta.get("motivo"))
+
+    codigo, bloque, _ = pedir(
+        "GET", "/api/clientes/%d/pasada/en-bloque" % identificador)
+    comprobar("sin pasada no hay nada que aprobar en bloque",
+              codigo == 200 and bloque["cuantos"] == 0,
+              "código %s: %s" % (codigo, bloque))
+
+    codigo, cuerpo, _ = pedir(
+        "POST", "/api/clientes/%d/pasada/aprobar" % identificador,
+        {"ids": []})
+    comprobar("aprobar sin escoger nada se rechaza", codigo == 400,
+              "código %s: %s" % (codigo, cuerpo))
+
+    codigo, cuerpo, _ = pedir("GET", "/api/clientes/999999/pasada")
+    comprobar("un cliente que no existe da 404", codigo == 404,
+              "código %s" % codigo)
+
+    codigo, gasto, _ = pedir("GET", "/api/gasto")
+    comprobar("el gasto se puede consultar y trae el total",
+              codigo == 200 and "total" in gasto and "por_cliente" in gasto,
+              "código %s: %s" % (codigo, gasto))
+    comprobar("y dice que el costo es aproximado",
+              "aproximado" in (gasto.get("aviso") or ""),
+              gasto.get("aviso"))
+
+    codigo, comparacion, _ = pedir(
+        "GET", "/api/clientes/%d/comparacion" % identificador)
+    comprobar("sin comparación previa lo dice sin romperse",
+              codigo == 200 and comparacion.get("hay_comparacion") is False,
+              "código %s: %s" % (codigo, comparacion))
+
+
+
 def probar_cuenta():
     titulo("I. La cuenta")
 
@@ -993,6 +1045,7 @@ def main():
             probar_formulario(identificador)
             probar_exogena(identificador)
             probar_rentai(identificador)
+            probar_pasada(identificador)
         probar_importar()
         probar_cuenta()
     finally:

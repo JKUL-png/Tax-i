@@ -4901,3 +4901,183 @@ code {
   text-align: center;
   color: var(--texto-tenue);
 }
+
+
+/* ==========================================================
+   La propuesta del formulario
+
+   El amarillo de aquí es una excepción deliberada a la regla de arriba
+   —«un dato leído por una máquina no lleva color propio»— y vale la
+   pena decir por qué.
+
+   Aquel color afirmaba: pintaba de azul un dato para decir «esto lo
+   leyó la IA», que es afirmar algo sobre su calidad. Este amarillo no
+   afirma nada sobre el dato: dice DÓNDE MIRAR PRIMERO. Marca los
+   renglones de nivel C, que son en los que el modelo tuvo que
+   interpretar, y sirve exactamente para que el contador pueda saltarse
+   la lectura de los otros treinta.
+
+   Es el mismo ocre del plazo que se acerca (--alerta-texto), no un
+   amarillo nuevo: la pantalla sigue teniendo una sola paleta.
+   ========================================================== */
+
+.lista-propuesta {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.propuesta-renglon {
+  background: var(--superficie);
+  border: 1px solid var(--borde);
+  border-left: 3px solid var(--n4);
+  border-radius: 8px;
+  padding: 12px 14px;
+}
+
+/* Nivel A: sin marca. Es el caso normal y no tiene por qué llamar la
+   atención. */
+.propuesta-renglon.nivel-A { border-left-color: var(--n3); }
+
+/* Nivel B: una raya discreta. La razón se lee al pasar el cursor. */
+.propuesta-renglon.nivel-B { border-left-color: var(--n5); }
+
+/* Nivel C: amarillo, visible de un vistazo. */
+.propuesta-renglon.nivel-C {
+  border-left-color: var(--alerta-texto);
+  background: #FDF8EE;
+}
+
+.propuesta-renglon.propuesta-conflicto {
+  border-left-color: var(--error);
+}
+
+.propuesta-cabecera {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.propuesta-titulo {
+  font-weight: 600;
+  color: var(--texto);
+}
+
+.propuesta-marca {
+  color: var(--n5);
+  cursor: help;
+}
+
+.etiqueta-revisar {
+  color: var(--alerta-texto);
+  border-color: rgba(138, 90, 18, 0.34);
+  margin-left: 8px;
+  cursor: help;
+}
+
+.propuesta-total { font-weight: 600; white-space: nowrap; }
+
+.propuesta-conflicto-texto {
+  color: var(--error-texto);
+  font-size: 0.86rem;
+  margin: 6px 0 0;
+}
+
+.propuesta-componente {
+  border-top: 1px solid var(--raya);
+  margin-top: 10px;
+  padding-top: 10px;
+}
+
+.propuesta-componente.estado-revision { opacity: 0.75; }
+.propuesta-componente.estado-descartado { display: none; }
+
+.propuesta-linea {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.propuesta-cifra { font-weight: 600; }
+.propuesta-donde { color: var(--texto-secundario); font-size: 0.88rem; }
+.propuesta-casilla {
+  color: var(--texto-tenue);
+  font-size: 0.84rem;
+  cursor: help;
+}
+.propuesta-falta { color: var(--alerta-texto); }
+
+/* La cita es lo que hace verificable la cifra: va entre comillas y en la
+   letra del documento, no en la de la interfaz, para que se lea como lo
+   que es — un pedazo copiado de un papel. */
+.propuesta-cita {
+  margin: 6px 0 0;
+  padding-left: 12px;
+  border-left: 2px solid var(--n3);
+  color: var(--texto-secundario);
+  font-size: 0.88rem;
+}
+
+.propuesta-nota {
+  margin: 6px 0 0;
+  color: var(--texto-tenue);
+  font-size: 0.86rem;
+}
+
+.propuesta-motivo {
+  margin: 6px 0 0;
+  color: var(--alerta-texto);
+  font-size: 0.86rem;
+}
+
+.propuesta-conteo {
+  font-size: 1.05rem;
+  font-weight: 600;
+  margin: 0;
+}
+
+
+/* ---------- El modo comparación ---------- */
+
+.comparacion-resumen { margin-top: 14px; }
+
+.comparacion-lista {
+  margin-top: 12px;
+  border: 1px solid var(--borde);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.comparacion-fila {
+  display: grid;
+  grid-template-columns: 1fr auto auto auto;
+  gap: 12px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--raya);
+  font-size: 0.88rem;
+}
+
+.comparacion-fila:last-child { border-bottom: none; }
+.comparacion-nombre { color: var(--texto-secundario); }
+.comparacion-diferencia { color: var(--texto-tenue); }
+
+.comparacion-coincide { background: var(--superficie); }
+.comparacion-difiere { background: #FDF8EE; }
+.comparacion-solo_taxi,
+.comparacion-solo_contador { background: var(--n2); }
+
+/* Una fila de la lista de gasto: el nombre a la izquierda, el detalle a
+   la derecha. Es la misma forma de las otras listas de la pantalla. */
+.fila-lista {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--raya);
+}
+
+.fila-lista:last-child { border-bottom: none; }

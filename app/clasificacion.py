@@ -675,10 +675,16 @@ def sugerir_todas(nombre_archivo, contenido, contexto_cliente):
 #   letra a ninguna parte y no gasta cupo de ningún servicio. Entonces
 #   pasa solo, apenas se confirma la carga.
 #
-#   Leer con IA CUESTA. Por eso esa fila la arranca el contador cuando
-#   decide gastar (ver app/cola.py).
+#   La pasada del formulario CUESTA. Por eso esa la pide el contador
+#   cuando decide gastar (ver app/pasada.py).
 #
 # Es la regla de la casa: lo gratis pasa solo, lo que cuesta se pide.
+#
+# Aquí ya no hay ninguna capa con IA. La había —le preguntaba al modelo
+# por los documentos que la capa 1 no supo ubicar— y se fue en
+# septiembre de 2026: la pasada hace ese mismo trabajo mirando TODO el
+# cliente junto, que es como se acierta, en vez de un documento suelto
+# a la vez.
 
 import threading
 
@@ -688,11 +694,8 @@ _hilo = None
 _candado = threading.Lock()
 
 
-def clasificar_documento(documento, contexto_cliente, con_ia=False):
+def clasificar_documento(documento, contexto_cliente):
     """Le propone renglón a un documento y lo guarda. Devuelve cuántas.
-
-    Con con_ia=False solo corre la capa 1, que es gratis. La capa 2 se
-    pide aparte, porque cuesta.
 
     Nunca lanza excepción: un archivo dañado no puede trabar la tanda.
     """
@@ -711,25 +714,15 @@ def clasificar_documento(documento, contexto_cliente, con_ia=False):
         # documento, y eso no puede quedar en un registro.
         propuestas = []
 
-    # La capa 2 corre SOLO si la capa 1 no encontró nada. Si el NIT del
-    # banco estaba impreso en el certificado, no hay nada que preguntar
-    # ni por qué pagar.
-    if not propuestas and con_ia:
-        try:
-            propuestas = sugerir_con_ia(
-                documento["nombre_original"], contenido, contexto_cliente)
-        except Exception:
-            propuestas = []
-
     db.guardar_sugerencias(
         documento["cliente_id"], documento["id"], propuestas)
     return len(propuestas)
 
 
-def clasificar_pendientes(cliente_id=None, con_ia=False):
+def clasificar_pendientes(cliente_id=None):
     """Clasifica todo lo que esté esperando. Devuelve un informe."""
     pendientes = db.documentos_sin_clasificar(cliente_id)
-    informe = {"revisados": 0, "con_sugerencia": 0, "con_ia": bool(con_ia)}
+    informe = {"revisados": 0, "con_sugerencia": 0}
 
     # El contexto se arma una vez por cliente, no una por documento.
     contextos = {}
@@ -737,14 +730,14 @@ def clasificar_pendientes(cliente_id=None, con_ia=False):
         suyo = documento["cliente_id"]
         if suyo not in contextos:
             contextos[suyo] = contexto(suyo)
-        cuantas = clasificar_documento(documento, contextos[suyo], con_ia)
+        cuantas = clasificar_documento(documento, contextos[suyo])
         informe["revisados"] += 1
         if cuantas:
             informe["con_sugerencia"] += 1
     return informe
 
 
-def arrancar(cliente_id=None, con_ia=False):
+def arrancar(cliente_id=None):
     """Pone a clasificar en otro hilo. Vuelve enseguida.
 
     Subir sigue siendo instantáneo: el contador confirma la carga y ya,
@@ -758,7 +751,7 @@ def arrancar(cliente_id=None, con_ia=False):
 
         def trabajar():
             try:
-                clasificar_pendientes(cliente_id, con_ia)
+                clasificar_pendientes(cliente_id)
             except Exception:
                 # Nunca se registra el detalle: podría traer el nombre o
                 # el contenido de un documento de un cliente.
@@ -775,188 +768,6 @@ def trabajando():
 
 
 # ----------------------------------------------------------
-# Capa 2: preguntarle al modelo, y SOLO lo que sobró
-# ----------------------------------------------------------
-#
-# Esta capa corre únicamente cuando la capa 1 no encontró nada. Si el
-# NIT del banco estaba impreso en el certificado, no hay nada que
-# preguntar: ya se sabe.
-#
-# Cinco reglas, y las cinco están puestas en código, no en el texto que
-# se le manda al modelo. Pedirle algo por favor no es lo mismo que
-# impedírselo:
-#
-#   1. LISTA CERRADA. Elige entre los renglones que ese cliente YA
-#      tiene. No puede inventar renglones ni proponer nombres nuevos.
-#      La respuesta se valida contra la lista y lo que no esté, se
-#      descarta sin más.
-#   2. «NO SÉ» ES UNA RESPUESTA CORRECTA. Si no está claro, devuelve
-#      nulo y el documento se queda sin asignar. Un documento sin
-#      asignar es mejor que uno mal asignado, y no se le empuja a
-#      contestar.
-#   3. CERTEZA. Con 'baja' no se propone nada.
-#   4. POCO TEXTO. Los primeros 1.500 caracteres y el nombre del
-#      archivo. Para saber qué clase de papel es, sobra.
-#   5. NI UNA CIFRA. Esta capa clasifica y nada más. Sacar los datos es
-#      otro trabajo y lo hace app/extraccion.py, una sola vez.
-#
-# Y todo lo anterior sigue funcionando con IA_PROVEEDOR=ninguno: esta
-# capa simplemente no corre, y se dice sin alarma.
-
-import json
-
-from app import instrucciones, proveedores
-from app.configuracion import CONFIG
-
-# Cuánto texto se le manda. Para identificar un tipo de documento
-# alcanza y sobra; con más se gasta cupo sin acertar más.
-LETRAS_PARA_CLASIFICAR = 1500
-
-def hay_ia():
-    """¿Está prendida la IA? Si no, la capa 2 no corre y punto."""
-    return bool(CONFIG.ia_disponible)
-
-
-def _lista_para_el_modelo(renglones):
-    return "\n".join("%d: %s" % (r["id"], r["titulo"]) for r in renglones)
-
-
-def _json_de_la_respuesta(contenido):
-    """Saca el JSON de lo que contestó, aunque venga envuelto en ```."""
-    limpio = (contenido or "").strip()
-    if limpio.startswith("```"):
-        limpio = limpio.split("```")[1] if "```" in limpio[3:] else limpio[3:]
-        if limpio.lstrip().lower().startswith("json"):
-            limpio = limpio.lstrip()[4:]
-    try:
-        return json.loads(limpio.strip())
-    except ValueError:
-        # Contestó algo que no era JSON. No es motivo para tumbar nada:
-        # se trata como «no sé».
-        return None
-
-
-def _validar(respuesta, renglones):
-    """Deja pasar SOLO lo que está en la lista del cliente.
-
-    Esta función es la que hace que la promesa se cumpla. Se lo pedimos
-    en el texto, pero se lo impedimos aquí: un modelo puede devolver un
-    id inventado, el id de otro cliente o una frase, y nada de eso pasa.
-
-    Devuelve (principal, secundarios, certeza). Con «no sé» devuelve
-    (None, [], "").
-    """
-    if not isinstance(respuesta, dict):
-        return None, [], ""
-
-    permitidos = {r["id"]: r for r in renglones}
-
-    def id_valido(valor):
-        if isinstance(valor, bool) or not isinstance(valor, (int, str)):
-            return None
-        try:
-            numero = int(valor)
-        except (TypeError, ValueError):
-            return None
-        return numero if numero in permitidos else None
-
-    principal = id_valido(respuesta.get("renglon"))
-    if principal is None:
-        return None, [], ""
-
-    certeza = str(respuesta.get("certeza", "")).strip().lower()
-    if certeza not in (ALTA, MEDIA, BAJA):
-        # Si no dijo con cuánta certeza, se toma la más baja que se
-        # muestra. Nunca se le regala certeza a una respuesta.
-        certeza = MEDIA
-
-    secundarios = []
-    crudos = respuesta.get("tambien")
-    if isinstance(crudos, list):
-        for valor in crudos[:SECUNDARIOS_MAXIMOS]:
-            otro = id_valido(valor)
-            if otro is not None and otro != principal and otro not in secundarios:
-                secundarios.append(otro)
-
-    return principal, secundarios, certeza
-
-
-def sugerir_con_ia(nombre_archivo, contenido, contexto_cliente):
-    """Le pregunta al modelo. Devuelve una lista de sugerencias, o [].
-
-    Devuelve [] cuando la IA está apagada, cuando el documento no tiene
-    texto, cuando el modelo dijo que no sabe, cuando contestó algo que
-    no estaba en la lista y cuando la certeza fue baja. Las cinco son
-    respuestas correctas.
-    """
-    if not hay_ia():
-        return []
-
-    renglones = contexto_cliente["renglones"]
-    if not renglones:
-        return []
-
-    texto, _motivo = lectura.texto_del_documento(nombre_archivo, contenido)
-    if not texto.strip():
-        # De una foto o de un PDF con contraseña no hay texto que
-        # mandar. No se manda el archivo: nunca sale del computador.
-        return []
-
-    pregunta = [
-        {"role": "system", "content": instrucciones.CLASIFICAR},
-        {"role": "user", "content":
-         "Renglones disponibles:\n%s\n\nNombre del archivo: %s\n\n"
-         "Documento:\n%s" % (_lista_para_el_modelo(renglones),
-                             nombre_archivo,
-                             texto[:LETRAS_PARA_CLASIFICAR])},
-    ]
-
-    # Se intenta dos veces como mucho. Si contesta algo que no es el
-    # JSON pedido, se reintenta UNA vez; si vuelve a fallar, el
-    # documento se queda sin propuesta, que es una salida honesta. Una
-    # respuesta a medias no se acepta nunca.
-    principal, secundarios, certeza = None, [], ""
-    for intento in range(2):
-        try:
-            contenido_modelo = proveedores.conversar(CONFIG, pregunta)
-        except proveedores.ErrorDeProveedor:
-            # El servicio falló. No es un fallo del documento: se queda
-            # sin sugerencia y ya.
-            return []
-
-        entendido = _json_de_la_respuesta(contenido_modelo)
-        if entendido is not None:
-            principal, secundarios, certeza = _validar(entendido, renglones)
-            break
-        if intento == 1:
-            return []
-
-    if principal is None or certeza == BAJA:
-        return []
-
-    por_id = {r["id"]: r for r in renglones}
-    salida = [{
-        "renglon_id": principal,
-        "titulo": por_id[principal]["titulo"],
-        "codigo": por_id[principal].get("codigo_renglon") or "",
-        "origen": POR_IA,
-        "certeza": certeza,
-        "porque": "Lectura automática del texto del documento. Verifique.",
-    }]
-    for otro in secundarios:
-        salida.append({
-            "renglon_id": otro,
-            "titulo": por_id[otro]["titulo"],
-            "codigo": por_id[otro].get("codigo_renglon") or "",
-            "origen": POR_IA,
-            "certeza": MEDIA,
-            "porque": "Lectura automática: este documento también podría"
-                      " soportar este renglón. Verifique.",
-        })
-    return salida
-
-
-# ----------------------------------------------------------
 # Aprender de las correcciones
 # ----------------------------------------------------------
 #
@@ -969,7 +780,7 @@ def sugerir_con_ia(nombre_archivo, contenido, contexto_cliente):
 # decidió. Y vale para TODOS sus clientes, no solo para ese: la regla se
 # guarda por código de renglón del 210, que es el mismo en todas partes.
 #
-# Con el uso, la capa determinista crece y la IA se necesita menos.
+# Con el uso, esta capa crece y le deja menos trabajo a la pasada.
 #
 # Lo que NO se guarda: ni el nombre del cliente, ni el del archivo, ni
 # una letra de su contenido. Solo quién emite y a qué renglón va.

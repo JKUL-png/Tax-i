@@ -517,6 +517,48 @@ def main():
                         not errores, errores[:3])
 
             # ---------- El selector de renglones ----------
+            titulo("F2. La pestaña de la propuesta del formulario")
+            errores.clear()
+            pagina.goto(DIRECCION + "/cliente?id=%d" % id_cliente,
+                        wait_until="networkidle")
+
+            pagina.locator('[data-vista="formulario"]').click()
+            pagina.wait_for_timeout(400)
+            # El plegable puede venir abierto o cerrado según lo que el
+            # navegador recuerde de la vez pasada. Se abre a la fuerza.
+            pagina.evaluate(
+                "document.getElementById('plegable-formulario').open = true"
+            )
+            pagina.wait_for_timeout(800)
+
+            revisar("la pestaña Propuesta existe y es la primera",
+                    pagina.locator('[data-panel="panel-propuesta"]').count() == 1)
+            revisar("abre sin errores de JavaScript", not errores, errores[:3])
+
+            # Con IA_PROVEEDOR=ninguno —el modo de fábrica— la pasada no
+            # existe, y la pantalla tiene que decirlo SIN alarma y sin
+            # esconder lo demás.
+            sin_ia = pagina.locator("#propuesta-sin-ia")
+            arrancar = pagina.locator("#propuesta-arrancar")
+            revisar("dice si la propuesta está apagada, o deja pedirla",
+                    sin_ia.is_visible() or arrancar.is_visible(),
+                    "sin_ia" if sin_ia.is_visible() else "arrancar")
+            if sin_ia.is_visible():
+                revisar("y explica por qué, sin alarma",
+                        bool(pagina.locator("#propuesta-motivo")
+                             .inner_text().strip()))
+
+            revisar("la hoja de captura sigue estando a un clic",
+                    pagina.locator('[data-panel="panel-hoja"]').count() == 1)
+            pagina.locator('[data-panel="panel-hoja"]').click()
+            pagina.wait_for_timeout(400)
+            revisar("y se puede volver a ella sin que reviente nada",
+                    pagina.locator("#panel-hoja").is_visible() and not errores,
+                    errores[:3])
+
+            revisar("el modo comparación está a la vista",
+                    pagina.locator("#boton-comparar").count() == 1)
+
             titulo("G. El selector de renglones")
             errores.clear()
             pagina.locator('[data-vista="documentos"]').click()

@@ -27,10 +27,12 @@ datos que ya se le sacaron a sus documentos**, no los documentos.
 
 Eso último cambió. Antes, cada pregunta remandaba el texto de los
 documentos, así que el mismo certificado salía de aquí una y otra vez.
-Ahora cada documento se lee UNA sola vez, al confirmarlo (eso lo hace
-app/extraccion.py, y ahí sí sale su texto esa única vez), lo que se le
-sacó queda guardado en la base, y a partir de entonces lo que sale son
-esas filas: "Salarios = 45.000.000", no el certificado entero.
+Ahora cada documento se lee UNA sola vez —los XML al confirmarlos, con
+código y gratis (app/extraccion.py), y los PDF en la propuesta del
+formulario, que es donde sí sale su texto esa única vez
+(app/pasada.py)—, lo que se le sacó queda guardado en la base, y a
+partir de entonces lo que sale son esas filas: "Salarios =
+45.000.000", no el certificado entero.
 
 Sale menos, sale una vez, y lo ya leído se sigue viendo aunque después
 se apague la IA. Los archivos NO se mandan nunca.
@@ -101,9 +103,10 @@ def resumen_de_documentos(cliente_id):
     modelo en cada pregunta. Eso significaba pagar el mismo certificado
     otra vez en cada mensaje, y esperar a que se releyera.
 
-    Ahora los documentos se leen UNA vez, al confirmarlos (ver
-    app/extraccion.py), y lo que se les sacó vive en la base. Aquí solo
-    se consultan esas filas. Los documentos ya no se vuelven a mandar
+    Ahora los documentos se leen UNA vez —los XML al confirmarlos, en
+    app/extraccion.py, y los PDF en la propuesta del formulario, en
+    app/pasada.py— y lo que se les sacó vive en la base. Aquí solo se
+    consultan esas filas. Los documentos ya no se vuelven a mandar
     nunca: lo que sale son los datos, que son mucho más cortos.
 
     Eso también es lo que hace que lo ya leído se siga viendo con
@@ -133,9 +136,10 @@ def resumen_de_documentos(cliente_id):
             sin_leer.append(documento["nombre_original"])
             continue
 
-        # 'ia' es lectura automática; 'codigo' lo leyó el programa de un
-        # XML y es exacto. Se le dice al modelo, para que no presente lo
-        # uno como si fuera lo otro.
+        # 'codigo' lo leyó el programa de un XML y es exacto; 'pasada'
+        # (y 'ia', de versiones anteriores) es lectura automática. Se le
+        # dice al modelo, para que no presente lo uno como si fuera lo
+        # otro.
         como = ("leído por el programa del XML: exacto"
                 if suyos[0]["origen"] == "codigo"
                 else "LECTURA AUTOMÁTICA: hay que verificarla")
@@ -153,8 +157,8 @@ def resumen_de_documentos(cliente_id):
         bloques.append(
             "DOCUMENTOS QUE TODAVÍA NO SE HAN LEÍDO (%d): %s\n"
             "  No sabes qué dicen. No adivines su contenido: dile al"
-            " contador que los procese primero."
-            % (len(sin_leer), ", ".join(sin_leer[:8]))
+            " contador que pida la propuesta del formulario, que es"
+            " cuando se leen." % (len(sin_leer), ", ".join(sin_leer[:8]))
         )
 
     if not bloques:

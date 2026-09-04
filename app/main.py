@@ -34,14 +34,14 @@ Nota: no se registra en los logs ningún nombre de cliente ni contenido de
 documentos. Solo errores técnicos.
 """
 
-from app import cola, db, revision
+from app import db, revision
 from app.api.base import app
 
 # Cada uno de estos imports registra sus direcciones sobre `app`.
 # El orden no importa: las direcciones no se pisan entre sí.
 from app.api import (
     checklist, chat, clientes, cuenta, documentos, exogena, formulario,
-    importar, paginas, reglas, respaldo, resumen, sistema,
+    importar, paginas, pasada, reglas, respaldo, resumen, sistema,
 )
 
 # Esta tupla no se usa para nada más que dejar constancia de que los
@@ -49,7 +49,8 @@ from app.api import (
 # importarse. Sin ella parecen imports olvidados y alguien los borraría.
 MODULOS = (
     paginas, clientes, documentos, importar, checklist, resumen,
-    formulario, exogena, reglas, chat, cuenta, respaldo, sistema,
+    formulario, exogena, pasada, reglas, chat, cuenta, respaldo,
+    sistema,
 )
 
 
@@ -83,14 +84,15 @@ def preparar():
     # columnas nuevas si viene de una versión anterior.
     db.crear_tablas()
 
-    # Los documentos que quedaron a medio leer —porque se cerró el
-    # programa o se fue la luz— vuelven a la fila. La fila vive en la
-    # base, así que retoma donde iba en vez de perder el trabajo.
-    # No se pone a leer sola: eso lo decide el contador.
-    fila = cola.al_arrancar_el_programa()
-    if fila["rescatados"]:
+    # Los documentos que quedaron marcados como 'leyendo' —de una versión
+    # anterior del programa, cuando los PDF se leían uno por uno en otro
+    # hilo— vuelven a 'pendiente'. Hoy ya no queda nada a medias: los XML
+    # se leen de una al confirmar la carga, y el texto de los PDF lo lee
+    # la pasada del formulario cuando el contador la pide.
+    rescatados = db.rescatar_lecturas_a_medias()
+    if rescatados:
         print("  %d documento(s) habían quedado a medio leer y vuelven"
-              " a la fila." % fila["rescatados"])
+              " a quedar pendientes." % rescatados)
 
     # Y se revisa que todo esté en su sitio, contándolo en español. Solo
     # se escribe lo que hay que saber: si está todo bien, una línea.

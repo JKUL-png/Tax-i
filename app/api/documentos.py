@@ -4,11 +4,10 @@ import mimetypes
 from pathlib import Path
 
 from app import (
-    bitacora, checklist, clasificacion, cola, db, documentos, extraccion,
+    bitacora, checklist, clasificacion, db, documentos, extraccion,
     importar, lectura,
 )
 from app.api.base import app, campo_lista_de_numeros, cliente_o_404
-from app.configuracion import CONFIG
 from app.servidor import ErrorHttp, Respuesta
 
 
@@ -193,26 +192,26 @@ def api_subir_documentos(peticion, id_cliente):
         bitacora.anotar(id_cliente, bitacora.DOCUMENTOS_SUBIDOS,
                         detalle, len(guardados))
 
-    # Los documentos quedan anotados como pendientes de leer. Si el
-    # contador prendió «procesar automáticamente al confirmar», la fila
-    # arranca sola aquí; si no —que es de fábrica—, espera a que él
-    # apriete «Procesar pendientes». En los dos casos esta respuesta sale
-    # de una: leer se hace en otro hilo y nadie se queda esperando.
-    arrancó = False
-    if guardados and cola.procesar_automaticamente():
-        arrancó = cola.arrancar()
-
-    # La clasificación SÍ arranca sola, siempre, y esto no contradice lo
-    # de arriba: clasificar es gratis y pasa entero en este computador,
-    # así que no hay ninguna razón para hacérselo pedir. Lo que se le
-    # pide es gastar plata, no trabajar.
+    # Los XML se leen aquí mismo, de una. Es gratis, es exacto, tarda
+    # milisegundos y no sale del computador: no hay ninguna razón para
+    # hacérselo pedir. El texto de los PDF se lee después, todo junto,
+    # en la pasada del formulario — eso sí cuesta y lo pide él.
+    leidos = 0
     if guardados:
+        leidos = sum(
+            1 for informe in extraccion.leer_xml_pendientes(id_cliente)
+            if informe["estado"] == "listo"
+        )
+        # La clasificación también arranca sola, por lo mismo: es gratis
+        # y pasa entera en este computador. Lo que se le pide al contador
+        # es gastar plata, no trabajar.
         clasificacion.arrancar(id_cliente)
 
     return {
         "guardados": guardados,
         "ignorados": ignorados,
-        "cola": {"arrancó": arrancó, **cola.estado()},
+        "xml_leidos": leidos,
+        "estado": extraccion.resumen(id_cliente),
     }
 
 
@@ -221,7 +220,12 @@ def api_subir_documentos(peticion, id_cliente):
 #
 # Cada documento se lee UNA vez y lo que se le sacó queda en la base.
 # Después RentAI contesta con esas filas y no vuelve a leer —ni a pagar—
-# los mismos documentos. Ver app/extraccion.py.
+# los mismos documentos.
+#
+# Hay dos formas de llegar a esa tabla, y ninguna cuesta aparte: los XML
+# los lee el programa al confirmar la carga (app/extraccion.py), y de
+# los PDF los saca la pasada del formulario, en la misma llamada con la
+# que propone los renglones (app/pasada.py).
 # ----------------------------------------------------------
 
 
@@ -230,8 +234,9 @@ def api_datos_extraidos(peticion, id_cliente):
     """Los datos que ya se le sacaron a los documentos de este cliente.
 
     Cada dato dice de qué documento salió y quién lo leyó: 'codigo' si lo
-    leyó el programa de un XML (es exacto) o 'ia' si lo leyó un modelo
-    (es lectura automática y hay que verificarla contra el original).
+    leyó el programa de un XML (es exacto), o 'pasada' si salió de la
+    propuesta del formulario (es lectura automática, viene con su cita
+    ya verificada y hay que revisarla contra el original).
 
     Esto funciona con IA_PROVEEDOR=ninguno: lo ya leído está en este
     computador y no hay a quién preguntarle.
@@ -244,52 +249,20 @@ def api_datos_extraidos(peticion, id_cliente):
 
 
 @app.post("/api/clientes/{id_cliente}/datos/procesar")
-def api_procesar_pendientes(peticion, id_cliente):
-    """Pone a leer los documentos de este cliente que estén sin leer.
+def api_leer_xml(peticion, id_cliente):
+    """Lee los XML de este cliente que estén sin leer.
 
-    Es el botón «Procesar pendientes»: el contador decide cuándo gastar
-    cupo. **Contesta de una**, sin esperar a que termine: la lectura corre
-    en otro hilo y el contador sigue trabajando. La pantalla pregunta cada
-    tanto en qué va.
-
-    Si un documento falla se reintenta una vez; si vuelve a fallar queda
-    marcado y la fila sigue con los demás. Uno malo no traba a nadie.
+    Contesta cuando terminó, no antes: parsear un XML tarda
+    milisegundos, así que no hace falta una fila ni un hilo aparte.
+    Antes esto ponía a leer los PDF con IA, que se demoraba minutos —
+    de ahí venía toda esa maquinaria. Ahora los PDF los lee la pasada.
     """
     cliente_o_404(id_cliente)
-    arrancó = cola.arrancar(id_cliente)
-    if arrancó:
+    informes = extraccion.leer_xml_pendientes(id_cliente)
+    leidos = sum(1 for informe in informes if informe["estado"] == "listo")
+    if leidos:
         bitacora.anotar(id_cliente, bitacora.DOCUMENTOS_LEIDOS)
-    return {
-        "arrancó": arrancó,
-        "cola": cola.estado(id_cliente),
-        "estado": extraccion.resumen(id_cliente),
-    }
-
-
-@app.get("/api/cola")
-def api_estado_cola(peticion, **partes):
-    """En qué va la fila de lectura. La pantalla lo pregunta cada tanto."""
-    return cola.estado()
-
-
-@app.put("/api/cola/automatico")
-def api_cambiar_automatico(peticion, **partes):
-    """Prende o apaga el «procesar automáticamente al confirmar».
-
-    Viene apagado de fábrica: leer documentos gasta cupo y esa decisión es
-    del contador.
-    """
-    datos = peticion.diccionario()
-    if "prendido" not in datos:
-        raise ErrorHttp(400, "Falta decir si se prende o se apaga.")
-    return {"automatico": cola.cambiar_automatico(bool(datos["prendido"]))}
-
-
-@app.post("/api/cola/parar")
-def api_parar_cola(peticion, **partes):
-    """Le pide a la fila que pare cuando termine el documento que va leyendo."""
-    cola.parar()
-    return cola.estado()
+    return {"leidos": leidos, "estado": extraccion.resumen(id_cliente)}
 
 
 @app.get("/api/documentos/{id_documento}/archivo")
@@ -514,20 +487,17 @@ def api_aceptar_sugerencias(peticion, id_cliente):
 def api_clasificar(peticion, id_cliente):
     """Vuelve a mirar los documentos sin asignar.
 
-    Con con_ia=true corre además la capa 2, que es la que cuesta. Sin
-    eso corre solo la capa 1, que es gratis y local.
+    Es gratis y pasa entero en este computador: exógena, XML, texto y
+    nombre del archivo. No cuesta un peso y no sale nada.
+
+    Antes tenía un interruptor para preguntarle además al modelo por los
+    que no supo ubicar. Ese trabajo lo hace ahora la pasada del
+    formulario, mirando todo el cliente junto en vez de un documento
+    suelto a la vez, que es como se acierta.
     """
     cliente_o_404(id_cliente)
-    datos = peticion.diccionario()
-    con_ia = bool(datos.get("con_ia"))
-
-    if con_ia and not clasificacion.hay_ia():
-        raise ErrorHttp(409, CONFIG.motivo or "La IA está apagada.")
-
     db.marcar_para_clasificar(id_cliente)
-    arrancó = clasificacion.arrancar(id_cliente, con_ia=con_ia)
-    return {"arrancó": arrancó, "con_ia": con_ia,
-            "hay_ia": clasificacion.hay_ia()}
+    return {"arrancó": clasificacion.arrancar(id_cliente)}
 
 
 # ----------------------------------------------------------

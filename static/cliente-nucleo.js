@@ -268,15 +268,19 @@ function preguntar(opciones) {
 
   confirmarLista.innerHTML = "";
   const nombres = opciones.nombres || [];
-  nombres.slice(0, NOMBRES_EN_CONFIRMACION).forEach(function (nombre) {
+  /* Cuántos se alcanzan a ver. Al aprobar en bloque se muestran todos:
+     aceptar veinte propuestas a ciegas es justo el error que este
+     programa no debe dejar cometer, y "y 24 más" es a ciegas. */
+  const tope = opciones.maximo || NOMBRES_EN_CONFIRMACION;
+  nombres.slice(0, tope).forEach(function (nombre) {
     const item = document.createElement("li");
     item.textContent = nombre;
     confirmarLista.appendChild(item);
   });
-  if (nombres.length > NOMBRES_EN_CONFIRMACION) {
+  if (nombres.length > tope) {
     const mas = document.createElement("li");
     mas.className = "perfil-mas";
-    mas.textContent = "y " + (nombres.length - NOMBRES_EN_CONFIRMACION) + " más";
+    mas.textContent = "y " + (nombres.length - tope) + " más";
     confirmarLista.appendChild(mas);
   }
 

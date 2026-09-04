@@ -277,30 +277,6 @@
         </div>
       </div>
 
-      <!-- ---------- La fila de lectura ----------
-           Los documentos se leen UNA vez y lo que se les saca queda
-           guardado. Después, preguntarle algo a RentAI ya no vuelve a
-           leerlos ni a gastar cupo. La lectura corre aparte: el contador
-           no se queda esperando. -->
-      <div id="caja-cola" class="tarjeta caja-cola oculto">
-        <div class="cola-fila">
-          <p id="cola-texto" class="cola-texto"></p>
-          <button type="button" class="boton" id="cola-procesar">
-            Procesar pendientes
-          </button>
-        </div>
-        <p class="ayuda">
-          Leer un documento gasta cupo del servicio de IA, y las capas
-          gratis tienen un límite diario. Por eso existe esta fila: usted
-          decide cuándo se leen. Lo ya leído no se vuelve a leer nunca.
-          Los XML de facturas los lee el programa solo, sin gastar nada.
-        </p>
-        <label class="opcion-linea">
-          <input type="checkbox" id="cola-automatico">
-          Procesar automáticamente al confirmar una carga
-        </label>
-      </div>
-
       <div id="lista-documentos" class="lista">
         <div class="vacio">Cargando…</div>
       </div>
@@ -339,6 +315,9 @@
 
             <div class="pestanas" role="tablist">
               <button type="button" class="pestana pestana-activa"
+                      data-panel="panel-propuesta" role="tab">Propuesta<span
+                      class="conteo" id="conteo-propuesta"></span></button>
+              <button type="button" class="pestana"
                       data-panel="panel-hoja" role="tab">Hoja de captura</button>
               <button type="button" class="pestana"
                       data-panel="panel-resultado" role="tab">Resultado</button>
@@ -346,8 +325,96 @@
                       data-panel="panel-archivo" role="tab">Archivo y plantilla</button>
             </div>
 
+            <!-- ===== Pestaña 1: la propuesta del formulario =====
+                 Una sola llamada al modelo con la exógena y todos los
+                 documentos del cliente adentro. Lo que sale es una
+                 PROPUESTA: nada entra al formulario hasta que él
+                 apruebe, y de nivel C se revisa uno por uno. -->
+            <div id="panel-propuesta" class="panel">
+
+              <div id="propuesta-aviso" class="aviso oculto" role="alert"></div>
+
+              <!-- Sin IA configurada. Se dice sin alarma: todo lo demás
+                   del programa funciona igual. -->
+              <div id="propuesta-sin-ia" class="tarjeta oculto">
+                <h3>La propuesta automática está apagada</h3>
+                <p class="ayuda" id="propuesta-motivo"></p>
+                <p class="ayuda">
+                  Todo lo demás sigue funcionando igual: la exógena, los
+                  renglones, el checklist, subir documentos y anotar los
+                  valores a mano en la hoja de captura.
+                </p>
+                <div class="fila-botones" style="margin-top:14px">
+                  <a class="boton-secundario" href="/cuenta">Ir a Cuenta y ajustes</a>
+                </div>
+              </div>
+
+              <div id="propuesta-arrancar" class="tarjeta oculto">
+                <h3>Proponer el formulario de este cliente</h3>
+                <p class="ayuda">
+                  Se le manda al modelo, de una sola vez, la exógena ya
+                  leída por el programa y el texto de todos los documentos.
+                  Devuelve qué valor propone en cada renglón, de dónde lo
+                  sacó y la frase exacta del papel donde lo vio.
+                  Los archivos nunca salen: sale el texto que se extrajo aquí.
+                </p>
+                <p class="ayuda" id="propuesta-estimado"></p>
+                <div class="fila-botones" style="margin-top:14px">
+                  <button type="button" class="boton" id="boton-proponer">
+                    Proponer el formulario
+                  </button>
+                </div>
+              </div>
+
+              <div id="propuesta-resultado" class="oculto">
+                <div class="tarjeta">
+                  <p class="propuesta-conteo" id="propuesta-conteo"></p>
+                  <p class="ayuda" id="propuesta-ficha"></p>
+                  <div class="fila-botones" style="margin-top:14px">
+                    <button type="button" class="boton" id="boton-aprobar-bloque">
+                      Aceptar los de nivel A y B
+                    </button>
+                    <button type="button" class="boton-secundario" id="boton-reproponer">
+                      Volver a proponer
+                    </button>
+                  </div>
+                  <p class="ayuda" style="margin-top:10px">
+                    Los de nivel C se revisan uno por uno: son los que el
+                    modelo tuvo que interpretar. Después de aprobar puede
+                    cambiar cualquier valor en la hoja de captura.
+                  </p>
+                </div>
+                <div id="propuesta-lista" class="lista-propuesta"></div>
+              </div>
+
+              <!-- ===== Modo comparación =====
+                   Para saber si esto sirve antes de usarlo en trabajo de
+                   verdad: su 210 lleno a mano contra el propuesto. -->
+              <details class="plegable" id="plegable-comparar">
+                <summary class="plegable-titulo">
+                  <h3>Comparar contra el formulario que usted llenó</h3>
+                </summary>
+                <div class="plegable-cuerpo">
+                  <p class="ayuda">
+                    Suba un Formulario 210 que usted ya llenó a mano, en la
+                    misma plantilla, y el programa lo compara renglón por
+                    renglón contra lo que propuso. No cambia ni una cifra
+                    de este cliente: es una medición.
+                  </p>
+                  <div class="fila-botones" style="margin-top:12px">
+                    <button type="button" class="boton-secundario" id="boton-comparar">
+                      Subir mi 210 lleno y comparar
+                    </button>
+                    <input type="file" id="campo-comparar" accept=".xlsx,.xlsm"
+                           class="oculto">
+                  </div>
+                  <div id="comparacion-resultado" class="oculto"></div>
+                </div>
+              </details>
+            </div>
+
             <!-- ===== Pestaña 1: la hoja, como en Excel ===== -->
-            <div id="panel-hoja" class="panel">
+            <div id="panel-hoja" class="panel oculto">
               <div class="barra-hoja">
                 <div class="campo campo-filtro">
                   <input type="text" id="filtro-hoja" autocomplete="off"
@@ -827,6 +894,7 @@
   <script src="/static/cliente-respaldo.js"></script>
   <script src="/static/selector-renglon.js"></script>
   <script src="/static/formulario.js"></script>
+  <script src="/static/pasada.js"></script>
   <script src="/static/cliente-exogena.js"></script>
   <script src="/static/rentai.js"></script>
   <script src="/static/riel.js"></script>

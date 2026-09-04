@@ -230,7 +230,26 @@ def main():
      «Llevar al Formulario 210». Le pregunta antes de escribir.
      (Hace falta una plantilla en la carpeta plantillas/.)
 
-  7. RENTAI — el cuadradito negro de abajo a la derecha. Un clic abre,
+  7. LA PROPUESTA — pestaña «Formulario 210», sub-pestaña «Propuesta».
+     Es el camino nuevo, y el único que gasta plata. Antes de apretar
+     nada le dice cuántos documentos va a mandar y cuánto cuesta más o
+     menos. Apriete «Proponer el formulario» y espere.
+     Lo que sale es una PROPUESTA: nada entró al 210 todavía. Los
+     renglones en amarillo son los que el modelo tuvo que interpretar
+     —son por donde hay que empezar—; los demás traen la cifra, la
+     frase exacta del papel de donde salió y un enlace para abrir el
+     documento al lado. «Aceptar los de nivel A y B» muestra la lista
+     completa antes de confirmar.
+     Si no ve el botón sino un aviso de que está apagada, es que está
+     en IA_PROVEEDOR=ninguno, que es el modo de fábrica. Todo lo demás
+     de arriba funciona igual.
+
+  8. COMPARAR — al final de esa misma pestaña. Suba un 210 lleno a mano
+     y le dice, renglón por renglón, en cuántos coincidió. Es la
+     medición que sirve para decidir si esto ayuda de verdad. No cambia
+     ni una cifra del cliente.
+
+  9. RENTAI — el cuadradito negro de abajo a la derecha. Un clic abre,
      otro cierra. Quédese mirando el logo unos segundos: parpadea, y de
      vez en cuando se queda pensando o hace el guiño con el visto.
 

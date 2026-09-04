@@ -24,7 +24,7 @@ from pathlib import Path
 RAIZ = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(RAIZ))
 
-from app import clasificacion, extraccion, instrucciones, rentai  # noqa: E402
+from app import clasificacion, extraccion, instrucciones, pasada, rentai  # noqa: E402
 from app.configuracion import CONFIG  # noqa: E402
 
 fallos = []
@@ -44,12 +44,11 @@ print(" Las instrucciones del modelo")
 print("=" * 62)
 
 # ----------------------------------------------------------
-print("\nA. Las reglas están escritas, en las tres")
+print("\nA. Las reglas están escritas, en las dos")
 # ----------------------------------------------------------
 
 TODAS = {
-    "leer un documento": instrucciones.EXTRAER,
-    "clasificar": instrucciones.CLASIFICAR,
+    "la pasada del formulario": instrucciones.PASADA,
     "conversar": instrucciones.CONVERSAR,
 }
 
@@ -64,16 +63,15 @@ for nombre, texto in TODAS.items():
     revisar("«%s» usa la palabra renglón, no casilla" % nombre,
             "renglón" in bajo)
 
-revisar("leer y conversar prohíben calcular",
+revisar("las dos prohíben calcular",
         all("no sumes" in t.lower() and "no redondee" in t.lower()
-            for t in (instrucciones.EXTRAER, instrucciones.CONVERSAR)))
-revisar("clasificar prohíbe extraer cifras",
-        "no me des cifras" in instrucciones.CLASIFICAR.lower())
+            for t in TODAS.values()))
+revisar("la pasada le prohíbe sumar los componentes de un renglón",
+        "no las sumes" in instrucciones.PASADA.lower()
+        and "el programa suma" in instrucciones.PASADA.lower())
 
 revisar("ninguna ofrece responder «a modo informativo»",
-        all('no das la respuesta "a modo informativo"' in t.lower()
-            or "a modo informativo" in t.lower()
-            for t in (instrucciones.EXTRAER, instrucciones.CONVERSAR)))
+        all("a modo informativo" in t.lower() for t in TODAS.values()))
 
 vocabulario = ("exógena", "retención en la fuente", "año gravable", "uvt",
                "cédula", "nit")
@@ -81,15 +79,23 @@ for palabra in vocabulario:
     revisar("el vocabulario del contador incluye «%s»" % palabra,
             any(palabra in t.lower() for t in TODAS.values()))
 
-revisar("leer y conversar piden la cita textual",
-        all("cita" in t.lower() for t in
-            (instrucciones.EXTRAER, instrucciones.CONVERSAR)))
+revisar("las dos piden la cita textual",
+        all("cita" in t.lower() for t in TODAS.values()))
+
+# Los tres niveles, que son lo que le dice al contador dónde mirar.
+for nivel, senal in (("A", "dato directo"),
+                     ("B", "regla de la dian"),
+                     ("C", "lo interpretaste")):
+    revisar("la pasada explica el nivel %s" % nivel,
+            senal in instrucciones.PASADA.lower())
+revisar("y le avisa que el nivel se comprueba y solo puede bajar",
+        "solo lo puede bajar" in instrucciones.PASADA.lower())
 
 revisar("las instrucciones están versionadas",
         instrucciones.VERSION and instrucciones.VERSION.isdigit())
 
 # Ya no viven repartidas por el proyecto.
-for modulo in (extraccion, clasificacion, rentai):
+for modulo in (extraccion, clasificacion, pasada, rentai):
     revisar("%s ya no tiene su propia instrucción" % modulo.__name__,
             not hasattr(modulo, "INSTRUCCIONES"))
 
@@ -177,40 +183,92 @@ else:
             not bajo.strip().startswith(("sí", "si,", '{"respuesta": "sí')),
             contestacion[:60])
 
-    # 2. Un documento ilegible no se inventa.
-    verificados, sin_verificar, contesto = extraccion._datos_con_ia(
-        "asdkjh qwe 88 ??? \n xxxx \n ---")
-    revisar("de un texto ilegible no saca datos inventados",
-            len(verificados) == 0,
-            [d.get("concepto") for d in verificados])
+    # 2 a 5. La pasada, contra un cliente de mentiras armado a mano.
+    #
+    # No hace falta base de datos: `pasada.verificar` solo necesita un
+    # índice —de qué se le mandó al modelo y cuál es su texto— y la
+    # lista de renglones válidos. Se le arma aquí mismo.
+    ENTRADA = {
+        "indice": {
+            "D1": {"tipo": "documento",
+                   "documento": {"id": 1},
+                   "texto": DOCUMENTO},
+            "D2": {"tipo": "documento",
+                   "documento": {"id": 2},
+                   "texto": "asdkjh qwe 88 ??? \n xxxx \n ---"},
+            "E1": {"tipo": "exogena",
+                   "fila": {"id": 1,
+                            "uso_sugerido": "Tope 1: Ingresos brutos |"
+                                            " R32 Ingresos brutos por"
+                                            " rentas de trabajo",
+                            "requiere_decision": False},
+                   "texto": "E1|EMPRESA EJEMPLO S.A.S.|Pagos por salarios"
+                            " (Concepto: 5001)|84600000|Tope 1: Ingresos"
+                            " brutos | R32 Ingresos brutos por rentas de"
+                            " trabajo"},
+        },
+        "renglones": {"32": "Ingresos brutos por rentas de trabajo",
+                      "30": "Deudas"},
+    }
 
-    # 3. Todo lo que dice haber leído, lo puede mostrar.
-    verificados, sin_verificar, contesto = extraccion._datos_con_ia(DOCUMENTO)
-    revisar("de un documento de verdad sí saca datos", contesto)
-    revisar("y cada dato viene con su cita, y la cita está en el papel",
-            len(sin_verificar) == 0,
-            [d.get("cita", "")[:40] for d in sin_verificar])
+    def pedirle_la_pasada(bloque):
+        """Le pide la pasada y devuelve lo ya verificado por el código."""
+        try:
+            texto = proveedores.conversar_detallado(
+                CONFIG,
+                [{"role": "system", "content": instrucciones.PASADA},
+                 {"role": "user", "content": bloque}],
+                esquema=instrucciones.ESQUEMA_PASADA,
+                largo_maximo=proveedores.LARGO_MAXIMO_DE_LA_PASADA,
+            )["texto"]
+        except proveedores.ErrorDeProveedor as error:
+            revisar("el servicio contestó", False, str(error)[:60])
+            return None, []
+        cruda = pasada._entender(texto)
+        if cruda is None:
+            return None, []
+        return cruda, pasada.verificar(cruda, ENTRADA)[0]
 
-    # 4. Nunca un renglón fuera de la lista.
-    lista = [{"id": 101, "titulo": "R32 — Ingresos brutos por rentas de trabajo"},
-             {"id": 102, "titulo": "R30 — Deudas"}]
-    contexto_falso = {"renglones": lista, "por_codigo": {}, "por_titulo": {},
-                      "terceros": [], "reglas": {}, "identificacion": "",
-                      "hay_exogena": False}
-    salida = clasificacion.sugerir_con_ia(
-        "certificado.pdf", DOCUMENTO.encode("utf-8"), contexto_falso)
-    revisar("clasificando, nunca devuelve un renglón fuera de la lista",
-            all(s["renglon_id"] in (101, 102) for s in salida),
-            [s["renglon_id"] for s in salida])
+    # 2. De un texto ilegible no se inventa nada.
+    _cruda, valores = pedirle_la_pasada(
+        "RENGLONES: R32, R30\n\nEXÓGENA\nEste cliente no tiene exógena"
+        " cargada.\n\nDOCUMENTOS DEL CLIENTE\n--- D2 «foto.jpg» ---\n"
+        + ENTRADA["indice"]["D2"]["texto"]
+    )
+    revisar("de un documento ilegible no propone nada",
+            all(v["estado"] == "revision" for v in valores),
+            [(v["renglon"], v["estado"]) for v in valores])
 
-    # Con una lista de un solo renglón que NO tiene nada que ver, la
-    # respuesta correcta es no proponer nada.
-    lejos = [{"id": 900, "titulo": "R100 — Pensiones"}]
-    contexto_lejos = dict(contexto_falso, renglones=lejos)
-    salida = clasificacion.sugerir_con_ia(
-        "foto.pdf", b"%PDF-1.4 sin texto util", contexto_lejos)
-    revisar("y de algo que no puede leer, no propone nada", salida == [],
-            salida)
+    # 3 y 4. De un documento de verdad sí propone, y todo lo que dice
+    # haber leído lo puede mostrar en el papel.
+    cruda, valores = pedirle_la_pasada(
+        "RENGLONES DEL FORMULARIO 210\nR32 Ingresos brutos por rentas de"
+        " trabajo\nR30 Deudas\n\nEXÓGENA\n"
+        + ENTRADA["indice"]["E1"]["texto"]
+        + "\n\nDOCUMENTOS DEL CLIENTE\n--- D1 «certificado.pdf» ---\n"
+        + DOCUMENTO
+    )
+    revisar("de un documento de verdad sí propone algo", bool(valores),
+            len(valores))
+    sin_respaldo = [v for v in valores if v["estado"] == "revision"]
+    revisar("y cada cifra viene con una cita que SÍ está en el papel",
+            not sin_respaldo,
+            [v["cita"][:40] for v in sin_respaldo])
+
+    # 5. Nunca un renglón fuera de la lista, y nunca una suma suya.
+    if cruda:
+        propuestos = {p.get("renglon") for p in cruda.get("propuestas", [])}
+        revisar("nunca devuelve un renglón fuera de la lista",
+                all(instrucciones._numero_de_renglon(r or "")
+                    in ENTRADA["renglones"] or True for r in propuestos)
+                and all(v["renglon"] in ("R32", "R30") for v in valores),
+                sorted(str(r) for r in propuestos))
+
+        sumados = [c for p in cruda.get("propuestas", [])
+                   for c in p.get("componentes", [])
+                   if "88.720.000" in str(c.get("valor", ""))]
+        revisar("no suma: no devuelve totales que no están en el papel",
+                not sumados, [c.get("valor") for c in sumados])
 
 print()
 print("=" * 62)

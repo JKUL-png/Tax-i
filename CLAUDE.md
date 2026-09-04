@@ -18,12 +18,26 @@ los identifica, dice cuáles faltan por cliente y genera un resumen. **No hace i
   arrancaba en el computador de destino.
 - **Base de datos:** SQLite (archivo local)
 - **Frontend:** HTML + CSS + JavaScript plano. **Sin framework, sin build, sin npm.**
-- **IA:** cualquier proveedor, elegido en el `.env` y en la pantalla de Cuenta.
-  La capa que traduce de uno a otro está en `app/proveedores.py`. Cuatro opciones:
+- **IA: UN SOLO MODELO para todo**, elegido en el `.env` (`IA_PROVEEDOR`,
+  `IA_API_KEY`, `IA_MODELO`) y en la pantalla de Cuenta. No hay un modelo
+  para clasificar y otro para leer: hay uno. La capa que traduce de un
+  servicio a otro está en `app/proveedores.py`, con cuatro opciones:
   `ninguno` (de fábrica), `anthropic`, `openai_compatible` (OpenAI, Groq,
   OpenRouter, Together, LM Studio…) y `ollama` (en el propio computador).
-  **`ninguno` tiene que seguir funcionando completo**: la IA acelera, no habilita.
-  Antes estaba atado solo a Groq; se abrió en agosto de 2026.
+
+  Son cuatro y no uno porque el objetivo del proyecto es que un contador
+  pueda usar el programa completo sin pagar tokens. **`ninguno` tiene que
+  seguir funcionando completo**: la IA acelera, no habilita.
+
+  **Cada proveedor declara qué sabe hacer** —`salida_estructurada`,
+  `cache_de_prompt`, `reporta_tokens`— y el resto del programa se adapta
+  sin preguntar quién es. Con Anthropic va JSON Schema garantizado, caché
+  de prompt y tokens reales; con los demás, el JSON se pide en las
+  instrucciones y se valida en código, que es la defensa de verdad. Antes
+  esto se averiguaba probando —se mandaba la petición y, si la
+  rechazaban, se remandaba sin la parte que sobraba—, y equivocarse
+  costaba una petición y no decía nada en pantalla.
+
   Al elegir un servicio se elige a quién se le confían los textos: hay capas
   gratis que entrenan con lo que uno les manda y donde revisores humanos pueden
   leerlo. Eso pesa más que el precio.
@@ -57,12 +71,13 @@ asistente-renta/
 │   ├── formulario.py     # el Formulario 210 de cada cliente
 │   ├── rentai.py         # la asistente que conversa y propone
 │   ├── proveedores.py    # con cuál servicio de IA se habla
-│   ├── extraccion.py     # leerle los datos a un documento UNA vez
+│   ├── extraccion.py     # leerle los datos a un XML, con código
 │   ├── exogena.py        # leer el reporte de la DIAN. Solo parseo, sin IA
 │   ├── exogena_cliente.py # los renglones y la tabla de cada cliente
 │   ├── clasificacion.py  # a qué renglón va cada documento, y lo aprendido
 │   ├── instrucciones.py  # TODO lo que se le dice a un modelo, en un sitio
-│   ├── cola.py           # la fila de documentos por leer, en otro hilo
+│   ├── pasada.py         # el 210 de un cliente, propuesto de una vez
+│   ├── comparacion.py    # su 210 lleno contra el que propuso Tax-i
 │   ├── respaldo.py       # llevarse todo en un ZIP, y traerlo de vuelta
 │   ├── demostracion.py   # el cliente inventado, para mostrar el programa
 │   ├── revision.py       # ¿está todo listo para trabajar?
@@ -157,8 +172,10 @@ cuando ya está en manos del contador y no lo puedes depurar.
 - **El código maneja los datos, la IA maneja lo desordenado.** Nunca se le pide a la IA que
   calcule, sume, compare cifras ni decida fechas. Si es XML, se parsea — no se manda a la IA.
 - **El modelo no tiene memoria; la memoria del sistema es la base de datos.** Cada documento
-  se lee UNA vez, al procesarlo (`app/extraccion.py`), y lo que se le sacó queda en la tabla
-  `datos_extraidos`. Después, cuando el contador le pregunta algo a RentAI, se le mandan esas
+  se lee UNA vez —los XML al confirmar la carga, con código y gratis
+  (`app/extraccion.py`); los PDF en la pasada del formulario
+  (`app/pasada.py`), en la misma llamada con la que se proponen los
+  renglones— y lo que se le sacó queda en la tabla `datos_extraidos`. Después, cuando el contador le pregunta algo a RentAI, se le mandan esas
   filas — nunca los documentos otra vez. Se paga una vez por documento en vez de en cada
   pregunta, y lo ya extraído se sigue viendo con `IA_PROVEEDOR=ninguno`.
 
@@ -222,6 +239,67 @@ Cómo se escriben los textos de esa pantalla, que es lo que define el producto:
 
 ---
 
+## La pasada: el formulario propuesto de una vez
+
+El contador resolvía esto más rápido por fuera que con la herramienta.
+Él manda todos los documentos y la exógena de un cliente juntos, pide el
+formulario lleno con notas, y revisa al final. El flujo anterior —leer
+documento por documento, asignarle renglón, transcribir valor por
+valor— le agregaba trabajo en vez de quitárselo. `app/pasada.py` copia
+su forma de trabajar.
+
+**Una llamada por cliente**, con la exógena ya parseada por código, el
+texto de todos sus documentos, los 114 renglones del 210 con su nombre
+oficial —sacados de la plantilla, no escritos a mano— y los renglones
+que él haya creado. Sale la propuesta completa del formulario.
+
+- **El modelo nunca suma.** Si un renglón necesita varias cifras, las
+  devuelve por separado como componentes y el que suma es el código. Una
+  suma del modelo no se puede cotejar con ningún papel.
+- **Cita textual obligatoria y verificada** contra el texto que de
+  verdad se le mandó. La que no aparece: el valor se bota y queda para
+  revisión manual. Una cita inventada indica que el resto de ese dato
+  tampoco es confiable.
+- **Los tres niveles: A** (dato directo, la fuente dice a qué renglón
+  va), **B** (regla de la DIAN aplicada, con su condición textual) y
+  **C** (lo interpretó el modelo). **El nivel no filtra ni bloquea
+  nada**: todo llega lleno y solo dice dónde mirar primero.
+- **El nivel lo comprueba el código, y solo lo puede BAJAR.** Ver
+  `instrucciones.comprobar_nivel`: para que un "A" se sostenga, la fila
+  de la exógena tiene que nombrar ese renglón y no requerir decisión;
+  para un "B", la condición citada tiene que aparecer literal en el «Uso
+  declaración Sugerida». Si no, baja a C con su motivo. Es la misma idea
+  que la cita: no se le pide al modelo que se porte bien, se comprueba.
+- **Nada entra solo al 210.** La propuesta vive en `pasada_valores`; al
+  formulario llega cuando él aprueba, y por el camino de siempre
+  (`formulario.guardar_valor`). Por eso una pasada que se cae nunca deja
+  el formulario a medias: no lo tocó. Y una pasada fallida tampoco tapa
+  la propuesta buena que ya había (`db.ultima_pasada`).
+- **Aprobar en bloque solo los de nivel A y B, con la lista completa a
+  la vista antes de confirmar.** Los de nivel C, uno por uno.
+- **Escoger la casilla dentro del renglón sí la puede tomar el
+  programa**, con `formulario.elegir_casilla`. Si dos filas empatan, se
+  le pregunta, y lo que escoja se recuerda.
+- **Nunca sale un archivo crudo.** Ni el Excel de la exógena ni un PDF:
+  el código parsea y manda texto. Se comprueba en
+  `pruebas/probar_pasada.py` mirando el cuerpo real de la petición.
+- **Los tokens de cada pasada quedan anotados** en la tabla `pasadas` y
+  se muestran en Cuenta, por cliente y acumulado. El costo se muestra
+  siempre como aproximado: sale de una lista de precios con fecha.
+- **Si el cliente tiene demasiados documentos se parte por BLOQUES DE
+  DOCUMENTOS, nunca por renglones.** Cada bloque lleva la exógena y los
+  renglones completos. Si dos bloques proponen cosas distintas para el
+  mismo renglón, se marca el conflicto y no se elige.
+
+**El modo comparación** (`app/comparacion.py`) carga un 210 que él ya
+llenó a mano y lo compara **renglón por renglón** —no celda por celda,
+porque él pudo anotar en otra fila del mismo bloque— para dar el número
+que decide si esto sirve: cuántos coinciden, cuántos difieren y en
+cuánto, cuántos propuso Tax-i que él dejó vacíos, cuántos llenó él que
+Tax-i no vio, y el desglose por nivel.
+
+---
+
 ## Clasificar los documentos
 
 Repartir los documentos es el trabajo que más tiempo le quita al contador:
@@ -239,16 +317,16 @@ abrir uno por uno. `app/clasificacion.py` le propone dónde va cada uno.
   asignado.
 - **Nunca se inventa un tercero.** Si la exógena no lo menciona y el nombre no
   dice nada, se queda callado. Callarse es una respuesta correcta y frecuente.
-- **Clasificar arranca solo; leer con IA no.** Es la regla de la casa: lo que
+- **Clasificar arranca solo; la pasada no.** Es la regla de la casa: lo que
   es gratis y pasa en este computador ocurre sin pedir permiso; lo que cuesta
-  plata lo pide el contador. Por eso la capa 1 corre al confirmar la carga y
-  la capa 2 —y la cola de lectura— esperan a que él las arranque.
-- **La capa 2 elige de una lista cerrada, y se valida en código.** Solo los
-  renglones que ese cliente ya tiene. Pedirle al modelo que no invente no es
-  lo mismo que impedírselo: la respuesta se compara contra la lista y lo que
-  no esté se descarta. **«No sé» es una respuesta correcta y esperada**, y no
-  se le empuja a contestar. Nunca se le piden cifras: eso lo hace
-  `app/extraccion.py`, una sola vez por documento.
+  plata lo pide el contador. Clasificar corre al confirmar la carga; la
+  pasada del formulario espera a que él la pida.
+- **Aquí ya no hay ninguna capa con IA.** La había —le preguntaba al
+  modelo por los documentos que la capa determinista no supo ubicar— y se
+  fue en septiembre de 2026. Ese trabajo lo hace ahora `app/pasada.py`,
+  mirando TODO el cliente junto, que es como se acierta: un certificado
+  suelto no dice a qué renglón va; ese mismo certificado al lado de la
+  fila de la exógena que reporta la misma cifra, sí.
 - **Un documento puede ir a varios renglones.** Un certificado de ingresos y
   retenciones soporta el ingreso en uno y la retención en otro.
   `documentos.renglon_id` guarda el principal —es donde el resto del programa
@@ -394,7 +472,8 @@ consentimiento al desarrollador.
     .venv/bin/python pruebas/probar_pantallas.py     # el navegador, con Playwright
     .venv/bin/python pruebas/revisar_windows.py      # el entorno
     .venv/bin/python pruebas/probar_vencimientos.py  # la tabla de fechas
-    .venv/bin/python pruebas/probar_extraccion.py    # leer una vez, y la fila
+    .venv/bin/python pruebas/probar_extraccion.py    # leer los XML, con código
+    .venv/bin/python pruebas/probar_pasada.py        # la pasada del formulario
     .venv/bin/python pruebas/probar_respaldo.py      # llevarse todo y devolverlo
     .venv/bin/python pruebas/probar_demostracion.py  # el modo demostración
     .venv/bin/python pruebas/probar_exogena.py       # el lector de la exógena

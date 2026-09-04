@@ -53,6 +53,11 @@ EXOGENA_SOPORTE = "exogena_soporte"
 EXOGENA_DECISION = "exogena_decision"
 EXOGENA_AL_210 = "exogena_al_210"
 
+PASADA = "pasada"
+PASADA_APROBADA = "pasada_aprobada"
+PASADA_DESCARTADA = "pasada_descartada"
+COMPARACION = "comparacion"
+
 # Cómo se lee cada acción en pantalla. La primera forma es para una sola
 # cosa, la segunda para varias. Se escoge según la cantidad.
 TEXTOS = {
@@ -89,6 +94,17 @@ TEXTOS = {
                            "Se eligieron los renglones de {n} registros"),
     EXOGENA_AL_210:       ("Se llevó un valor de la exógena al Formulario 210",
                            "Se llevaron {n} valores de la exógena al Formulario 210"),
+    PASADA:               ("Se le pidió al modelo la propuesta del formulario",
+                           "Se le pidió al modelo la propuesta del formulario"
+                           " ({n} valores)"),
+    PASADA_APROBADA:      ("Se aprobó un valor propuesto",
+                           "Se aprobaron {n} valores propuestos"),
+    PASADA_DESCARTADA:    ("Se descartó un valor propuesto",
+                           "Se descartaron {n} valores propuestos"),
+    COMPARACION:          ("Se comparó la propuesta contra el formulario"
+                           " que usted llenó",
+                           "Se comparó la propuesta contra el formulario"
+                           " que usted llenó"),
 }
 
 # Cómo se pinta cada acción en la pantalla: sirve para que el contador
@@ -105,6 +121,9 @@ TONOS = {
     EXOGENA_CARGADA: "entrada",
     EXOGENA_REEMPLAZADA: "entrada",
     EXOGENA_AL_210: "logro",
+    PASADA: "entrada",
+    PASADA_APROBADA: "logro",
+    PASADA_DESCARTADA: "peligro",
 }
 
 

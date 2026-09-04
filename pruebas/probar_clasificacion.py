@@ -20,7 +20,13 @@ Lo que comprueba:
   C. Cada fuente encuentra lo suyo: XML, texto, exógena y nombre.
   D. No inventa: un tercero que la exógena no menciona no se sugiere,
      y lo que no se puede leer se queda sin sugerencia.
-  E. El número: cuántos de los veinte resuelve, y con cuál fuente.
+  E. Aprender de las correcciones: lo que el contador enseña se guarda
+     por código de renglón, y vale para todos sus clientes.
+  F. El número: cuántos de los veinte resuelve, y con cuál fuente.
+
+Aquí ya no se prueba ninguna capa con IA porque ya no existe: la que
+había se fue en septiembre de 2026 y su trabajo lo hace la pasada del
+formulario, que mira todo el cliente junto (ver pruebas/probar_pasada.py).
 """
 
 import os
@@ -189,66 +195,7 @@ revisar("y ahí el nombre del archivo sigue sirviendo",
             "vehiculo soportes.pdf", b"%PDF-1.4", ctx_vacio) is not None)
 
 # ----------------------------------------------------------
-print("\nE. La capa 2 no puede salirse de la lista del cliente")
-# ----------------------------------------------------------
-#
-# Esto es lo que hace que la promesa se cumpla. Al modelo se le PIDE que
-# elija de la lista, pero además se le IMPIDE en código: lo que conteste
-# fuera de la lista se descarta sin más. Pedir por favor no es lo mismo
-# que impedir.
-
-sus_renglones = ctx["renglones"]
-uno = sus_renglones[0]["id"]
-otro = sus_renglones[1]["id"]
-
-def validar(respuesta):
-    return clasificacion._validar(respuesta, sus_renglones)
-
-revisar("acepta un renglón que sí está en la lista",
-        validar({"renglon": uno, "certeza": "alta"})[0] == uno)
-
-revisar("un id inventado se descarta",
-        validar({"renglon": 999999, "certeza": "alta"})[0] is None)
-revisar("un renglón de OTRO cliente se descarta",
-        validar({"renglon": -1, "certeza": "alta"})[0] is None)
-revisar("un nombre de renglón inventado se descarta",
-        validar({"renglon": "Certificado que yo me inventé"})[0] is None)
-revisar("una respuesta que no es un objeto se descarta",
-        validar(["R32"])[0] is None)
-revisar("y una respuesta que ni siquiera era JSON se descarta",
-        clasificacion._json_de_la_respuesta("perdón, no entendí") is None)
-
-# «No sé» es una respuesta correcta y esperada.
-revisar("«no sé» deja el documento sin asignar",
-        validar({"renglon": None, "certeza": "alta"})[0] is None)
-revisar("y una respuesta vacía también",
-        validar({})[0] is None)
-
-# La certeza baja no se muestra.
-principal, _, certeza = validar({"renglon": uno, "certeza": "baja"})
-revisar("con certeza baja el renglón se lee pero no se propone",
-        principal == uno and certeza == clasificacion.BAJA)
-revisar("si no dice la certeza, no se le regala la más alta",
-        validar({"renglon": uno})[2] == clasificacion.MEDIA)
-
-# Los secundarios pasan por el mismo filtro.
-_, secundarios, _ = validar(
-    {"renglon": uno, "tambien": [otro, 999999, uno], "certeza": "alta"})
-revisar("los renglones secundarios se validan igual que el principal",
-        secundarios == [otro], secundarios)
-
-revisar("el JSON envuelto en ``` se entiende igual",
-        clasificacion._json_de_la_respuesta(
-            '```json\n{"renglon": 3}\n```') == {"renglon": 3})
-
-# Y con la IA apagada, la capa 2 simplemente no corre.
-revisar("con IA_PROVEEDOR=ninguno la capa 2 no corre",
-        not clasificacion.hay_ia(), CONFIG.proveedor)
-revisar("y no rompe nada: devuelve vacío y ya",
-        clasificacion.sugerir_con_ia("x.pdf", b"%PDF", ctx) == [])
-
-# ----------------------------------------------------------
-print("\nF. Aprender de las correcciones")
+print("\nE. Aprender de las correcciones")
 # ----------------------------------------------------------
 #
 # Lo más valioso que pasa en el programa: el contador corrige y el

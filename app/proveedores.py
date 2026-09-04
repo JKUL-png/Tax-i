@@ -72,9 +72,26 @@ ESPERAS_POR_CUPO = (2, 4, 8)
 # él decida si reintenta o sigue con otra cosa.
 ESPERA_MAXIMA_ACEPTADA = 30
 
-# Techo de la respuesta. Aquí se piden cifras y frases cortas, no
-# ensayos: con esto sobra y se gasta menos.
+# Techo de la respuesta.
+#
+# Hay dos, porque hay dos trabajos de tamaños muy distintos:
+#
+#   - Conversar con el contador son frases cortas. Con 2.000 sobra.
+#   - La pasada devuelve el formulario entero: cuarenta renglones, cada
+#     uno con su valor, su cita textual y su nota. Con 2.000 se corta a
+#     la mitad y se pierde la llamada completa, que es la más cara del
+#     programa. Por eso va aparte y va alto.
+#
+# Quedarse corto aquí no da error: da una respuesta truncada que no
+# valida, y entonces se reintenta y se paga dos veces.
 LARGO_MAXIMO_RESPUESTA = 2000
+LARGO_MAXIMO_DE_LA_PASADA = 16000
+
+# Cuánto se espera por una pasada. Es una sola llamada con el texto de
+# todos los documentos de un cliente: se demora mucho más que una
+# pregunta del chat, y cortarla a los 60 segundos sería tirar a la
+# basura lo que ya se pagó.
+SEGUNDOS_DE_ESPERA_DE_LA_PASADA = 300
 
 
 class ErrorDeProveedor(Exception):
@@ -95,6 +112,18 @@ class ErrorDeProveedor(Exception):
         self.segundos_sugeridos = segundos_sugeridos
 
 
+# La forma en que se cuenta el gasto de una llamada. Siempre la misma,
+# hable con quien hable, para que la pantalla no tenga que saber de
+# proveedores. En ceros significa "el servicio no lo dijo".
+SIN_USO = {
+    "entrada": 0,
+    "salida": 0,
+    "cache_lectura": 0,
+    "cache_escritura": 0,
+    "medido": False,
+}
+
+
 def _sin_barra(texto):
     """Quita la barra del final para poder pegar la dirección sin dudas."""
     return (texto or "").strip().rstrip("/")
@@ -109,7 +138,33 @@ def _sin_barra(texto):
 
 
 class Proveedor:
-    """Lo que todo proveedor sabe hacer."""
+    """Lo que todo proveedor sabe hacer.
+
+    Además de la dirección y la llave, cada proveedor declara TRES
+    capacidades. Antes esto no existía y el programa lo averiguaba
+    probando: mandaba la petición, y si el servidor la rechazaba, la
+    volvía a mandar sin la parte que sobraba. Eso es pagar por
+    equivocarse y no dice nada en pantalla.
+
+      salida_estructurada  el servicio garantiza que la respuesta cumple
+                           un esquema JSON que uno le da. Solo Anthropic.
+                           Con los demás el JSON se pide en las
+                           instrucciones y se valida en código, que es
+                           de todos modos la defensa de verdad.
+
+      cache_de_prompt      se le puede marcar al servicio qué pedazo del
+                           prompt se repite entre clientes para que no
+                           lo vuelva a cobrar entero. Solo Anthropic.
+
+      reporta_tokens       el servicio dice cuántos tokens gastó. Con eso
+                           la pantalla de Cuenta muestra el gasto de
+                           verdad; sin eso, se estima y se dice que es
+                           una estimación.
+
+    Y los precios, en dólares por millón de tokens, para poder mostrar
+    cuánto costó cada cliente. En 0 significa que no se cobra —Ollama
+    corre aquí mismo— o que no se sabe.
+    """
 
     clave = ""
     nombre = ""
@@ -117,6 +172,13 @@ class Proveedor:
     necesita_base_url = False
     base_url_por_defecto = ""
     modelo_sugerido = ""
+    salida_estructurada = False
+    cache_de_prompt = False
+    reporta_tokens = False
+    precio_entrada = 0.0
+    precio_salida = 0.0
+    precio_cache_lectura = 0.0
+    precio_cache_escritura = 0.0
     # Qué se le manda a este servicio cuando la IA está encendida.
     # Se muestra en la pantalla de Cuenta, para que el contador sepa.
     que_sale = ""
@@ -135,11 +197,40 @@ class Proveedor:
     def cabeceras(self, llave):
         raise NotImplementedError
 
-    def cuerpo(self, mensajes, modelo, pedir_json=True):
+    def cuerpo(self, mensajes, modelo, pedir_json=True, esquema=None,
+               largo_maximo=LARGO_MAXIMO_RESPUESTA, cachear=False):
+        """Arma el cuerpo de la petición.
+
+        `esquema` y `cachear` solo los atiende quien declaró saber
+        hacerlo; los demás los ignoran en silencio y el resultado sigue
+        siendo correcto, solo que sin la ayuda extra.
+        """
         raise NotImplementedError
 
     def leer_respuesta(self, datos):
         raise NotImplementedError
+
+    def leer_uso(self, datos):
+        """Cuántos tokens gastó la petición, si el servicio lo dice.
+
+        Devuelve siempre el mismo diccionario, aunque venga en ceros:
+        así quien llama no tiene que saber con cuál servicio habló.
+        """
+        return dict(SIN_USO)
+
+    def costo_en_dolares(self, uso):
+        """Cuánto costó, en dólares, según los precios de este proveedor.
+
+        Ojo con el nombre: `costo` a secas es otra cosa —'gratis',
+        'mixto' o 'pago'—, que es lo que usa la pantalla para ordenar la
+        lista de proveedores.
+        """
+        return (
+            uso.get("entrada", 0) * self.precio_entrada
+            + uso.get("salida", 0) * self.precio_salida
+            + uso.get("cache_lectura", 0) * self.precio_cache_lectura
+            + uso.get("cache_escritura", 0) * self.precio_cache_escritura
+        ) / 1_000_000
 
     def leer_prueba(self, datos):
         """Qué decir cuando la prueba de conexión salió bien."""
@@ -169,7 +260,21 @@ class Anthropic(Proveedor):
     nombre = "Anthropic (Claude)"
     necesita_llave = True
     base_url_por_defecto = "https://api.anthropic.com"
-    modelo_sugerido = "claude-opus-5"
+    modelo_sugerido = "claude-sonnet-5"
+    # Es el único que sabe hacer las tres cosas, y por eso es con el que
+    # la pasada del formulario sale mejor y se puede medir lo que gasta.
+    salida_estructurada = True
+    cache_de_prompt = True
+    reporta_tokens = True
+    # Dólares por millón de tokens de claude-sonnet-5. Leer del caché
+    # cuesta la décima parte de la entrada normal; escribirlo, 1,25
+    # veces. Si Anthropic cambia la lista, se cambia aquí — y en pantalla
+    # el costo siempre se muestra como aproximado, porque estos números
+    # son de una fecha.
+    precio_entrada = 2.0
+    precio_salida = 10.0
+    precio_cache_lectura = 0.2
+    precio_cache_escritura = 2.5
     que_sale = ("El nombre del cliente, su checklist, la conversación y"
                 " los datos que ya se le sacaron a sus documentos. Cada"
                 " documento se lee UNA vez —ahí sí sale su texto— y de"
@@ -192,7 +297,8 @@ class Anthropic(Proveedor):
             "User-Agent": IDENTIFICACION,
         }
 
-    def cuerpo(self, mensajes, modelo, pedir_json=True):
+    def cuerpo(self, mensajes, modelo, pedir_json=True, esquema=None,
+               largo_maximo=LARGO_MAXIMO_RESPUESTA, cachear=False):
         # Anthropic lleva las instrucciones aparte, en "system", no
         # mezcladas con la conversación como los demás.
         instrucciones = []
@@ -206,13 +312,37 @@ class Anthropic(Proveedor):
         cuerpo = {
             "model": modelo,
             # max_tokens es obligatorio aquí, a diferencia de los demás.
-            "max_tokens": LARGO_MAXIMO_RESPUESTA,
+            "max_tokens": largo_maximo,
             "messages": conversacion,
         }
+
         if instrucciones:
-            cuerpo["system"] = "\n\n".join(instrucciones)
-        # No lleva "response_format": aquí el JSON se pide en las
-        # instrucciones, que ya lo hacen (ver app/rentai.py).
+            if cachear:
+                # El caché es por PREFIJO: se guarda todo lo que va antes
+                # de la marca, y con que cambie una letra de eso, se
+                # pierde entero. Por eso la marca va al final de las
+                # instrucciones, que son lo único igual de un cliente a
+                # otro. Lo que cambia —la exógena, los documentos— va
+                # después, en los mensajes.
+                cuerpo["system"] = [
+                    {"type": "text", "text": texto} for texto in instrucciones
+                ]
+                cuerpo["system"][-1]["cache_control"] = {"type": "ephemeral"}
+            else:
+                cuerpo["system"] = "\n\n".join(instrucciones)
+
+        if esquema is not None:
+            # Salida estructurada: el servicio GARANTIZA que lo que
+            # devuelve cumple este esquema. No es pedirlo por favor en
+            # las instrucciones — es que no puede contestar otra cosa.
+            cuerpo["output_config"] = {
+                "format": {"type": "json_schema", "schema": esquema}
+            }
+
+        # Nada de "temperature": los modelos nuevos de Anthropic lo
+        # rechazan con un error 400. Y "thinking" no se manda: omitirlo
+        # ya deja el modelo pensando de forma adaptativa, que es lo que
+        # se quiere aquí.
         return cuerpo
 
     def leer_respuesta(self, datos):
@@ -231,6 +361,20 @@ class Anthropic(Proveedor):
         except (KeyError, TypeError):
             pass
         raise ErrorDeProveedor("El servicio contestó algo que no se entendió.")
+
+    def leer_uso(self, datos):
+        crudo = datos.get("usage") or {}
+        uso = dict(SIN_USO)
+        uso.update({
+            "entrada": int(crudo.get("input_tokens") or 0),
+            "salida": int(crudo.get("output_tokens") or 0),
+            "cache_lectura": int(crudo.get("cache_read_input_tokens") or 0),
+            "cache_escritura": int(
+                crudo.get("cache_creation_input_tokens") or 0
+            ),
+            "medido": True,
+        })
+        return uso
 
     def leer_prueba(self, datos):
         cuantos = len(datos.get("data") or [])
@@ -273,10 +417,12 @@ class CompatibleConOpenAI(Proveedor):
             "User-Agent": IDENTIFICACION,
         }
 
-    def cuerpo(self, mensajes, modelo, pedir_json=True):
+    def cuerpo(self, mensajes, modelo, pedir_json=True, esquema=None,
+               largo_maximo=LARGO_MAXIMO_RESPUESTA, cachear=False):
         cuerpo = {
             "model": modelo,
             "messages": mensajes,
+            "max_tokens": largo_maximo,
             # Temperatura baja: aquí no se quiere creatividad, se quiere
             # que copie bien una cifra de un papel.
             "temperature": 0.1,
@@ -286,6 +432,9 @@ class CompatibleConOpenAI(Proveedor):
             # No todos los servidores compatibles lo admiten; si uno lo
             # rechaza, quien llama vuelve a intentar sin esta línea.
             cuerpo["response_format"] = {"type": "json_object"}
+        # `esquema` y `cachear` se ignoran: este proveedor no declaró
+        # saber hacerlos. El JSON se pide en las instrucciones y se
+        # valida en código, que es lo que de verdad protege.
         return cuerpo
 
     def leer_respuesta(self, datos):
@@ -293,6 +442,20 @@ class CompatibleConOpenAI(Proveedor):
             return datos["choices"][0]["message"]["content"]
         except (KeyError, IndexError, TypeError):
             raise ErrorDeProveedor("El servicio contestó algo que no se entendió.")
+
+    def leer_uso(self, datos):
+        # Casi todos los compatibles mandan "usage" al estilo de OpenAI.
+        # Los que no, dejan el conteo en ceros y la pantalla lo dice.
+        crudo = datos.get("usage") or {}
+        entrada = int(crudo.get("prompt_tokens") or 0)
+        salida = int(crudo.get("completion_tokens") or 0)
+        uso = dict(SIN_USO)
+        uso.update({
+            "entrada": entrada,
+            "salida": salida,
+            "medido": bool(entrada or salida),
+        })
+        return uso
 
     def leer_prueba(self, datos):
         cuantos = len(datos.get("data") or [])
@@ -312,6 +475,8 @@ class Ollama(Proveedor):
     costo = "gratis"
     base_url_por_defecto = "http://localhost:11434"
     modelo_sugerido = "llama3.1"
+    # Cuenta los tokens, pero no cobra por ellos: el modelo corre aquí.
+    reporta_tokens = True
     que_sale = ("Nada sale de este computador: el modelo corre aquí"
                 " mismo.")
 
@@ -327,17 +492,21 @@ class Ollama(Proveedor):
             "User-Agent": IDENTIFICACION,
         }
 
-    def cuerpo(self, mensajes, modelo, pedir_json=True):
+    def cuerpo(self, mensajes, modelo, pedir_json=True, esquema=None,
+               largo_maximo=LARGO_MAXIMO_RESPUESTA, cachear=False):
         cuerpo = {
             "model": modelo,
             "messages": mensajes,
             # Sin esto contesta en pedacitos y hay que irlos pegando.
             "stream": False,
-            "options": {"temperature": 0.1},
+            "options": {"temperature": 0.1, "num_predict": largo_maximo},
         }
         if pedir_json:
-            # Ollama no dice "response_format": dice "format".
-            cuerpo["format"] = "json"
+            # Ollama no dice "response_format": dice "format". Y si se le
+            # pasa un esquema en vez de la palabra "json", lo respeta —
+            # pero no lo garantiza como Anthropic, así que igual se
+            # valida en código.
+            cuerpo["format"] = esquema if esquema is not None else "json"
         return cuerpo
 
     def leer_respuesta(self, datos):
@@ -345,6 +514,17 @@ class Ollama(Proveedor):
             return datos["message"]["content"]
         except (KeyError, TypeError):
             raise ErrorDeProveedor("El servicio contestó algo que no se entendió.")
+
+    def leer_uso(self, datos):
+        entrada = int(datos.get("prompt_eval_count") or 0)
+        salida = int(datos.get("eval_count") or 0)
+        uso = dict(SIN_USO)
+        uso.update({
+            "entrada": entrada,
+            "salida": salida,
+            "medido": bool(entrada or salida),
+        })
+        return uso
 
     def leer_prueba(self, datos):
         modelos = datos.get("models") or []
@@ -469,6 +649,11 @@ def lista_para_pantalla():
             "modelo_sugerido": p.modelo_sugerido,
             "que_sale": p.que_sale,
             "costo": p.costo,
+            "salida_estructurada": p.salida_estructurada,
+            "cache_de_prompt": p.cache_de_prompt,
+            "reporta_tokens": p.reporta_tokens,
+            "precio_entrada": p.precio_entrada,
+            "precio_salida": p.precio_salida,
         }
         for p in (PROVEEDORES["ninguno"], PROVEEDORES["ollama"],
                   PROVEEDORES["openai_compatible"], PROVEEDORES["anthropic"])
@@ -651,11 +836,24 @@ def _resumen_del_detalle(detalle):
     return str(datos.get("message", ""))[:200]
 
 
-def conversar(config, mensajes):
-    """Le manda la conversación al servicio elegido y devuelve el texto.
+def conversar_detallado(config, mensajes, esquema=None,
+                        largo_maximo=LARGO_MAXIMO_RESPUESTA,
+                        segundos=SEGUNDOS_DE_ESPERA, cachear=False):
+    """Le manda la conversación al servicio y devuelve texto Y gasto.
+
+    Devuelve un diccionario:
+
+        {"texto": "...", "uso": {...}, "proveedor": "anthropic",
+         "modelo": "claude-sonnet-5", "costo": 0.0812}
 
     `config` es el objeto Configuracion: de ahí salen el proveedor, la
     dirección, la llave y el modelo.
+
+    `esquema` y `cachear` son PEDIDOS, no exigencias: se le pasan al
+    proveedor y el que no sepa hacerlos los ignora. Quien llama no tiene
+    que preguntar con cuál servicio está hablando — pero si le importa
+    saberlo, ahí están `proveedor.salida_estructurada` y
+    `proveedor.cache_de_prompt`.
     """
     proveedor = obtener(config.proveedor)
 
@@ -670,12 +868,18 @@ def conversar(config, mensajes):
     url = proveedor.url_del_chat(config.base_url)
     cabeceras = proveedor.cabeceras(config.llave)
 
-    try:
-        datos = _pedir(
-            url, cabeceras,
-            proveedor.cuerpo(mensajes, config.modelo, pedir_json=True),
-            "POST", SEGUNDOS_DE_ESPERA, reintentar_cupo=True,
+    def armar(pedir_json):
+        # El esquema y el caché se pasan siempre. Cada proveedor hace lo
+        # que sabe con ellos, y el que no sabe los ignora — por eso aquí
+        # no hay ni un "si es Anthropic entonces".
+        return proveedor.cuerpo(
+            mensajes, config.modelo, pedir_json=pedir_json,
+            esquema=esquema, largo_maximo=largo_maximo, cachear=cachear,
         )
+
+    try:
+        datos = _pedir(url, cabeceras, armar(True), "POST", segundos,
+                       reintentar_cupo=True)
     except ErrorDeProveedor as error:
         # Hay servidores compatibles con OpenAI que no admiten que se les
         # pida JSON con response_format y rechazan la petición entera. En
@@ -684,13 +888,25 @@ def conversar(config, mensajes):
         # con los servidores caseros.
         if "rechazó la petición" not in str(error):
             raise
-        datos = _pedir(
-            url, cabeceras,
-            proveedor.cuerpo(mensajes, config.modelo, pedir_json=False),
-            "POST", SEGUNDOS_DE_ESPERA, reintentar_cupo=True,
-        )
+        datos = _pedir(url, cabeceras, armar(False), "POST", segundos,
+                       reintentar_cupo=True)
 
-    return proveedor.leer_respuesta(datos)
+    uso = proveedor.leer_uso(datos)
+    return {
+        "texto": proveedor.leer_respuesta(datos),
+        "uso": uso,
+        "costo": proveedor.costo_en_dolares(uso),
+        "proveedor": proveedor.clave,
+        "modelo": config.modelo,
+    }
+
+
+def conversar(config, mensajes):
+    """Como `conversar_detallado`, pero devolviendo solo el texto.
+
+    Es lo que usa el chat, al que no le interesa el conteo de tokens.
+    """
+    return conversar_detallado(config, mensajes)["texto"]
 
 
 def probar(clave_proveedor, llave, base_url):

@@ -1,42 +1,46 @@
 """
-Prueba de la lectura de documentos: leer una vez y guardar en la base.
+Prueba de la lectura de documentos: los XML, con código y gratis.
 
 Se corre así, desde la carpeta del proyecto:
 
     .venv/bin/python pruebas/probar_extraccion.py
 
-No se conecta a internet ni gasta cupo de ninguna IA: se levanta un
-servicio de mentira aquí mismo, que además CUENTA cuántas veces lo
-llaman. Eso último es lo que de verdad se está probando: que un
-documento se lea una sola vez y que después nadie lo vuelva a mandar.
+En Windows:
+
+    .venv\\Scripts\\python pruebas\\probar_extraccion.py
+
+Aquí NO hay ninguna llamada a un modelo, y la prueba lo comprueba: corre
+con IA_PROVEEDOR=ninguno y falla si alguien mete una dependencia de
+proveedores en el camino de leer un XML.
 
 Trabaja sobre una base de datos aparte, en una carpeta temporal. La base
 del contador no se toca.
+
+Qué cambió y por qué esta prueba es tan corta ahora
+---------------------------------------------------
+Este archivo probaba dos cosas: que un XML lo leyera el programa, y que
+un PDF pasara por la IA una sola vez. Lo segundo se fue en septiembre de
+2026: los PDF los lee la pasada del formulario, todo el cliente junto y
+en una sola llamada, y eso se prueba en pruebas/probar_pasada.py.
+
+Lo que quedó aquí es lo que no cuesta nada y corre solo.
 
 Lo que comprueba:
 
   A. Un XML lo lee el PROGRAMA, no la IA. Es la regla del proyecto: si
      hay estructura, se parsea; no se le pregunta a un modelo.
-  B. Un PDF o un texto sí pasa por la IA, pero UNA sola vez, y lo que
-     sale de este computador es el texto, nunca el archivo.
-  C. Lo ya leído no se vuelve a leer ni a pagar.
+  B. Lo que no es XML queda pendiente, y eso NO es un fallo: es que lo
+     lee la pasada.
+  C. Lo ya leído no se vuelve a leer.
   D. RentAI arma su contexto con las filas de la BASE, no remandando los
-     documentos, y distingue lo que leyó un modelo de lo que leyó el
-     programa.
-  E. Con la IA apagada, lo ya leído se sigue viendo, y un documento
-     nuevo queda PENDIENTE en vez de darse por fallido.
-  F. Un documento ilegible no traba la fila de los demás.
-  G. La fila trabaja en otro hilo —confirmar es instantáneo—, vive en
-     SQLite y retoma donde iba si se cierra el programa a mitad.
+     documentos, y distingue lo que leyó el programa de lo que leyó un
+     modelo.
+  E. Con la IA apagada, todo esto funciona igual de completo.
 """
 
-import json
 import shutil
 import sys
 import tempfile
-import threading
-import time
-from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 RAIZ = Path(__file__).resolve().parent.parent
@@ -55,69 +59,13 @@ def titulo(texto):
     print("\n" + texto)
 
 
-# ----------------------------------------------------------
-# Un servicio de IA de mentira, que cuenta cuántas veces lo llaman
-# ----------------------------------------------------------
-
-PUERTO = 8232
-LLAMADAS = {"cuantas": 0, "lo_que_recibio": ""}
-
-
-class _ServicioFalso(BaseHTTPRequestHandler):
-    protocol_version = "HTTP/1.1"
-
-    def do_POST(self):
-        largo = int(self.headers.get("Content-Length") or 0)
-        LLAMADAS["cuantas"] += 1
-        LLAMADAS["lo_que_recibio"] = self.rfile.read(largo).decode(
-            "utf-8", "replace"
-        )
-
-        # El servicio de mentiras contesta como se le pide de verdad:
-        # cada dato con la frase del documento de donde salió.
-        #
-        # El primero SÍ está en el certificado y el segundo NO: es un
-        # dato inventado con una cita inventada. Así se comprueba que la
-        # verificación lo atrapa, que es para lo que existe.
-        # Ver app/instrucciones.py.
-        contestacion = json.dumps({"datos": [
-            {"concepto": "Salarios", "valor": "45.000.000",
-             "detalle": "Enero a diciembre",
-             "cita": "Salarios 45.000.000"},
-            {"concepto": "Retención practicada", "valor": "1.200.000",
-             "detalle": "",
-             "cita": "Retención en la fuente practicada 1.200.000"},
-        ]})
-        cuerpo = json.dumps(
-            {"choices": [{"message": {"content": contestacion}}]}
-        ).encode("utf-8")
-
-        self.send_response(200)
-        self.send_header("Content-Type", "application/json")
-        self.send_header("Content-Length", str(len(cuerpo)))
-        self.end_headers()
-        self.wfile.write(cuerpo)
-
-    def log_message(self, formato, *argumentos):
-        pass
-
-
-class _ConIA:
-    proveedor = "openai_compatible"
-    llave = "x" * 20
-    base_url = "http://127.0.0.1:%d" % PUERTO
-    modelo = "modelo-de-prueba"
-    ia_disponible = True
-    motivo = ""
-
-
 class _SinIA:
     proveedor = "ninguno"
     llave = ""
     base_url = ""
     modelo = ""
     ia_disponible = False
-    motivo = "La IA está apagada."
+    motivo = "Modo sin IA activo."
 
 
 # Una factura electrónica de mentira, con la forma real (UBL 2.1).
@@ -139,16 +87,12 @@ FACTURA_XML = """<?xml version="1.0" encoding="UTF-8"?>
 
 def main():
     print("=" * 62)
-    print(" Lectura de documentos: una sola vez, guardada en la base")
+    print(" Leer los XML: con código, gratis y sin salir del computador")
     print("=" * 62)
 
     carpeta = Path(tempfile.mkdtemp(prefix="taxi-extraccion-"))
-    servidor = ThreadingHTTPServer(("127.0.0.1", PUERTO), _ServicioFalso)
-    servidor.daemon_threads = True
-    threading.Thread(target=servidor.serve_forever, daemon=True).start()
 
     try:
-        # La base de prueba vive aparte. La del contador no se toca.
         from app import db
         db.CARPETA_DATOS = carpeta
         db.ARCHIVO_BD = carpeta / "base.db"
@@ -156,7 +100,7 @@ def main():
 
         from app import documentos, extraccion, rentai
         documentos.CARPETA_ARCHIVOS = carpeta / "archivos"
-        extraccion.CONFIG = _ConIA()
+        rentai.CONFIG = _SinIA()
 
         cliente = db.crear_cliente("Cliente de prueba lectura", "05", None)
         cliente_id = cliente["id"]
@@ -179,196 +123,97 @@ def main():
         # --------------------------------------------------------------
         titulo("A. Un XML lo lee el programa, NO la IA")
         # --------------------------------------------------------------
-        LLAMADAS["cuantas"] = 0
         informe = extraccion.extraer(documento_xml)
-        comprobar("el documento queda listo",
-                  informe["estado"] == "listo", informe["motivo"])
-        comprobar("lo leyó el código, no un modelo",
-                  informe["origen"] == "codigo")
-        comprobar("no se llamó a la IA ni una vez",
-                  LLAMADAS["cuantas"] == 0,
-                  "%d llamadas" % LLAMADAS["cuantas"])
 
-        filas = db.listar_datos_extraidos(
-            cliente_id, documento_id=documento_xml["id"]
-        )
-        comprobar("guardó los campos del XML", len(filas) >= 4,
-                  "%d datos" % len(filas))
-        comprobar("copió el total tal cual, sin convertir ni redondear",
-                  any(f["valor"] == "250000" for f in filas))
-        comprobar("cada dato dice de qué documento salió",
-                  all(f["nombre_original"] == "factura.xml" for f in filas))
+        comprobar("el XML se leyó", informe["estado"] == "listo", informe)
+        comprobar("y lo leyó el CÓDIGO, no un modelo",
+                  informe["origen"] == "codigo", informe["origen"])
+
+        datos = db.listar_datos_extraidos(
+            cliente_id, documento_id=documento_xml["id"])
+        conceptos = {fila["concepto"]: fila["valor"] or fila["detalle"]
+                     for fila in datos}
+        comprobar("sacó el número del documento",
+                  conceptos.get("Número del documento") == "FE-991")
+        comprobar("sacó el NIT del emisor",
+                  conceptos.get("NIT del emisor") == "900123456")
+        comprobar("sacó el total, como cifra",
+                  conceptos.get("Total del documento") == "250000")
+        comprobar("todo quedó marcado como leído por el programa",
+                  all(f["origen"] == "codigo" for f in datos))
 
         # --------------------------------------------------------------
-        titulo("B. Un texto sí pasa por la IA, pero una sola vez")
+        titulo("B. Lo que no es XML queda pendiente, y eso no es un fallo")
         # --------------------------------------------------------------
-        LLAMADAS["cuantas"] = 0
         informe = extraccion.extraer(documento_txt)
-        comprobar("el documento queda listo",
-                  informe["estado"] == "listo", informe["motivo"])
-        comprobar("queda marcado como lectura automática",
-                  informe["origen"] == "ia")
-        filas_ia = db.listar_datos_extraidos(
-            cliente_id, documento_id=documento_txt["id"]
-        )
-        comprobar("solo se guardó el dato que SÍ está en el documento",
-                  len(filas_ia) == 1
-                  and filas_ia[0]["concepto"] == "Salarios",
-                  [f["concepto"] for f in filas_ia])
-        comprobar("el inventado se descartó, aunque traía cita",
-                  not any("Retención" in f["concepto"] for f in filas_ia))
-        comprobar("y se avisa que hubo uno sin verificar",
-                  informe.get("sin_verificar") == 1,
-                  informe.get("sin_verificar"))
-
-        comprobar("se llamó a la IA exactamente una vez",
-                  LLAMADAS["cuantas"] == 1, "%d" % LLAMADAS["cuantas"])
-        comprobar("salió el TEXTO, no el archivo",
-                  "Salarios 45.000.000" in LLAMADAS["lo_que_recibio"]
-                  and "certificado.txt" not in LLAMADAS["lo_que_recibio"])
-
-        # --------------------------------------------------------------
-        titulo("C. Lo ya leído no se vuelve a leer ni a pagar")
-        # --------------------------------------------------------------
-        LLAMADAS["cuantas"] = 0
-        informes = extraccion.extraer_pendientes(cliente_id)
-        comprobar("no quedaba nada pendiente", len(informes) == 0,
-                  "%d" % len(informes))
-        comprobar("y no se gastó ni una llamada",
-                  LLAMADAS["cuantas"] == 0, "%d" % LLAMADAS["cuantas"])
-
-        # --------------------------------------------------------------
-        titulo("D. RentAI arma su contexto con la BASE, no con los documentos")
-        # --------------------------------------------------------------
-        LLAMADAS["cuantas"] = 0
-        contexto = rentai.resumen_de_documentos(cliente_id)
-        comprobar("armar el contexto no llama a la IA",
-                  LLAMADAS["cuantas"] == 0)
-        comprobar("trae los datos que ya estaban guardados",
-                  "Salarios" in contexto and "45.000.000" in contexto)
-        comprobar("marca como LECTURA AUTOMÁTICA lo que leyó un modelo",
-                  "LECTURA AUTOMÁTICA" in contexto)
-        comprobar("y marca como exacto lo que leyó el programa del XML",
-                  "exacto" in contexto)
-        comprobar("NO remanda el texto crudo del certificado",
-                  "CERTIFICADO DE INGRESOS" not in contexto)
-        comprobar("el contexto es mucho más corto que los documentos",
-                  len(contexto) < 900, "%d letras" % len(contexto))
-
-        # --------------------------------------------------------------
-        titulo("E. Con la IA apagada, lo ya leído se sigue viendo")
-        # --------------------------------------------------------------
-        extraccion.CONFIG = _SinIA()
-        contexto = rentai.resumen_de_documentos(cliente_id)
-        comprobar("lo extraído sigue disponible sin IA",
-                  "45.000.000" in contexto)
-
-        suelto = subir("suelto.txt", "algo sin estructura".encode("utf-8"))
-        informe = extraccion.extraer(suelto)
-        comprobar("un documento nuevo queda PENDIENTE, no fallido",
-                  informe["estado"] == "pendiente", informe["motivo"])
-
-        otra_factura = subir("factura2.xml", FACTURA_XML)
-        comprobar("pero un XML se lee igual, porque no necesita IA",
-                  extraccion.extraer(otra_factura)["estado"] == "listo")
-
-        # --------------------------------------------------------------
-        titulo("F. Un documento malo no traba a los demás")
-        # --------------------------------------------------------------
-        extraccion.CONFIG = _ConIA()
-        roto = subir("roto.zzz", b"\x00\x01 esto no es nada")
-        otro_bueno = subir("factura3.xml", FACTURA_XML)
-
-        informes = extraccion.extraer_pendientes(cliente_id)
-        por_nombre = {i["nombre"]: i for i in informes}
-        comprobar("el ilegible queda marcado como fallo",
-                  por_nombre.get("roto.zzz", {}).get("estado") == "fallo",
-                  por_nombre.get("roto.zzz", {}).get("motivo", ""))
-        comprobar("pero los de después SÍ se procesaron",
-                  por_nombre.get("factura3.xml", {}).get("estado") == "listo")
-        comprobar("el motivo del fallo se le puede mostrar al contador",
-                  bool(por_nombre.get("roto.zzz", {}).get("motivo")))
-
-        # «suelto.txt» dice «algo sin estructura», y el modelo de mentiras
-        # contestó que ahí decía «Salarios 45.000.000». Ninguna de sus dos
-        # citas aparece en ese texto, así que NADA se guardó y el
-        # documento quedó para que lo revise el contador. Eso es
-        # exactamente para lo que existe la cita textual: atrapar al
-        # modelo diciendo que leyó algo que no está.
-        suelto_ahora = db.obtener_documento(suelto["id"])
-        comprobar("un documento del que el modelo inventó todo NO queda listo",
-                  suelto_ahora["estado_lectura"] == "fallo",
-                  suelto_ahora["estado_lectura"])
-        comprobar("y el motivo dice que no se pudo verificar",
-                  "no aparece en el documento"
-                  in (suelto_ahora["motivo_lectura"] or ""),
-                  suelto_ahora["motivo_lectura"])
-        comprobar("no se le guardó ni un dato inventado",
+        comprobar("un texto no se lee aquí", informe["estado"] == "pendiente",
+                  informe["estado"])
+        comprobar("y se dice sin alarma quién lo va a leer",
+                  "propuesta del formulario" in informe["motivo"],
+                  informe["motivo"])
+        comprobar("no se le inventó ni un dato",
                   db.listar_datos_extraidos(
-                      cliente_id, documento_id=suelto["id"]) == [])
+                      cliente_id, documento_id=documento_txt["id"]) == [])
+
+        # --------------------------------------------------------------
+        titulo("C. Lo ya leído no se vuelve a leer")
+        # --------------------------------------------------------------
+        antes = len(db.listar_datos_extraidos(cliente_id))
+        pendientes = extraccion.leer_xml_pendientes(cliente_id)
+        comprobar("el XML ya leído no vuelve a la lista",
+                  all(i["documento_id"] != documento_xml["id"]
+                      for i in pendientes),
+                  [i["documento_id"] for i in pendientes])
+        comprobar("y no se duplicó ni un dato",
+                  len(db.listar_datos_extraidos(cliente_id)) == antes)
+
+        # --------------------------------------------------------------
+        titulo("D. RentAI arma su contexto con la BASE, no con los archivos")
+        # --------------------------------------------------------------
+        resumen = rentai.resumen_de_documentos(cliente_id)
+
+        comprobar("el contexto trae lo que se le sacó al XML",
+                  "FE-991" in resumen, resumen[:70])
+        comprobar("y dice que ese lo leyó el programa y es exacto",
+                  "exacto" in resumen)
+        comprobar("del que no se ha leído dice que no sabe qué dice",
+                  "certificado.txt" in resumen
+                  and "TODAVÍA NO SE HAN LEÍDO" in resumen)
+        comprobar("y le dice al modelo que NO adivine su contenido",
+                  "No adivines su contenido" in resumen)
+        comprobar("el texto del XML NO se remanda entero",
+                  "PayableAmount" not in resumen)
+
+        # --------------------------------------------------------------
+        titulo("E. Todo esto funciona con IA_PROVEEDOR=ninguno")
+        # --------------------------------------------------------------
+        import app.proveedores as proveedores
+        llamadas = {"cuantas": 0}
+        original = proveedores.conversar_detallado
+
+        def espia(*args, **kwargs):
+            llamadas["cuantas"] += 1
+            return original(*args, **kwargs)
+
+        proveedores.conversar_detallado = espia
+        try:
+            otro = subir("factura2.xml", FACTURA_XML.replace(
+                b"FE-991", b"FE-992"))
+            informe = extraccion.extraer(otro)
+        finally:
+            proveedores.conversar_detallado = original
+
+        comprobar("leer un XML no llama a ningún servicio",
+                  llamadas["cuantas"] == 0, llamadas["cuantas"])
+        comprobar("y sale bien igual", informe["estado"] == "listo")
 
         estado = extraccion.resumen(cliente_id)
-        comprobar("el resumen cuenta los dos que fallaron",
-                  estado["estados"]["fallo"] == 2, str(estado["estados"]))
-        comprobar("un fallo NO se reintenta solo",
-                  extraccion.resumen(cliente_id)["sin_leer"] == 0,
-                  "sin leer: %d" % estado["sin_leer"])
-
-        # --------------------------------------------------------------
-        titulo("G. La fila trabaja aparte y sobrevive a cerrar el programa")
-        # --------------------------------------------------------------
-        from app import cola
-
-        comprobar("el procesar automático viene APAGADO de fábrica",
-                  cola.procesar_automaticamente() is False)
-
-        for numero in range(4):
-            subir("tanda%d.txt" % numero,
-                  ("Salarios %d" % numero).encode("utf-8"))
-
-        comienzo = time.monotonic()
-        arrancó = cola.arrancar(cliente_id)
-        tardó = time.monotonic() - comienzo
-        comprobar("arrancar la fila contesta al instante",
-                  arrancó and tardó < 0.3, "%.3f s" % tardó)
-        comprobar("hay un hilo trabajando", cola.trabajando())
-        comprobar("pedirla otra vez no amontona hilos",
-                  cola.arrancar(cliente_id) is False)
-
-        for _ in range(300):
-            if not cola.trabajando():
-                break
-            time.sleep(0.1)
-        comprobar("termina sola", not cola.trabajando())
-        comprobar("y deja los de la tanda leídos",
-                  extraccion.resumen(cliente_id)["sin_leer"] == 0)
-
-        # Se simula que se cerró el programa con un documento a medio leer.
-        for numero in range(3):
-            subir("tarde%d.txt" % numero, ("otro %d" % numero).encode("utf-8"))
-        a_medias = db.documentos_sin_leer(cliente_id)[0]
-        db.marcar_lectura(a_medias["id"], "leyendo")
-
-        fila = cola.al_arrancar_el_programa()
-        comprobar("al volver a abrir, rescata el que quedó a medio leer",
-                  fila["rescatados"] == 1, str(fila))
-        comprobar("el que estaba a medias vuelve a pendiente",
-                  db.obtener_documento(a_medias["id"])["estado_lectura"]
-                  == "pendiente")
-        comprobar("sabe cuántos quedan sin leer",
-                  fila["pendientes"] == 3, str(fila))
-        comprobar("y NO se pone a leer solo al arrancar",
-                  not cola.trabajando())
-
-        comprobar("el interruptor se guarda en la base, no en memoria",
-                  cola.cambiar_automatico(True) is True
-                  and db.leer_ajuste(cola.CLAVE_AUTOMATICO) == "si")
-        comprobar("y se puede volver a apagar",
-                  cola.cambiar_automatico(False) is False)
+        comprobar("el resumen cuenta los dos XML leídos",
+                  estado["estados"]["listo"] == 2, str(estado["estados"]))
+        comprobar("y el texto sigue pendiente, esperando la pasada",
+                  estado["estados"]["pendiente"] == 1, str(estado["estados"]))
 
     finally:
-        servidor.shutdown()
-        servidor.server_close()
         shutil.rmtree(carpeta, ignore_errors=True)
 
     print()

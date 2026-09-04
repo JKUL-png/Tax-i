@@ -539,6 +539,143 @@ def crear_tablas():
             " ON reglas_aprendidas (tercero, tipo)"
         )
 
+        # Cada vez que se le pide al modelo el formulario de un cliente.
+        #
+        # Una fila por pasada, con lo que gastó. Es lo que contesta
+        # «¿cuánto me está costando esto?» en la pantalla de Cuenta, y
+        # también lo que deja rastro de con cuál modelo se propuso cada
+        # cifra cuando algo no cuadre en marzo.
+        conexion.execute(
+            """
+            CREATE TABLE IF NOT EXISTS pasadas (
+                id             INTEGER PRIMARY KEY AUTOINCREMENT,
+                cliente_id     INTEGER NOT NULL,
+                corrida_en     TEXT NOT NULL,
+                proveedor      TEXT NOT NULL DEFAULT '',
+                modelo         TEXT NOT NULL DEFAULT '',
+                -- Con cuáles instrucciones se corrió. Ver
+                -- instrucciones.VERSION.
+                version        TEXT NOT NULL DEFAULT '',
+                -- En cuántos pedazos hubo que partirla. 1 es lo normal.
+                bloques        INTEGER NOT NULL DEFAULT 1,
+                documentos     INTEGER NOT NULL DEFAULT 0,
+                filas_exogena  INTEGER NOT NULL DEFAULT 0,
+                tokens_entrada INTEGER NOT NULL DEFAULT 0,
+                tokens_salida  INTEGER NOT NULL DEFAULT 0,
+                tokens_cache_lectura   INTEGER NOT NULL DEFAULT 0,
+                tokens_cache_escritura INTEGER NOT NULL DEFAULT 0,
+                -- Aproximado, y en pantalla se dice que es aproximado:
+                -- sale de una lista de precios que tiene fecha.
+                costo_usd      REAL NOT NULL DEFAULT 0,
+                -- 'lista', 'parcial' (algún bloque falló) o 'fallo'.
+                estado         TEXT NOT NULL DEFAULT 'lista',
+                motivo         TEXT NOT NULL DEFAULT '',
+                FOREIGN KEY (cliente_id) REFERENCES clientes(id)
+                    ON DELETE CASCADE
+            )
+            """
+        )
+        conexion.execute(
+            "CREATE INDEX IF NOT EXISTS idx_pasadas_cliente"
+            " ON pasadas (cliente_id)"
+        )
+
+        # Lo que propuso la pasada, un renglón puede tener varias filas.
+        #
+        # Esto NO es el formulario: es una PROPUESTA. El formulario del
+        # cliente sigue siendo valores_210, y de aquí a allá solo se pasa
+        # cuando el contador aprueba. Tenerlo en dos tablas separadas es
+        # lo que hace que una pasada fallida no le deje el formulario a
+        # medio llenar.
+        conexion.execute(
+            """
+            CREATE TABLE IF NOT EXISTS pasada_valores (
+                id             INTEGER PRIMARY KEY AUTOINCREMENT,
+                pasada_id      INTEGER NOT NULL,
+                cliente_id     INTEGER NOT NULL,
+                -- "R32". El código del renglón del 210, nunca un id.
+                renglon        TEXT NOT NULL,
+                renglon_nombre TEXT NOT NULL DEFAULT '',
+                -- La cifra como la copió el modelo, con sus puntos, y
+                -- al lado la misma ya convertida por el código. Las dos,
+                -- porque la primera es lo que se puede cotejar con el
+                -- papel y la segunda es con la que se suma.
+                valor          TEXT NOT NULL DEFAULT '',
+                numero         REAL,
+                -- 'exogena' o 'documento', y de cuál.
+                fuente         TEXT NOT NULL DEFAULT '',
+                referencia     TEXT NOT NULL DEFAULT '',
+                documento_id   INTEGER,
+                fila_exogena_id INTEGER,
+                cita           TEXT NOT NULL DEFAULT '',
+                -- 1 si la cita se encontró en el original. Lo que no se
+                -- verifica no se puede aprobar.
+                verificada     INTEGER NOT NULL DEFAULT 0,
+                -- 'A', 'B' o 'C', ya comprobado contra la fuente.
+                nivel          TEXT NOT NULL DEFAULT 'C',
+                -- El que había dicho el modelo, antes de comprobarlo.
+                nivel_pedido   TEXT NOT NULL DEFAULT '',
+                condicion      TEXT NOT NULL DEFAULT '',
+                nota           TEXT NOT NULL DEFAULT '',
+                -- Por qué se bajó el nivel o por qué se descartó.
+                motivo         TEXT NOT NULL DEFAULT '',
+                -- En cuál casilla de la plantilla va, y por qué esa.
+                -- Vacío cuando el renglón tiene varias y empatan: ahí
+                -- escoge el contador. Escoger la casilla DENTRO de un
+                -- renglón no es una decisión tributaria —el renglón ya
+                -- está decidido—, por eso el programa sí la puede tomar.
+                celda          TEXT NOT NULL DEFAULT '',
+                celda_motivo   TEXT NOT NULL DEFAULT '',
+                -- 'propuesto', 'aprobado', 'descartado' o 'revision'.
+                estado         TEXT NOT NULL DEFAULT 'propuesto',
+                bloque         INTEGER NOT NULL DEFAULT 1,
+                -- 1 cuando dos bloques propusieron cosas distintas para
+                -- el mismo renglón. No se resuelve solo: se avisa.
+                conflicto      INTEGER NOT NULL DEFAULT 0,
+                FOREIGN KEY (pasada_id) REFERENCES pasadas(id)
+                    ON DELETE CASCADE,
+                FOREIGN KEY (cliente_id) REFERENCES clientes(id)
+                    ON DELETE CASCADE
+            )
+            """
+        )
+        conexion.execute(
+            "CREATE INDEX IF NOT EXISTS idx_pasada_valores_pasada"
+            " ON pasada_valores (pasada_id)"
+        )
+        conexion.execute(
+            "CREATE INDEX IF NOT EXISTS idx_pasada_valores_cliente"
+            " ON pasada_valores (cliente_id)"
+        )
+
+        # El modo comparación: el 210 que el contador llenó a mano contra
+        # el que propuso Tax-i. Es la medición que dice si esto sirve.
+        conexion.execute(
+            """
+            CREATE TABLE IF NOT EXISTS comparaciones (
+                id            INTEGER PRIMARY KEY AUTOINCREMENT,
+                cliente_id    INTEGER NOT NULL,
+                pasada_id     INTEGER,
+                hecha_en      TEXT NOT NULL,
+                archivo       TEXT NOT NULL DEFAULT '',
+                coinciden     INTEGER NOT NULL DEFAULT 0,
+                difieren      INTEGER NOT NULL DEFAULT 0,
+                solo_taxi     INTEGER NOT NULL DEFAULT 0,
+                solo_contador INTEGER NOT NULL DEFAULT 0,
+                -- El detalle renglón por renglón y el desglose por
+                -- nivel, en JSON. Es un informe, no una tabla que se
+                -- consulte por partes.
+                detalle       TEXT NOT NULL DEFAULT '{}',
+                FOREIGN KEY (cliente_id) REFERENCES clientes(id)
+                    ON DELETE CASCADE
+            )
+            """
+        )
+        conexion.execute(
+            "CREATE INDEX IF NOT EXISTS idx_comparaciones_cliente"
+            " ON comparaciones (cliente_id)"
+        )
+
         # --- Cambios sobre bases que ya existían ---
         # Si la base se creó con una versión anterior del programa, le falta
         # la columna "notas". Se agrega aquí en vez de pedirle al contador
@@ -631,6 +768,19 @@ def crear_tablas():
         if "motivo_lectura" not in columnas_doc:
             conexion.execute(
                 "ALTER TABLE documentos ADD COLUMN motivo_lectura TEXT"
+            )
+
+        # La frase del documento de donde salió cada dato. Antes se
+        # verificaba y se botaba; ahora se guarda, para que el contador
+        # pueda ver de dónde salió sin volver a abrir el PDF.
+        columnas_extraidos = {
+            fila["name"]
+            for fila in conexion.execute("PRAGMA table_info(datos_extraidos)")
+        }
+        if "cita" not in columnas_extraidos:
+            conexion.execute(
+                "ALTER TABLE datos_extraidos ADD COLUMN cita TEXT"
+                " NOT NULL DEFAULT ''"
             )
 
 
@@ -858,13 +1008,12 @@ def marcar_lectura(id_documento, estado, motivo=""):
 def documentos_sin_leer(cliente_id=None):
     """Los documentos a los que todavía no se les sacó nada.
 
-    Sin `cliente_id` devuelve los de todos los clientes, que es como los
-    pide la cola cuando arranca el programa.
+    Sin `cliente_id` devuelve los de todos los clientes.
 
     Van los que están 'pendiente' y también los que quedaron a medias en
-    'leyendo' —porque se cerró el programa a mitad—, para que se puedan
-    retomar. Los que fallaron NO vuelven solos: el contador decide si
-    reintentarlos, para no gastar cupo repitiendo lo que ya falló.
+    'leyendo' —de una versión anterior, cuando los PDF se leían uno por
+    uno en otro hilo—. Los que fallaron NO vuelven solos: el contador
+    decide si reintentarlos.
     """
     consulta = (
         "SELECT * FROM documentos"
@@ -884,9 +1033,9 @@ def documentos_sin_leer(cliente_id=None):
 def rescatar_lecturas_a_medias():
     """Devuelve a 'pendiente' los documentos que quedaron en 'leyendo'.
 
-    Un documento queda en 'leyendo' si se cerró el programa —o se fue la
-    luz— justo mientras se leía. Se llama al arrancar: así la cola retoma
-    donde iba en vez de dejar documentos colgados para siempre.
+    Un documento quedaba en 'leyendo' si se cerraba el programa —o se
+    iba la luz— justo mientras la vieja fila lo leía. Se llama al
+    arrancar para que ninguno se quede colgado para siempre.
 
     Devuelve cuántos rescató.
     """
@@ -902,14 +1051,20 @@ def guardar_datos_extraidos(cliente_id, documento_id, datos, origen):
     """Guarda lo que se le sacó a un documento. Reemplaza lo que hubiera.
 
     `datos` es una lista de diccionarios con 'concepto' y, opcionalmente,
-    'valor' y 'detalle'. `origen` es 'codigo' (lo leyó el programa de un
-    XML: es exacto) o 'ia' (lo leyó un modelo: es lectura automática y en
-    pantalla se muestra marcada como tal).
+    'valor', 'detalle' y 'cita'. `origen` dice quién lo leyó:
+
+      'codigo'  lo leyó el programa de un XML. Es exacto.
+      'pasada'  salió de la pasada del formulario. Es lectura automática
+                y en pantalla se muestra marcada como tal, con su cita
+                ya verificada contra el texto del documento.
+      'ia'      lo leyó un modelo, en las versiones anteriores del
+                programa. Ya no se escribe, pero se sigue leyendo: lo
+                que un contador ya tiene guardado no se le borra.
 
     Se borra primero lo anterior de ese documento para que releer no
     deje datos duplicados ni datos viejos de una lectura anterior.
     """
-    if origen not in ("codigo", "ia"):
+    if origen not in ("codigo", "pasada", "ia"):
         raise ValueError("Origen desconocido: %r" % (origen,))
 
     cuando = datetime.now().isoformat(timespec="seconds")
@@ -926,12 +1081,12 @@ def guardar_datos_extraidos(cliente_id, documento_id, datos, origen):
                 """
                 INSERT INTO datos_extraidos
                     (cliente_id, documento_id, concepto, valor, detalle,
-                     origen, extraido_en)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
+                     origen, extraido_en, cita)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (cliente_id, documento_id, concepto[:200],
                  _o_nada(dato.get("valor")), _o_nada(dato.get("detalle")),
-                 origen, cuando),
+                 origen, cuando, str(dato.get("cita") or "")[:500]),
             )
     return listar_datos_extraidos(cliente_id, documento_id=documento_id)
 
@@ -1983,3 +2138,230 @@ def eliminar_regla(id_regla):
             "DELETE FROM reglas_aprendidas WHERE id = ?", (id_regla,)
         )
     return cursor.rowcount > 0
+
+
+# ----------------------------------------------------------
+# La pasada del formulario
+# ----------------------------------------------------------
+#
+# Dos tablas y una regla: lo que propone la pasada vive en
+# `pasada_valores` y NO es el formulario. El formulario del cliente
+# sigue siendo `valores_210`, y solo pasa de una tabla a la otra cuando
+# el contador aprueba. Por eso una pasada que se cae a la mitad no le
+# deja el formulario a medio llenar: no lo tocó nunca.
+
+
+def crear_pasada(cliente_id, proveedor="", modelo="", version="",
+                 documentos=0, filas_exogena=0, bloques=1):
+    """Abre una pasada y devuelve su id. Se cierra con `cerrar_pasada`."""
+    with conectar() as conexion:
+        cursor = conexion.execute(
+            """
+            INSERT INTO pasadas
+                (cliente_id, corrida_en, proveedor, modelo, version,
+                 bloques, documentos, filas_exogena, estado)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'corriendo')
+            """,
+            (cliente_id, datetime.now().isoformat(timespec="seconds"),
+             proveedor, modelo, version, bloques, documentos, filas_exogena),
+        )
+        return cursor.lastrowid
+
+
+def cerrar_pasada(pasada_id, estado, uso=None, costo=0.0, motivo="",
+                  bloques=None):
+    """Anota cómo terminó una pasada y lo que gastó."""
+    uso = uso or {}
+    campos = {
+        "estado": estado,
+        "motivo": motivo,
+        "tokens_entrada": int(uso.get("entrada") or 0),
+        "tokens_salida": int(uso.get("salida") or 0),
+        "tokens_cache_lectura": int(uso.get("cache_lectura") or 0),
+        "tokens_cache_escritura": int(uso.get("cache_escritura") or 0),
+        "costo_usd": float(costo or 0),
+    }
+    if bloques is not None:
+        campos["bloques"] = int(bloques)
+
+    asignaciones = ", ".join("%s = ?" % clave for clave in campos)
+    with conectar() as conexion:
+        conexion.execute(
+            "UPDATE pasadas SET %s WHERE id = ?" % asignaciones,
+            list(campos.values()) + [pasada_id],
+        )
+    return obtener_pasada(pasada_id)
+
+
+def obtener_pasada(pasada_id):
+    with conectar() as conexion:
+        fila = conexion.execute(
+            "SELECT * FROM pasadas WHERE id = ?", (pasada_id,)
+        ).fetchone()
+    return dict(fila) if fila else None
+
+
+def ultima_pasada(cliente_id):
+    """La última pasada de un cliente que haya dejado algo. O None.
+
+    Se saltan las que fallaron y las que están corriendo, y eso es
+    deliberado: una pasada que se cayó NO puede tapar la propuesta buena
+    que el contador ya tenía en pantalla. Que falló se le dice en el
+    momento, con el error; lo que no se hace es borrarle el trabajo
+    anterior por un servicio que se cayó dos minutos.
+
+    Las fallidas se quedan en la tabla igual, porque también gastaron
+    tokens y eso tiene que aparecer en el gasto.
+    """
+    with conectar() as conexion:
+        fila = conexion.execute(
+            "SELECT * FROM pasadas WHERE cliente_id = ?"
+            " AND estado IN ('lista', 'parcial')"
+            " ORDER BY id DESC LIMIT 1",
+            (cliente_id,),
+        ).fetchone()
+    return dict(fila) if fila else None
+
+
+def guardar_valores_de_pasada(pasada_id, cliente_id, valores):
+    """Guarda lo que propuso una pasada. Reemplaza lo de esa pasada."""
+    with conectar() as conexion:
+        conexion.execute(
+            "DELETE FROM pasada_valores WHERE pasada_id = ?", (pasada_id,)
+        )
+        for valor in valores:
+            conexion.execute(
+                """
+                INSERT INTO pasada_valores
+                    (pasada_id, cliente_id, renglon, renglon_nombre, valor,
+                     numero, fuente, referencia, documento_id,
+                     fila_exogena_id, cita, verificada, nivel, nivel_pedido,
+                     condicion, nota, motivo, celda, celda_motivo, estado,
+                     bloque, conflicto)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+                        ?, ?, ?, ?, ?)
+                """,
+                (pasada_id, cliente_id,
+                 str(valor.get("renglon") or ""),
+                 str(valor.get("renglon_nombre") or "")[:200],
+                 str(valor.get("valor") or "")[:100],
+                 valor.get("numero"),
+                 str(valor.get("fuente") or ""),
+                 str(valor.get("referencia") or "")[:20],
+                 valor.get("documento_id"),
+                 valor.get("fila_exogena_id"),
+                 str(valor.get("cita") or "")[:500],
+                 1 if valor.get("verificada") else 0,
+                 str(valor.get("nivel") or "C"),
+                 str(valor.get("nivel_pedido") or ""),
+                 str(valor.get("condicion") or "")[:300],
+                 str(valor.get("nota") or "")[:600],
+                 str(valor.get("motivo") or "")[:400],
+                 str(valor.get("celda") or "")[:10],
+                 str(valor.get("celda_motivo") or "")[:200],
+                 str(valor.get("estado") or "propuesto"),
+                 int(valor.get("bloque") or 1),
+                 1 if valor.get("conflicto") else 0),
+            )
+    return listar_valores_de_pasada(pasada_id)
+
+
+def listar_valores_de_pasada(pasada_id):
+    """Lo propuesto por una pasada, con el nombre del documento al lado."""
+    with conectar() as conexion:
+        filas = conexion.execute(
+            "SELECT p.*, d.nombre_original, d.nombre_guardado"
+            " FROM pasada_valores p"
+            " LEFT JOIN documentos d ON d.id = p.documento_id"
+            " WHERE p.pasada_id = ?"
+            " ORDER BY CAST(REPLACE(p.renglon, 'R', '') AS INTEGER), p.id",
+            (pasada_id,),
+        ).fetchall()
+    return [dict(fila) for fila in filas]
+
+
+def cambiar_estado_de_valores(ids, estado):
+    """Marca varias propuestas de golpe: aprobadas, descartadas…"""
+    if not ids:
+        return 0
+    huecos = ", ".join("?" for _ in ids)
+    with conectar() as conexion:
+        cursor = conexion.execute(
+            "UPDATE pasada_valores SET estado = ? WHERE id IN (%s)" % huecos,
+            [estado] + list(ids),
+        )
+        return cursor.rowcount
+
+
+def gasto_de_pasadas(cliente_id=None):
+    """Cuánto se ha gastado en pasadas, por cliente o en total.
+
+    Es lo que muestra la pantalla de Cuenta. El costo es aproximado y
+    ahí se dice: sale de una lista de precios con fecha.
+    """
+    consulta = (
+        "SELECT COUNT(*) AS pasadas,"
+        " COALESCE(SUM(tokens_entrada), 0) AS entrada,"
+        " COALESCE(SUM(tokens_salida), 0) AS salida,"
+        " COALESCE(SUM(tokens_cache_lectura), 0) AS cache_lectura,"
+        " COALESCE(SUM(tokens_cache_escritura), 0) AS cache_escritura,"
+        " COALESCE(SUM(costo_usd), 0) AS costo"
+        " FROM pasadas WHERE estado != 'corriendo'"
+    )
+    parametros = []
+    if cliente_id is not None:
+        consulta += " AND cliente_id = ?"
+        parametros.append(cliente_id)
+    with conectar() as conexion:
+        return dict(conexion.execute(consulta, parametros).fetchone())
+
+
+def gasto_por_cliente():
+    """El gasto de cada cliente que haya tenido al menos una pasada."""
+    with conectar() as conexion:
+        filas = conexion.execute(
+            "SELECT p.cliente_id, c.nombre, COUNT(*) AS pasadas,"
+            " COALESCE(SUM(p.tokens_entrada + p.tokens_salida), 0) AS tokens,"
+            " COALESCE(SUM(p.costo_usd), 0) AS costo"
+            " FROM pasadas p JOIN clientes c ON c.id = p.cliente_id"
+            " WHERE p.estado != 'corriendo'"
+            " GROUP BY p.cliente_id, c.nombre"
+            " ORDER BY costo DESC"
+        ).fetchall()
+    return [dict(fila) for fila in filas]
+
+
+def guardar_comparacion(cliente_id, pasada_id, archivo, resumen, detalle):
+    """Guarda el resultado de comparar contra el 210 que él llenó."""
+    with conectar() as conexion:
+        cursor = conexion.execute(
+            """
+            INSERT INTO comparaciones
+                (cliente_id, pasada_id, hecha_en, archivo, coinciden,
+                 difieren, solo_taxi, solo_contador, detalle)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (cliente_id, pasada_id,
+             datetime.now().isoformat(timespec="seconds"), archivo,
+             int(resumen.get("coinciden", 0)),
+             int(resumen.get("difieren", 0)),
+             int(resumen.get("solo_taxi", 0)),
+             int(resumen.get("solo_contador", 0)),
+             json.dumps(detalle, ensure_ascii=False)),
+        )
+        return cursor.lastrowid
+
+
+def ultima_comparacion(cliente_id):
+    """La última comparación de un cliente, con su detalle ya entendido."""
+    with conectar() as conexion:
+        fila = conexion.execute(
+            "SELECT * FROM comparaciones WHERE cliente_id = ?"
+            " ORDER BY id DESC LIMIT 1",
+            (cliente_id,),
+        ).fetchone()
+    if not fila:
+        return None
+    comparacion = dict(fila)
+    comparacion["detalle"] = _desde_json(comparacion["detalle"], {})
+    return comparacion

@@ -694,3 +694,77 @@ cargarDemostracion();
 
   cargar();
 })();
+
+
+/* ==========================================================
+   Lo que se ha gastado
+
+   Una sola cosa gasta plata en todo el programa: pedir la propuesta del
+   formulario de un cliente. Aquí se ve cuánto, por cliente y en total.
+
+   Los tokens son los que reportó el servicio, no una estimación. El
+   costo sí es aproximado, y se dice: sale de una lista de precios que
+   trae el programa y que tiene fecha.
+   ========================================================== */
+
+(function () {
+
+const total = document.getElementById("gasto-total");
+const aviso = document.getElementById("gasto-aviso");
+const lista = document.getElementById("gasto-lista");
+if (!total) return;
+
+function dolares(valor) {
+  return "US$" + (valor || 0).toFixed(valor && valor < 1 ? 3 : 2);
+}
+
+async function cargar() {
+  let datos;
+  try {
+    const respuesta = await fetch("/api/gasto");
+    if (!respuesta.ok) throw new Error();
+    datos = await respuesta.json();
+  } catch (e) {
+    total.textContent = "No se pudo consultar el gasto.";
+    return;
+  }
+
+  const suma = datos.total || {};
+  const tokens = (suma.entrada || 0) + (suma.salida || 0);
+
+  if (!suma.pasadas) {
+    total.textContent = "Todavía no se ha gastado nada.";
+    aviso.textContent = "No se le ha pedido la propuesta del formulario a"
+                      + " ningún cliente.";
+    lista.innerHTML = "";
+    return;
+  }
+
+  total.textContent = dolares(suma.costo) + " en "
+    + contar(suma.pasadas, "propuesta", "propuestas")
+    + " · " + tokens.toLocaleString("es-CO") + " tokens";
+  aviso.textContent = datos.aviso || "";
+
+  lista.innerHTML = "";
+  (datos.por_cliente || []).forEach(function (fila) {
+    const item = document.createElement("div");
+    item.className = "fila-lista";
+
+    const nombre = document.createElement("span");
+    nombre.textContent = fila.nombre;
+    item.appendChild(nombre);
+
+    const detalle = document.createElement("span");
+    detalle.className = "ayuda";
+    detalle.textContent = contar(fila.pasadas, "propuesta", "propuestas")
+      + " · " + (fila.tokens || 0).toLocaleString("es-CO") + " tokens · "
+      + dolares(fila.costo);
+    item.appendChild(detalle);
+
+    lista.appendChild(item);
+  });
+}
+
+cargar();
+
+})();

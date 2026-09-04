@@ -19,11 +19,16 @@ if (!idCliente) {
   // Primero el checklist y DESPUÉS los documentos: el selector de cada
   // documento se arma con los renglones, así que tienen que existir ya.
   // Y al final la fila de lectura, que necesita saber qué documentos hay.
-  cargarChecklist().then(cargarDocumentos).then(arrancarLaCola);
+  cargarChecklist().then(cargarDocumentos);
 
   // La pestaña Exógena se enciende aparte: no depende de las otras y
   // trae sus propios datos.
   if (window.ExogenaTaxi) ExogenaTaxi.encender(idCliente);
+
+  // Y la propuesta del formulario, igual: trae lo suyo y no depende de
+  // nadie. Solo LEE lo que ya se propuso; no le pide nada al modelo
+  // hasta que el contador apriete el botón.
+  if (window.PasadaTaxi) PasadaTaxi.encender(idCliente);
 }
 
 recordarPlegables();

@@ -166,21 +166,29 @@ def revisar_libreoffice():
     )
 
 
-def revisar_cola():
-    """¿Quedaron documentos sin leer de la sesión anterior?"""
+def revisar_lectura():
+    """¿Hay documentos a los que todavía no se les ha sacado nada?
+
+    «Sin leer» ya no significa lo que significaba. Antes había una fila
+    que leía los PDF uno por uno con IA y esto avisaba si había quedado
+    a medias. Ahora los XML se leen solos al confirmar la carga y el
+    texto de los PDF lo lee la propuesta del formulario, todo junto.
+
+    Así que un documento sin leer no es nada roto: es un documento al
+    que no le han pedido la propuesta todavía. Se dice sin alarma.
+    """
     pendientes = len(db.documentos_sin_leer())
     if not pendientes:
         return _punto(
             "Documentos por leer", "bien",
-            "No quedó ningún documento sin leer.",
+            "A todos los documentos se les sacó ya lo que dicen.",
         )
 
     return _punto(
-        "Documentos por leer", "aviso",
-        "Quedaron %d documento(s) sin leer de la vez pasada. No se perdió"
-        " nada: siguen en la fila, tal como estaban." % pendientes,
-        "Entre al cliente y apriete «Procesar pendientes» cuando quiera"
-        " leerlos. Usted decide cuándo se gasta el cupo del día.",
+        "Documentos por leer", "bien",
+        "Hay %d documento(s) a los que todavía no se les ha sacado nada."
+        " No falta nada por hacer: eso pasa cuando se pide la propuesta"
+        " del formulario de ese cliente." % pendientes,
     )
 
 
@@ -206,7 +214,7 @@ def revisar_todo(probar_conexion=False):
         revisar_plantilla(),
         revisar_ia(probar_conexion),
         revisar_libreoffice(),
-        revisar_cola(),
+        revisar_lectura(),
     ]
     aviso_demo = revisar_demostracion()
     if aviso_demo:
