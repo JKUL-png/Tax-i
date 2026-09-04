@@ -4979,6 +4979,25 @@ code {
 
 .propuesta-total { font-weight: 600; white-space: nowrap; }
 
+/* La casilla de la plantilla: G132, H104. Va PRIMERO, antes del
+   renglón, y en la monoespaciada, que es la regla de la casa para lo
+   que se lee carácter por carácter.
+
+   El orden no es un capricho de diseño. El contador trabaja con su hoja
+   de Excel abierta al lado, y lo que busca ahí es la coordenada. «R33»
+   es la palabra de la DIAN —así viene escrita en la exógena, y por eso
+   no se puede quitar— pero no es por donde él entra. */
+.propuesta-donde-va {
+  font-family: var(--fuente-cifras);
+  font-weight: 600;
+  color: var(--texto);
+  white-space: nowrap;
+}
+
+.propuesta-separador { color: var(--n4); }
+
+.propuesta-renglon-nombre { color: var(--texto-secundario); }
+
 .propuesta-conflicto-texto {
   color: var(--error-texto);
   font-size: 0.86rem;
@@ -5003,12 +5022,19 @@ code {
 
 .propuesta-cifra { font-weight: 600; }
 .propuesta-donde { color: var(--texto-secundario); font-size: 0.88rem; }
-.propuesta-casilla {
-  color: var(--texto-tenue);
-  font-size: 0.84rem;
+
+/* Cuando el programa no pudo escoger la casilla no se disimula: se dice
+   con el ocre de «esto le toca a usted», que es el mismo del nivel C.
+
+   Y va en la letra normal, no en la monoespaciada, aunque ocupe el
+   mismo sitio que «G132». La regla de esta hoja no tiene excepciones:
+   la monoespaciada es para lo que se lee carácter por carácter, y
+   «escoja la casilla» es una frase, no un código. */
+.propuesta-falta {
+  color: var(--alerta-texto);
+  font-weight: 500;
   cursor: help;
 }
-.propuesta-falta { color: var(--alerta-texto); }
 
 /* La cita es lo que hace verificable la cifra: va entre comillas y en la
    letra del documento, no en la de la interfaz, para que se lea como lo

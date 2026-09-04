@@ -155,7 +155,44 @@ function dibujarRenglon(renglon) {
   const titulo = document.createElement("div");
   titulo.className = "propuesta-titulo";
   const ficha = NIVELES[renglon.nivel] || NIVELES.C;
-  titulo.textContent = renglon.renglon + " — " + (renglon.nombre || "");
+
+  /* La casilla va PRIMERO, antes del renglón. El contador trabaja con
+     la hoja de Excel abierta al lado: lo que busca es G132, no R33.
+     R33 es la palabra de la DIAN —así viene escrita en la exógena— y
+     por eso no se puede quitar; pero no es por donde él entra.
+
+     Un renglón puede repartirse en varias casillas: R32 tiene nueve
+     filas de detalle en la plantilla. Cuando son más de dos se dice
+     cuántas en vez de listarlas, que ocuparía más que el nombre. */
+  const casillas = (renglon.totales_por_casilla || [])
+    .map(function (uno) { return uno.celda; })
+    .filter(function (celda) { return !!celda; });
+
+  const donde = document.createElement("span");
+  donde.className = "propuesta-donde-va";
+  if (casillas.length === 0) {
+    donde.className = "propuesta-falta";
+    donde.textContent = "sin casilla";
+    donde.title = "Ese renglón tiene varias filas de detalle en su"
+                + " plantilla y ninguna gana claramente. La escoge usted.";
+  } else if (casillas.length <= 2) {
+    donde.textContent = casillas.join(", ");
+  } else {
+    donde.textContent = casillas.length + " casillas";
+    donde.title = casillas.join(", ");
+  }
+  titulo.appendChild(donde);
+
+  const separador = document.createElement("span");
+  separador.className = "propuesta-separador";
+  separador.textContent = " · ";
+  titulo.appendChild(separador);
+
+  const cual = document.createElement("span");
+  cual.className = "propuesta-renglon-nombre";
+  cual.textContent = renglon.renglon + " — " + (renglon.nombre || "");
+  titulo.appendChild(cual);
+
   if (ficha.marca) {
     const marca = document.createElement("span");
     marca.className = "propuesta-marca";
@@ -208,6 +245,21 @@ function dibujarComponente(componente) {
     linea.appendChild(marca);
   }
 
+  /* Igual que arriba: primero dónde se escribe, después cuánto. */
+  const casilla = document.createElement("span");
+  if (componente.celda) {
+    casilla.className = "propuesta-donde-va";
+    casilla.textContent = componente.celda;
+    casilla.title = componente.celda_motivo || "";
+  } else {
+    casilla.className = "propuesta-falta";
+    casilla.textContent = componente.estado === "propuesto"
+      ? "escoja la casilla" : "—";
+    casilla.title = "Ese renglón tiene varias filas de detalle y ninguna"
+                  + " gana claramente. La escoge usted, en la hoja de captura.";
+  }
+  linea.appendChild(casilla);
+
   const cifra = document.createElement("span");
   cifra.className = "cifra propuesta-cifra";
   cifra.textContent = componente.numero === null
@@ -227,21 +279,6 @@ function dibujarComponente(componente) {
     donde.textContent = "Exógena, registro " + componente.referencia.slice(1);
   }
   linea.appendChild(donde);
-
-  if (componente.celda) {
-    const casilla = document.createElement("span");
-    casilla.className = "propuesta-casilla";
-    casilla.textContent = "→ " + componente.celda;
-    casilla.title = componente.celda_motivo || "";
-    linea.appendChild(casilla);
-  } else if (componente.estado === "propuesto") {
-    const falta = document.createElement("span");
-    falta.className = "propuesta-casilla propuesta-falta";
-    falta.textContent = "→ escoja la casilla";
-    falta.title = "Ese renglón tiene varias filas de detalle y ninguna"
-                + " gana claramente. La escoge usted, en la hoja de captura.";
-    linea.appendChild(falta);
-  }
 
   if (componente.estado === "aprobado") {
     const marca = document.createElement("span");
@@ -352,8 +389,8 @@ async function aprobarEnBloque() {
   }
 
   const nombres = datos.valores.map(function (valor) {
-    return valor.renglon + " → " + valor.celda + "   "
-         + pesos(valor.numero) + "   (nivel " + valor.nivel + ")";
+    return valor.celda + "   " + pesos(valor.numero)
+         + "   " + valor.renglon + " (nivel " + valor.nivel + ")";
   });
   const seguro = await preguntar({
     titulo: "Aceptar " + datos.cuantos + " valores",

@@ -559,6 +559,73 @@ def main():
             revisar("el modo comparación está a la vista",
                     pagina.locator("#boton-comparar").count() == 1)
 
+            # Una propuesta de mentiras, metida directo en la base, para
+            # ver cómo se DIBUJA. Sin esto la pestaña se prueba vacía y
+            # el código que pinta los renglones no se ejecuta nunca.
+            from app import db as base
+            pasada_id = base.crear_pasada(
+                id_cliente, proveedor="ninguno", modelo="de-prueba")
+            base.guardar_valores_de_pasada(pasada_id, id_cliente, [
+                {"renglon": "R33", "renglon_nombre": "Ingresos no"
+                 " constitutivos de renta", "valor": "3.384.000",
+                 "numero": 3384000, "fuente": "exogena", "referencia": "E6",
+                 "cita": "Aportes obligatorios a salud a cargo Trabajador",
+                 "verificada": True, "nivel": "A", "nivel_pedido": "A",
+                 "nota": "La exógena lo asigna a este renglón.",
+                 "celda": "G132", "celda_motivo": "La fila dice «Aportes"
+                 " obligatorios a salud»."},
+                {"renglon": "R74", "renglon_nombre": "Ingresos brutos"
+                 " rentas no laborales", "valor": "1.000.000",
+                 "numero": 1000000, "fuente": "documento", "referencia": "D1",
+                 "cita": "Valor aportado 1.000.000", "verificada": True,
+                 "nivel": "C", "nivel_pedido": "C",
+                 "nota": "No había regla: lo ubicó el modelo.",
+                 "celda": "", "celda_motivo": ""},
+            ])
+            base.cerrar_pasada(pasada_id, "lista",
+                               {"entrada": 1000, "salida": 200}, 0.004)
+
+            errores.clear()
+            pagina.goto(DIRECCION + "/cliente?id=%d" % id_cliente,
+                        wait_until="networkidle")
+            pagina.locator('[data-vista="formulario"]').click()
+            pagina.evaluate(
+                "document.getElementById('plegable-formulario').open = true"
+            )
+            pagina.wait_for_selector("#propuesta-resultado:not(.oculto)",
+                                     timeout=10000)
+            pagina.wait_for_timeout(400)
+            revisar("dibuja la propuesta sin errores de JavaScript",
+                    not errores, errores[:3])
+
+            filas = pagina.locator(".propuesta-renglon")
+            revisar("pinta un bloque por renglón", filas.count() == 2,
+                    filas.count())
+
+            # Lo que el contador busca con su Excel abierto al lado es la
+            # coordenada, no el número del renglón. Va PRIMERO.
+            primero = pagina.locator(".propuesta-renglon").first
+            encabezado = primero.locator(".propuesta-titulo").inner_text()
+            revisar("la casilla va antes que el renglón",
+                    encabezado.index("G132") < encabezado.index("R33"),
+                    encabezado)
+            revisar("y el renglón sigue estando, que es lo que dice la DIAN",
+                    "R33" in encabezado, encabezado)
+
+            revisar("el nivel C se resalta y el A no",
+                    pagina.locator(".propuesta-renglon.nivel-C").count() == 1
+                    and pagina.locator(".propuesta-renglon.nivel-A").count() == 1)
+            revisar("cuando no hay casilla escogida se dice, no se disimula",
+                    pagina.locator(".propuesta-falta").count() >= 1)
+            revisar("cada valor muestra la frase del papel de donde salió",
+                    pagina.locator(".propuesta-cita").count() == 2,
+                    pagina.locator(".propuesta-cita").count())
+
+            conteo = pagina.locator("#propuesta-conteo").inner_text()
+            revisar("el contador de arriba dice cuántos hay que revisar",
+                    "2 valores propuestos" in conteo and "1 requieren" in conteo,
+                    conteo)
+
             titulo("G. El selector de renglones")
             errores.clear()
             pagina.locator('[data-vista="documentos"]').click()
