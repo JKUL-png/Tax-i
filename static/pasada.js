@@ -173,8 +173,8 @@ function dibujarRenglon(renglon) {
   if (casillas.length === 0) {
     donde.className = "propuesta-falta";
     donde.textContent = "sin casilla";
-    donde.title = "Ese renglón tiene varias filas de detalle en su"
-                + " plantilla y ninguna gana claramente. La escoge usted.";
+    donde.title = "Ninguno de sus valores tiene casilla escogida todavía."
+                + " Ábralos abajo y escoja.";
   } else if (casillas.length <= 2) {
     donde.textContent = casillas.join(", ");
   } else {
@@ -246,17 +246,27 @@ function dibujarComponente(componente) {
   }
 
   /* Igual que arriba: primero dónde se escribe, después cuánto. */
-  const casilla = document.createElement("span");
+  let casilla = document.createElement("span");
   if (componente.celda) {
     casilla.className = "propuesta-donde-va";
     casilla.textContent = componente.celda;
     casilla.title = componente.celda_motivo || "";
+  } else if (componente.estado === "propuesto") {
+    /* No es un rótulo: es un botón. Antes decía «escoja la casilla» y
+       lo dejaba a uno buscando en la hoja de captura cuál era. Ahora
+       abre la lista de las filas de ese renglón, con la etiqueta que
+       trae cada una en la plantilla, que es lo que permite reconocerla. */
+    casilla = document.createElement("button");
+    casilla.type = "button";
+    casilla.className = "propuesta-falta propuesta-escoger";
+    casilla.textContent = "escoja la casilla";
+    casilla.dataset.id = componente.id;
+    casilla.dataset.renglon = componente.renglon;
+    casilla.title = "Ese renglón tiene varias filas de detalle en su"
+                  + " plantilla. Ábralo y escoja en cuál va.";
   } else {
     casilla.className = "propuesta-falta";
-    casilla.textContent = componente.estado === "propuesto"
-      ? "escoja la casilla" : "—";
-    casilla.title = "Ese renglón tiene varias filas de detalle y ninguna"
-                  + " gana claramente. La escoge usted, en la hoja de captura.";
+    casilla.textContent = "—";
   }
   linea.appendChild(casilla);
 
@@ -422,6 +432,111 @@ async function aprobar(ids) {
     avisar(e.message || "No se pudieron anotar los valores.");
   }
 }
+
+/* ----------------------------------------------------------
+   Escoger la casilla
+
+   El renglón ya está decidido —lo decidió la DIAN en la exógena o lo
+   escogió él—. Lo que falta es en cuál FILA de su hoja de trabajo va,
+   y eso no es una decisión tributaria: se resuelve leyendo la etiqueta
+   de la fila. El programa lo intenta solo; cuando dos filas empatan,
+   pregunta, y lo que él escoja se recuerda para no volvérselo a
+   preguntar.
+   ---------------------------------------------------------- */
+
+async function abrirLasCasillas(boton) {
+  /* Si ya estaba abierto, se cierra: el mismo clic sirve para las dos. */
+  const abierta = boton.parentElement.parentElement
+                       .querySelector(".propuesta-casillas");
+  if (abierta) {
+    abierta.remove();
+    boton.classList.remove("propuesta-escoger-abierto");
+    return;
+  }
+
+  boton.disabled = true;
+  let datos;
+  try {
+    datos = await pedir("/pasada/casillas?renglon="
+                        + encodeURIComponent(boton.dataset.renglon));
+  } catch (e) {
+    avisar(e.message || "No se pudieron cargar las casillas.");
+    boton.disabled = false;
+    return;
+  }
+  boton.disabled = false;
+  boton.classList.add("propuesta-escoger-abierto");
+
+  const caja = document.createElement("div");
+  caja.className = "propuesta-casillas";
+
+  const titulo = document.createElement("p");
+  titulo.className = "propuesta-casillas-titulo";
+  titulo.textContent = datos.casillas.length
+    ? "¿En cuál fila de " + datos.renglon + " va esta cifra?"
+    : (datos.motivo || "Ese renglón no tiene casillas en esta plantilla.");
+  caja.appendChild(titulo);
+
+  datos.casillas.forEach(function (una) {
+    const opcion = document.createElement("button");
+    opcion.type = "button";
+    opcion.className = "propuesta-casilla-opcion";
+    opcion.dataset.id = boton.dataset.id;
+    opcion.dataset.celda = una.celda;
+
+    const codigo = document.createElement("span");
+    codigo.className = "propuesta-donde-va";
+    codigo.textContent = una.celda;
+    opcion.appendChild(codigo);
+
+    const que = document.createElement("span");
+    que.className = "propuesta-casilla-que";
+    que.textContent = una.descripcion || "(la plantilla no le puso nombre)";
+    opcion.appendChild(que);
+
+    const fila = document.createElement("span");
+    fila.className = "propuesta-casilla-fila";
+    fila.textContent = "fila " + una.fila;
+    opcion.appendChild(fila);
+
+    if (una.celda === datos.recordada) {
+      const marca = document.createElement("span");
+      marca.className = "etiqueta etiqueta-exito";
+      marca.textContent = "la que usó antes";
+      opcion.appendChild(marca);
+    }
+    caja.appendChild(opcion);
+  });
+
+  boton.parentElement.parentElement.appendChild(caja);
+}
+
+async function guardarLaCasilla(id, celda) {
+  try {
+    mostrar(await pedir("/pasada/casilla", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: Number(id), celda: celda })
+    }));
+    avisar("Queda en " + celda + ". El programa se acuerda para la"
+           + " próxima vez que aparezca ese renglón.", "exito");
+  } catch (e) {
+    avisar(e.message || "No se pudo guardar la casilla.");
+  }
+}
+
+lista.addEventListener("click", function (evento) {
+  const escoger = evento.target.closest(".propuesta-escoger");
+  if (escoger) {
+    abrirLasCasillas(escoger);
+    return;
+  }
+  const opcion = evento.target.closest(".propuesta-casilla-opcion");
+  if (opcion) {
+    guardarLaCasilla(opcion.dataset.id, opcion.dataset.celda);
+  }
+});
+
 
 function marcados() {
   return Array.from(lista.querySelectorAll(".propuesta-marcar:checked"))

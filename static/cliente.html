@@ -610,6 +610,16 @@
         <div class="exogena-filtros" id="exogena-filtros"
              role="group" aria-label="Filtrar por estado"></div>
 
+        <!-- Buscar dentro de la exógena. Treinta y seis registros ya son
+             demasiados para encontrar uno a punta de scroll, y en una
+             exógena de verdad son muchos más. -->
+        <div class="exogena-buscar">
+          <input type="search" id="exogena-buscar" autocomplete="off"
+                 placeholder="Buscar: concepto, quién reporta, NIT, R32, 2.342.990"
+                 aria-label="Buscar en la exógena">
+          <span class="ayuda" id="exogena-buscar-cuantos"></span>
+        </div>
+
         <div class="tabla-envoltura">
           <table class="exogena-tabla">
             <thead>

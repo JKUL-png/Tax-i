@@ -132,6 +132,46 @@ def api_descartar(peticion, id_cliente, **partes):
     return {"descartadas": cuantas, "pasada": pasada.resumen(id_cliente)}
 
 
+@app.get("/api/clientes/{id_cliente}/pasada/casillas")
+def api_casillas_del_renglon(peticion, id_cliente):
+    """Las casillas donde se puede escribir un renglón, para que él escoja.
+
+    Un renglón NO es una casilla: R33 son siete filas de detalle en la
+    plantilla. Cuando ninguna gana claramente, el programa no adivina —
+    escribir una cifra en la fila equivocada de su declaración es un
+    daño de verdad— y le muestra las opciones con la etiqueta que trae
+    cada fila, que es lo que le permite reconocerla.
+
+    Solo salen las casillas que alguna fórmula LEE. Ofrecer una de las
+    otras sería ofrecer un error silencioso: la cifra queda escrita,
+    parece anotada, y el renglón se queda en cero.
+    """
+    cliente_o_404(id_cliente)
+    codigo = (peticion.consulta.get("renglon") or "").strip()
+    numero = codigo.upper().lstrip("R")
+    if not numero.isdigit():
+        raise ErrorHttp(400, "Falta decir de cuál renglón.")
+
+    try:
+        casillas = formulario.celdas_de_renglon(numero)
+        recordada = formulario.casilla_recordada(numero)
+    except formulario.SinPlantilla as error:
+        raise ErrorHttp(409, str(error))
+
+    return {
+        "renglon": "R" + numero,
+        "casillas": casillas,
+        "recordada": recordada,
+        # Cuando no hay ninguna, la plantilla no tiene dónde escribir ese
+        # renglón. Se dice, en vez de mostrar una lista vacía.
+        "motivo": "" if casillas else (
+            "En esta plantilla, el renglón R%s no tiene ninguna casilla"
+            " que alguna fórmula lea. Anótelo directamente en la hoja de"
+            " captura si su plantilla lo maneja de otra forma." % numero
+        ),
+    }
+
+
 @app.put("/api/clientes/{id_cliente}/pasada/casilla")
 def api_casilla(peticion, id_cliente, **partes):
     """El contador escoge la casilla cuando el programa no pudo."""

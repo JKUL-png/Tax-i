@@ -25,6 +25,7 @@
   var datos = null;
   var renglones = [];
   var filtro = "";
+  var busqueda = "";
   var orden = { columna: "", alReves: false };
 
   var ESTADOS = {
@@ -189,6 +190,45 @@
     });
   }
 
+  /* Deja un texto listo para comparar: sin tildes, en minúscula y sin
+     los puntos de miles. Lo último es lo que permite escribir
+     «2342990» y encontrar «$ 2.342.990», que es como uno se acuerda de
+     una cifra cuando la está buscando. */
+  function paraBuscar(texto) {
+    return (texto === null || texto === undefined ? "" : String(texto))
+      .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+      .toLowerCase();
+  }
+
+  function soloDigitos(texto) {
+    return String(texto === null || texto === undefined ? "" : texto)
+      .replace(/[^0-9]/g, "");
+  }
+
+  /* Todo lo que una fila permite buscar, en un solo texto.
+
+     Va el «Uso declaración Sugerida» completo porque ahí está el
+     renglón: buscando «R32» aparecen todas las filas que la DIAN mandó
+     a ese renglón, que es la pregunta que uno se hace de verdad. */
+  function textoDeLaFila(fila) {
+    return paraBuscar([
+      fila.detalle, fila.nombre_reporta, fila.nit_reporta, fila.concepto,
+      fila.uso_sugerido, fila.estado_texto, fila.nombre_original,
+      fila.renglon_elegido
+    ].join(" "));
+  }
+
+  function coincideConLaBusqueda(fila, aguja) {
+    if (textoDeLaFila(fila).indexOf(aguja) !== -1) return true;
+    /* Y por la cifra, escrita como sea: con puntos o sin ellos. */
+    var digitos = soloDigitos(aguja);
+    if (digitos.length >= 3) {
+      if (soloDigitos(fila.valor).indexOf(digitos) !== -1) return true;
+      if (soloDigitos(fila.nit_reporta).indexOf(digitos) !== -1) return true;
+    }
+    return false;
+  }
+
   function filasAMostrar() {
     var lista = datos.filas.slice();
 
@@ -196,6 +236,13 @@
     else if (filtro) {
       lista = lista.filter(function (f) {
         return f.marcas.indexOf(filtro) !== -1;
+      });
+    }
+
+    var aguja = paraBuscar(busqueda).trim();
+    if (aguja) {
+      lista = lista.filter(function (f) {
+        return coincideConLaBusqueda(f, aguja);
       });
     }
 
@@ -227,6 +274,12 @@
        significa que falte nada: significa que ningún tercero reportó
        algo que la DIAN haya mandado allí. */
     var sueltos = datos.sin_reportar || [];
+    var aguja = paraBuscar(busqueda).trim();
+    if (aguja) {
+      sueltos = sueltos.filter(function (renglon) {
+        return paraBuscar(renglon.titulo || "").indexOf(aguja) !== -1;
+      });
+    }
     if ((!filtro || filtro === "sin_reportar") && sueltos.length) {
       sueltos.forEach(function (renglon) {
         cuerpo.appendChild(filaSinReportar(renglon));
@@ -238,14 +291,23 @@
       var celda = document.createElement("td");
       celda.colSpan = 5;
       celda.className = "vacio";
-      celda.textContent = "Ningún registro con ese estado.";
+      celda.textContent = busqueda.trim()
+        ? "Ningún registro dice «" + busqueda.trim() + "»."
+        : "Ningún registro con ese estado.";
       fila.appendChild(celda);
       cuerpo.appendChild(fila);
     }
 
+    var total = datos.filas.length + (datos.sin_reportar || []).length;
     $("exogena-pie").textContent =
-      "Mostrando " + cuerpo.children.length + " de " +
-      (datos.filas.length + sueltos.length) + " renglones.";
+      "Mostrando " + cuerpo.children.length + " de " + total + " renglones.";
+
+    var cuantos = $("exogena-buscar-cuantos");
+    if (cuantos) {
+      cuantos.textContent = busqueda.trim()
+        ? cuerpo.children.length + " de " + total
+        : "";
+    }
   }
 
   function etiquetaDeEstado(clave) {
@@ -770,6 +832,25 @@
 
     var quitar = $("boton-quitar-exogena");
     if (quitar) quitar.addEventListener("click", quitarExogena);
+
+    /* Buscar dentro de la tabla. Se filtra mientras escribe, sin botón:
+       con treinta y seis registros ya cansa el scroll, y una exógena de
+       verdad trae muchos más. */
+    var buscar = $("exogena-buscar");
+    if (buscar) {
+      buscar.addEventListener("input", function () {
+        busqueda = buscar.value;
+        pintarFilas();
+      });
+      /* Escape limpia, que es lo que uno intenta sin pensarlo. */
+      buscar.addEventListener("keydown", function (evento) {
+        if (evento.key === "Escape" && buscar.value) {
+          buscar.value = "";
+          busqueda = "";
+          pintarFilas();
+        }
+      });
+    }
 
     document.querySelectorAll(".exogena-tabla th.ordenable")
       .forEach(function (encabezado) {

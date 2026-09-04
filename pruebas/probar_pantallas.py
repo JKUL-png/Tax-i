@@ -428,6 +428,50 @@ def main():
                 revisar("los cinco topes van arriba, aparte de la tabla",
                         topes.count() == 5, topes.count())
 
+                # Buscar dentro de la tabla. Con 36 registros ya cansa
+                # el scroll, y una exógena de verdad trae muchos más.
+                buscar = pagina.locator("#exogena-buscar")
+                revisar("hay una barra para buscar en la exógena",
+                        buscar.count() == 1)
+
+                buscar.fill("davivienda")
+                pagina.wait_for_timeout(300)
+                por_tercero = pagina.locator("#exogena-filas tr").count()
+                revisar("busca por quién reporta",
+                        0 < por_tercero < 36, por_tercero)
+
+                buscar.fill("R30")
+                pagina.wait_for_timeout(300)
+                por_renglon = pagina.locator("#exogena-filas tr").count()
+                revisar("busca por renglón, que es la pregunta de verdad",
+                        0 < por_renglon < 36, por_renglon)
+
+                # La cifra, escrita como uno se acuerda de ella: sin los
+                # puntos de miles.
+                buscar.fill("2342990")
+                pagina.wait_for_timeout(300)
+                por_cifra = pagina.locator("#exogena-filas tr").count()
+                revisar("busca por la cifra aunque se escriba sin puntos",
+                        0 < por_cifra < 36, por_cifra)
+                revisar("y dice cuántos de cuántos está mostrando",
+                        "de 36" in pagina.locator(
+                            "#exogena-buscar-cuantos").inner_text(),
+                        pagina.locator("#exogena-buscar-cuantos").inner_text())
+
+                buscar.fill("zzzznoexiste")
+                pagina.wait_for_timeout(300)
+                revisar("cuando no hay nada lo dice con lo que se buscó",
+                        "zzzznoexiste" in pagina.locator(
+                            "#exogena-filas").inner_text(),
+                        pagina.locator("#exogena-filas").inner_text()[:60])
+
+                buscar.fill("")
+                pagina.wait_for_timeout(300)
+                revisar("y al borrar vuelven todos",
+                        pagina.locator("#exogena-filas tr").count() == 36,
+                        pagina.locator("#exogena-filas tr").count())
+                revisar("buscar no rompe nada", not errores, errores[:3])
+
                 avisos = pagina.locator(".exogena-aviso")
                 revisar("muestra los tres avisos de la DIAN",
                         avisos.count() == 3, avisos.count())
@@ -625,6 +669,39 @@ def main():
             revisar("el contador de arriba dice cuántos hay que revisar",
                     "2 valores propuestos" in conteo and "1 requieren" in conteo,
                     conteo)
+
+            # «escoja la casilla» no es un rótulo: es un botón que abre
+            # las filas de ese renglón. Sin esto, el contador quedaba
+            # sabiendo que faltaba algo pero no cuáles eran las opciones.
+            escoger = pagina.locator(".propuesta-escoger")
+            revisar("«escoja la casilla» es un botón, no un rótulo",
+                    escoger.count() == 1, escoger.count())
+
+            escoger.first.click()
+            pagina.wait_for_selector(".propuesta-casillas", timeout=8000)
+            opciones = pagina.locator(".propuesta-casilla-opcion")
+            revisar("al abrirlo muestra las casillas de ese renglón",
+                    opciones.count() > 0, opciones.count())
+            import re as _re
+            primera = opciones.first.inner_text()
+            revisar("cada opción dice la casilla, su etiqueta y la fila",
+                    _re.match(r"^[A-Z]+[0-9]+\n.+\nfila [0-9]+",
+                              primera.strip()) is not None,
+                    primera.replace("\n", " · ")[:70])
+            revisar("y no ofrece casillas que ninguna fórmula lea",
+                    opciones.count() <= 12, opciones.count())
+
+            celda_escogida = opciones.first.get_attribute("data-celda")
+            opciones.first.click()
+            pagina.wait_for_timeout(900)
+            revisar("al escoger una, queda anotada en la propuesta",
+                    celda_escogida in pagina.locator(
+                        "#propuesta-lista").inner_text(),
+                    celda_escogida)
+            revisar("y ya no queda ninguna sin casilla",
+                    pagina.locator(".propuesta-escoger").count() == 0)
+            revisar("todo eso sin errores de JavaScript", not errores,
+                    errores[:3])
 
             titulo("G. El selector de renglones")
             errores.clear()

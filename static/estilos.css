@@ -5107,3 +5107,100 @@ code {
 }
 
 .fila-lista:last-child { border-bottom: none; }
+
+/* ---------- Escoger la casilla de un renglón ----------
+
+   «escoja la casilla» dejó de ser un rótulo y es un botón. Antes decía
+   qué faltaba y lo dejaba a uno buscando en la hoja de captura cuál de
+   las siete filas de R33 era; ahora las abre con la etiqueta que trae
+   cada una en la plantilla, que es lo que permite reconocerla. */
+
+.propuesta-escoger {
+  background: none;
+  border: none;
+  border-bottom: 1px dashed currentColor;
+  padding: 0;
+  font: inherit;
+  font-weight: 500;
+  color: var(--alerta-texto);
+  cursor: pointer;
+}
+
+.propuesta-escoger:hover { color: var(--texto); }
+.propuesta-escoger-abierto { border-bottom-style: solid; }
+
+.propuesta-casillas {
+  margin: 10px 0 0 26px;
+  border: 1px solid var(--borde);
+  border-radius: 8px;
+  background: var(--superficie);
+  overflow: hidden;
+}
+
+.propuesta-casillas-titulo {
+  margin: 0;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--raya);
+  color: var(--texto-secundario);
+  font-size: 0.86rem;
+}
+
+.propuesta-casilla-opcion {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  width: 100%;
+  padding: 9px 12px;
+  border: none;
+  border-bottom: 1px solid var(--raya);
+  background: none;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.propuesta-casilla-opcion:last-child { border-bottom: none; }
+.propuesta-casilla-opcion:hover { background: var(--n2); }
+
+.propuesta-casilla-que {
+  flex: 1;
+  color: var(--texto);
+  font-size: 0.9rem;
+}
+
+.propuesta-casilla-fila {
+  color: var(--texto-tenue);
+  font-size: 0.82rem;
+  white-space: nowrap;
+}
+
+/* ---------- Buscar dentro de la exógena ----------
+   Treinta y seis registros ya cansan a punta de scroll, y una exógena
+   de verdad trae muchos más. Busca por concepto, por quién reporta, por
+   NIT, por renglón —«R32» saca todas las que la DIAN mandó ahí— y por
+   la cifra, escrita con puntos o sin ellos. */
+.exogena-buscar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 12px 0 4px;
+}
+
+.exogena-buscar input {
+  flex: 1;
+  max-width: 460px;
+  padding: 8px 12px;
+  border: 1px solid var(--borde-fuerte);
+  border-radius: 8px;
+  font: inherit;
+  background: var(--superficie);
+  color: var(--texto);
+}
+
+.exogena-buscar input:focus {
+  outline: 2px solid var(--primary);
+  outline-offset: 1px;
+  border-color: var(--primary);
+}
+
+.exogena-buscar .ayuda { white-space: nowrap; }
