@@ -435,6 +435,7 @@ async function subirArchivos(pendientes) {
 
   const tandas = armarTandas(pendientes);
   let guardados = 0;
+  let hayQueProponer = false;
   let ignorados = [];
   let enviados = 0;
   let entraronTodas = true;
@@ -480,6 +481,9 @@ async function subirArchivos(pendientes) {
       guardados += resultado.guardados.length;
       ignorados = ignorados.concat(resultado.ignorados);
       enviados += tanda.length;
+      /* Si él prendió «pedir la propuesta al confirmar», el servidor lo
+         dice aquí. Se pide UNA vez al final, no una por tanda. */
+      if (resultado.proponer_ahora) hayQueProponer = true;
 
       // Lo que ya entró sale de la zona de revisión. Si la siguiente
       // tanda falla, en la zona queda EXACTAMENTE lo que no se subió,
@@ -507,6 +511,16 @@ async function subirArchivos(pendientes) {
   cargarDocumentos();
   cargarHistorial();
   refrescarMensaje();
+
+  /* La pestaña de la propuesta se entera: o pide una nueva, o al menos
+     avisa que la que hay quedó vieja. Va por un evento y no llamando a
+     pasada.js directo, que es como ya se hablan los demás pedazos de
+     esta pantalla. */
+  if (guardados) {
+    document.dispatchEvent(new CustomEvent("carga-confirmada", {
+      detail: { proponer_ahora: hayQueProponer, guardados: guardados }
+    }));
+  }
 }
 
 /* Muestra el resumen de lo que se subió y lo que quedó por fuera. */

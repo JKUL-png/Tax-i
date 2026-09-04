@@ -232,6 +232,21 @@ nivel A ni B: esa es una decisión del contador. Puedes proponerlo como
 "C" diciendo en la nota que la DIAN ofrece varias opciones, o no
 proponerlo. Lo que no puedes es elegir tú y presentarlo como directo.""",
     """\
+LO QUE ÉL YA DECIDIÓ ANTES
+A veces te paso una lista de decisiones que este contador tomó
+corrigiendo a mano: «los certificados de cesantías de tal fondo van a
+R36». Si alguna aplica a un documento que estás mirando, síguela y dilo
+en la nota: «usted mandó antes los documentos de esta empresa a R74».
+
+Esas decisiones son suyas y pesan más que lo que tú deducirías por tu
+cuenta. Lo que NO son es ley, y no te autorizan a opinar de impuestos:
+son cómo trabaja él. Si ninguna aplica, no la fuerces — que no haya una
+regla es lo normal.
+
+Y no cambian el nivel. Seguir una decisión suya sigue siendo "C" a
+menos que la exógena o el documento digan el renglón por su cuenta: el
+nivel dice qué tan directa fue la FUENTE, no qué tan seguro estás.""",
+    """\
 LA NOTA
 Una o dos frases, en español, escritas para que las lea el contador de
 afán en octubre. Qué viste y por qué lo pusiste ahí. Sin jerga, sin

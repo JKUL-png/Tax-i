@@ -366,6 +366,16 @@
                 </div>
               </div>
 
+              <!-- Llegaron documentos (o exógena) después de la última
+                   propuesta. No se vuelve a correr sola —eso cuesta—
+                   pero se avisa, con el botón al lado. -->
+              <div id="propuesta-vieja" class="aviso-pendientes oculto">
+                <span id="propuesta-vieja-texto"></span>
+                <button type="button" class="boton" id="boton-reproponer-aviso">
+                  Volver a proponer
+                </button>
+              </div>
+
               <!-- El cruce: sus papeles contra lo que reportó la DIAN.
                    Sin IA y sin costo. Va ARRIBA de la propuesta porque
                    es lo primero que él mira. -->
@@ -387,6 +397,16 @@
                     Los de nivel C se revisan uno por uno: son los que el
                     modelo tuvo que interpretar. Después de aprobar puede
                     cambiar cualquier valor en la hoja de captura.
+                  </p>
+                  <label class="opcion-linea">
+                    <input type="checkbox" id="propuesta-automatico">
+                    Pedir la propuesta sola al confirmar una carga
+                  </label>
+                  <p class="ayuda">
+                    Viene apagado. Pedir la propuesta cuesta: es lo único
+                    de todo el programa que gasta. Prendido, se pide una
+                    vez por cada carga que usted confirme —no una por
+                    archivo—, y solo si el cliente ya tiene exógena.
                   </p>
                 </div>
                 <div id="propuesta-lista" class="lista-propuesta"></div>

@@ -5,7 +5,7 @@ from pathlib import Path
 
 from app import (
     bitacora, checklist, clasificacion, db, documentos, extraccion,
-    importar, lectura,
+    importar, lectura, pasada,
 )
 from app.api.base import app, campo_lista_de_numeros, cliente_o_404
 from app.servidor import ErrorHttp, Respuesta
@@ -207,10 +207,24 @@ def api_subir_documentos(peticion, id_cliente):
         # es gastar plata, no trabajar.
         clasificacion.arrancar(id_cliente)
 
+    # Si él prendió «pedir la propuesta al confirmar», se le dice a la
+    # pantalla que la pida — no se corre aquí. Correrla aquí dejaría al
+    # contador esperando un minuto mirando un botón trabado; pedida
+    # desde la pantalla, ve que está trabajando y puede seguir.
+    #
+    # Una sola por confirmación, no una por archivo: subir doce
+    # documentos de a uno costaría doce pasadas.
+    proponer = bool(
+        guardados
+        and pasada.proponer_al_confirmar()
+        and db.obtener_carga_exogena(id_cliente) is not None
+    )
+
     return {
         "guardados": guardados,
         "ignorados": ignorados,
         "xml_leidos": leidos,
+        "proponer_ahora": proponer,
         "estado": extraccion.resumen(id_cliente),
     }
 

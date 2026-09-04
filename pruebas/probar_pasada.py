@@ -403,6 +403,70 @@ def main():
                   "%d celdas" % len(anotados))
 
         # --------------------------------------------------------------
+        titulo("Aprende de SUS decisiones, no de leyes que nadie firmó")
+        # --------------------------------------------------------------
+        #
+        # Es la única forma en que este programa aprende. Meterle reglas
+        # tributarias escritas de memoria sería derecho inventado por un
+        # modelo — lo mismo que el proyecto ya prohíbe para las fechas
+        # de vencimiento, y por el mismo motivo.
+        sin_reglas = pasada.armar_entrada(cliente)
+        comprobar("sin reglas guardadas no se le manda ese bloque",
+                  "LO QUE ESTE CONTADOR YA DECIDIÓ" not in sin_reglas["bloques"][0])
+
+        db.guardar_regla("nit:900456789", "cesantias", "36",
+                         "R36 — Otras rentas exentas",
+                         "COMERCIALIZADORA EL ROBLE S.A.S.")
+        con_reglas = pasada.armar_entrada(cliente)
+        bloque = con_reglas["bloques"][0]
+
+        comprobar("con reglas guardadas sí se le mandan",
+                  "LO QUE ESTE CONTADOR YA DECIDIÓ" in bloque)
+        comprobar("y van escritas como una frase, no como una fila de base",
+                  "van al renglón R36" in bloque,
+                  bloque[bloque.find("LO QUE ESTE"):][:200])
+        comprobar("se le dice que son decisiones de él, no ley",
+                  "No son ley" in bloque)
+        comprobar("la instrucción le explica cómo usarlas",
+                  "LO QUE ÉL YA DECIDIÓ ANTES" in instrucciones.PASADA)
+        comprobar("y que seguirlas NO le sube el nivel",
+                  "no cambian el nivel" in instrucciones.PASADA.lower())
+
+        # Las reglas no llevan datos de nadie: solo quién emite y a
+        # cuál renglón va.
+        regla = db.listar_reglas()[0]
+        comprobar("una regla no guarda el nombre del cliente",
+                  cliente["nombre"] not in str(regla), str(regla)[:80])
+        comprobar("ni el nombre de ningún archivo",
+                  ".txt" not in str(regla) and ".pdf" not in str(regla))
+
+        # --------------------------------------------------------------
+        titulo("El interruptor de pedirla sola, y el aviso de que quedó vieja")
+        # --------------------------------------------------------------
+        comprobar("viene APAGADO de fábrica: la pasada cuesta",
+                  pasada.proponer_al_confirmar() is False)
+        comprobar("se puede prender", pasada.cambiar_automatico(True) is True)
+        comprobar("y queda guardado en la base, no en memoria",
+                  db.leer_ajuste(pasada.CLAVE_AUTOMATICO) == "si")
+        comprobar("y se puede volver a apagar",
+                  pasada.cambiar_automatico(False) is False)
+
+        antes = pasada.resumen(cliente_id)
+        comprobar("con nada nuevo, no dice que esté vieja",
+                  antes["cambios"]["documentos"] == 0
+                  and antes["cambios"]["exogena"] is False,
+                  antes["cambios"])
+
+        subir("llego_despues.txt", b"Certificado que llego tarde 1.000")
+        despues = pasada.resumen(cliente_id)
+        comprobar("al subir un documento nuevo, avisa que la propuesta"
+                  " quedó vieja",
+                  despues["cambios"]["documentos"] == 1,
+                  despues["cambios"])
+        comprobar("pero NO se vuelve a correr sola",
+                  despues["pasada"]["id"] == antes["pasada"]["id"])
+
+        # --------------------------------------------------------------
         titulo("El cruce: sus papeles contra lo que reportó la DIAN")
         # --------------------------------------------------------------
         informe_cruce = cruce.revisar(cliente_id)

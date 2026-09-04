@@ -53,8 +53,9 @@ el modelo: ver `instrucciones.comprobar_nivel`, que solo puede bajarlo.
 
 import json
 
-from app import (bitacora, db, documentos, exogena_cliente, formulario,
-                 instrucciones, lectura, proveedores)
+from app import (bitacora, clasificacion, db, documentos,
+                 exogena_cliente, formulario, instrucciones, lectura,
+                 proveedores)
 from app.configuracion import CONFIG
 
 # Cuánto texto de cada documento se le manda. Un certificado de ingresos
@@ -142,6 +143,47 @@ def _texto_de_renglones_propios(cliente_id):
             prefijo = "R%s " % codigo
         marca = "recibido" if renglon["estado"] == "recibido" else "falta"
         lineas.append("- %s%s [%s]" % (prefijo, titulo, marca))
+    return "\n".join(lineas)
+
+
+# Cuántas de sus decisiones anteriores se le mandan al modelo. Con más,
+# el contexto crece sin que las sugerencias mejoren: las que valen son
+# las que él ha repetido.
+REGLAS_QUE_SE_MANDAN = 40
+
+
+def _texto_de_lo_aprendido():
+    """Lo que el contador ya decidió antes, para que el modelo lo siga.
+
+    Esta es la única forma en que este programa «aprende»: de las
+    correcciones de ÉL. Cada vez que asigna un documento a mano se
+    guarda qué tercero, qué clase de papel y a qué renglón lo mandó
+    (`db.guardar_regla`), por código de renglón del 210 — así una
+    corrección hecha en un cliente sirve en todos.
+
+    Y es la única forma que puede haber. Meterle reglas tributarias
+    escritas de memoria sería derecho inventado por un modelo, que es
+    justo lo que este proyecto prohíbe para las fechas de vencimiento y
+    por el mismo motivo. Lo que sí tiene firma profesional detrás es lo
+    que decidió él.
+
+    Las reglas no llevan ni el nombre de un cliente, ni el de un
+    archivo, ni una letra de su contenido: solo quién emite y a qué
+    renglón va. El tercero, además, ya va en la exógena que se manda.
+    """
+    reglas = db.listar_reglas()
+    if not reglas:
+        return ""
+
+    # Primero las que él ha repetido más veces: son las que más pesan.
+    reglas.sort(key=lambda r: (-r.get("veces", 1), r["id"]))
+    lineas = []
+    for regla in reglas[:REGLAS_QUE_SE_MANDAN]:
+        frase = clasificacion.descripcion_de_regla(regla)
+        veces = regla.get("veces", 1)
+        if veces > 1:
+            frase += " (lo ha hecho %d veces)" % veces
+        lineas.append("- " + frase)
     return "\n".join(lineas)
 
 
@@ -275,15 +317,27 @@ def armar_entrada(cliente):
     texto_exogena = _texto_de_exogena(filas_numeradas)
     texto_propios = _texto_de_renglones_propios(cliente_id)
 
+    aprendido = _texto_de_lo_aprendido()
+    bloque_aprendido = ""
+    if aprendido:
+        bloque_aprendido = (
+            "LO QUE ESTE CONTADOR YA DECIDIÓ ANTES\n"
+            "Son decisiones suyas, tomadas corrigiendo a mano en otros"
+            " clientes. Si alguna aplica a un documento de este, síguela y"
+            " dilo en la nota. No son ley ni te autorizan a opinar de"
+            " impuestos: son cómo trabaja él.\n%s\n\n" % aprendido
+        )
+
     bloques = []
     for grupo in _repartir(numerados):
         bloques.append(
             "CLIENTE: %s (cédula termina en %s)\n\n"
+            "%s"
             "RENGLONES QUE EL CONTADOR YA CREÓ PARA ESTE CLIENTE\n%s\n\n"
             "EXÓGENA (lo que los terceros le reportaron a la DIAN)\n%s\n\n"
             "DOCUMENTOS DEL CLIENTE\n%s"
-            % (cliente["nombre"], cliente["dos_digitos"], texto_propios,
-               texto_exogena, _texto_de_documentos(grupo))
+            % (cliente["nombre"], cliente["dos_digitos"], bloque_aprendido,
+               texto_propios, texto_exogena, _texto_de_documentos(grupo))
         )
 
     return {
@@ -299,6 +353,7 @@ def armar_entrada(cliente):
         "renglones": nombres,
         "documentos": len(numerados),
         "filas_exogena": len(filas_numeradas),
+        "reglas": len(db.listar_reglas()),
     }
 
 
@@ -710,6 +765,50 @@ def _guardar_lecturas(cliente_id, lecturas):
 # ---------------------------------------------------------------------------
 
 
+# El ajuste que decide si la propuesta se pide sola al confirmar una
+# carga. Guardado en la base, no en el .env: es una preferencia de
+# trabajo del contador, no configuración del programa.
+#
+# Viene APAGADO de fábrica, y eso no es timidez: la pasada cuesta plata.
+# Es la regla de la casa — lo que es gratis y pasa en este computador
+# ocurre sin pedir permiso; lo que cuesta lo pide él.
+CLAVE_AUTOMATICO = "proponer_al_confirmar"
+
+
+def proponer_al_confirmar():
+    """¿Está prendido el pedir la propuesta al confirmar una carga?"""
+    return db.leer_ajuste(CLAVE_AUTOMATICO, "no") == "si"
+
+
+def cambiar_automatico(prendido):
+    """Prende o apaga el pedirla sola. Devuelve cómo quedó."""
+    db.guardar_ajuste(CLAVE_AUTOMATICO, "si" if prendido else "no")
+    return proponer_al_confirmar()
+
+
+def _que_cambio_desde_la_pasada(cliente_id, pasada):
+    """Qué llegó después de la última propuesta.
+
+    Sin esto, el contador sube tres documentos más y la pantalla le
+    sigue mostrando la propuesta vieja como si estuviera al día. No se
+    vuelve a correr sola —eso cuesta— pero sí se le dice, con el botón
+    al lado, para que no tenga que acordarse él.
+    """
+    cuando = (pasada or {}).get("corrida_en") or ""
+    if not cuando:
+        return {"documentos": 0, "exogena": False}
+
+    nuevos = sum(
+        1 for documento in db.listar_documentos(cliente_id)
+        if (documento.get("subido_en") or "") > cuando
+    )
+    carga = db.obtener_carga_exogena(cliente_id)
+    return {
+        "documentos": nuevos,
+        "exogena": bool(carga and (carga.get("cargado_en") or "") > cuando),
+    }
+
+
 def resumen(cliente_id):
     """La propuesta vigente de un cliente, lista para dibujar.
 
@@ -724,6 +823,8 @@ def resumen(cliente_id):
             "hay_pasada": False,
             "ia_disponible": CONFIG.ia_disponible,
             "motivo": CONFIG.motivo,
+            "automatico": proponer_al_confirmar(),
+            "cambios": {"documentos": 0, "exogena": False},
             "renglones": [],
         }
 
@@ -766,6 +867,10 @@ def resumen(cliente_id):
         "hay_pasada": True,
         "ia_disponible": CONFIG.ia_disponible,
         "motivo": CONFIG.motivo,
+        "automatico": proponer_al_confirmar(),
+        # Qué llegó después de esta propuesta. La pantalla lo avisa con
+        # el botón al lado; volver a correrla la pide él.
+        "cambios": _que_cambio_desde_la_pasada(cliente_id, pasada),
         "pasada": pasada,
         "renglones": renglones,
         "propuestos": len(cuentan),

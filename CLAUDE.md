@@ -287,6 +287,26 @@ que él haya creado. Sale la propuesta completa del formulario.
 - **Los tokens de cada pasada quedan anotados** en la tabla `pasadas` y
   se muestran en Cuenta, por cliente y acumulado. El costo se muestra
   siempre como aproximado: sale de una lista de precios con fecha.
+- **La pasada aprende de las decisiones DE ÉL, y de nada más.** Las
+  reglas de `reglas_aprendidas` —lo que él corrigió a mano, guardado por
+  código de renglón— se le mandan al modelo como contexto
+  (`pasada._texto_de_lo_aprendido`), y seguir una NO le sube el nivel: el
+  nivel dice qué tan directa fue la fuente, no qué tan seguro está.
+
+  **Nunca se le meten reglas tributarias escritas de memoria.** Sería
+  derecho inventado por un modelo, que es exactamente lo que este
+  proyecto ya prohíbe para la tabla de vencimientos y por el mismo
+  motivo. Lo que tiene firma profesional detrás es lo que decidió él; lo
+  que tiene autoridad es lo que la DIAN escribió en su propio archivo.
+- **La pasada no corre sola de fábrica.** Hay un interruptor
+  (`pasada.CLAVE_AUTOMATICO`) que la pide al confirmar una carga, y viene
+  apagado: es lo único del programa que gasta plata. Prendido, se pide
+  una vez por confirmación —no una por archivo— y solo si el cliente ya
+  tiene exógena. Y la pide la PANTALLA, no el servidor, para que él vea
+  que está trabajando en vez de mirar un botón trabado un minuto.
+- **Cuando llegan papeles después de una propuesta, se avisa; no se
+  vuelve a correr.** `pasada.resumen` cuenta qué entró después
+  (`cambios`) y la pantalla lo dice con el botón al lado.
 - **Si el cliente tiene demasiados documentos se parte por BLOQUES DE
   DOCUMENTOS, nunca por renglones.** Cada bloque lleva la exógena y los
   renglones completos. Si dos bloques proponen cosas distintas para el

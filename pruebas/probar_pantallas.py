@@ -703,6 +703,46 @@ def main():
             revisar("todo eso sin errores de JavaScript", not errores,
                     errores[:3])
 
+            # El interruptor de pedir la propuesta sola. Viene apagado:
+            # es lo único del programa que gasta plata.
+            marca = pagina.locator("#propuesta-automatico")
+            revisar("hay un interruptor para pedirla sola",
+                    marca.count() == 1)
+            revisar("y viene apagado", marca.is_checked() is False)
+            revisar("la pantalla dice que eso cuesta",
+                    "cuesta" in pagina.locator("#panel-propuesta").inner_text())
+
+            # Y el aviso de que la propuesta quedó vieja.
+            revisar("con nada nuevo, no avisa que esté vieja",
+                    "oculto" in (pagina.locator("#propuesta-vieja")
+                                 .get_attribute("class") or ""))
+
+            # Se envejece la propuesta en vez de crear un documento de
+            # mentiras: los documentos de este cliente los usa la sección
+            # siguiente, y meterle uno fantasma le cambiaba el escenario.
+            # El efecto es el mismo — la propuesta es anterior a lo que
+            # hay subido — y no se toca nada de nadie más.
+            with base.conectar() as conexion:
+                conexion.execute(
+                    "UPDATE pasadas SET corrida_en = '2020-01-01T00:00:00'"
+                    " WHERE id = ?", (pasada_id,))
+            pagina.reload(wait_until="networkidle")
+            pagina.locator('[data-vista="formulario"]').click()
+            pagina.evaluate(
+                "document.getElementById('plegable-formulario').open = true"
+            )
+            pagina.wait_for_timeout(900)
+            aviso_viejo = pagina.locator("#propuesta-vieja")
+            revisar("al llegar un documento nuevo, avisa que quedó vieja",
+                    "oculto" not in (aviso_viejo.get_attribute("class") or ""),
+                    aviso_viejo.get_attribute("class"))
+            texto_viejo = aviso_viejo.inner_text()
+            revisar("dice QUÉ llegó, y el botón está al lado",
+                    ("documento" in texto_viejo or "exógena" in texto_viejo)
+                    and "La propuesta de abajo es anterior" in texto_viejo
+                    and pagina.locator("#boton-reproponer-aviso").count() == 1,
+                    texto_viejo.replace("\n", " · "))
+
             titulo("G. El selector de renglones")
             errores.clear()
             pagina.locator('[data-vista="documentos"]').click()

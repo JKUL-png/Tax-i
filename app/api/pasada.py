@@ -93,6 +93,19 @@ def api_correr(peticion, id_cliente, **partes):
         raise ErrorHttp(502, str(error))
 
 
+@app.put("/api/pasada/automatico")
+def api_automatico(peticion, **partes):
+    """Prende o apaga el pedir la propuesta al confirmar una carga.
+
+    Viene APAGADO de fábrica. La pasada cuesta plata y esa decisión es
+    del contador, no del programa.
+    """
+    datos = peticion.diccionario()
+    if "prendido" not in datos:
+        raise ErrorHttp(400, "Falta decir si se prende o se apaga.")
+    return {"automatico": pasada.cambiar_automatico(bool(datos["prendido"]))}
+
+
 @app.get("/api/clientes/{id_cliente}/pasada/en-bloque")
 def api_en_bloque(peticion, id_cliente):
     """Lo que se aprobaría en bloque, para verlo ANTES de confirmar.

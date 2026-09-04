@@ -38,6 +38,10 @@ const botonComparar = document.getElementById("boton-comparar");
 const campoComparar = document.getElementById("campo-comparar");
 const cajaComparacion = document.getElementById("comparacion-resultado");
 const cajaCruce = document.getElementById("cruce");
+const cajaVieja = document.getElementById("propuesta-vieja");
+const textoVieja = document.getElementById("propuesta-vieja-texto");
+const botonReproponerAviso = document.getElementById("boton-reproponer-aviso");
+const marcaAutomatico = document.getElementById("propuesta-automatico");
 
 let cliente = null;
 let ultimo = null;
@@ -94,9 +98,33 @@ function mostrar(informe) {
     textoMotivo.textContent = informe.motivo || "";
   }
 
+  if (marcaAutomatico) marcaAutomatico.checked = !!informe.automatico;
+
   const hay = informe.hay_pasada && informe.renglones.length > 0;
   cajaArrancar.classList.toggle("oculto", !informe.ia_disponible || hay);
   cajaResultado.classList.toggle("oculto", !hay);
+
+  /* Llegaron papeles después de la última propuesta. No se vuelve a
+     correr sola —eso cuesta— pero se dice, con el botón al lado: sin
+     esto la pantalla le muestra la propuesta vieja como si estuviera al
+     día, y él no tiene por qué acordarse. */
+  const cambios = informe.cambios || { documentos: 0, exogena: false };
+  const desactualizada = hay && informe.ia_disponible
+                      && (cambios.documentos > 0 || cambios.exogena);
+  cajaVieja.classList.toggle("oculto", !desactualizada);
+  if (desactualizada) {
+    const partes = [];
+    if (cambios.documentos) {
+      partes.push(contar(cambios.documentos, "documento nuevo",
+                         "documentos nuevos"));
+    }
+    if (cambios.exogena) partes.push("una exógena nueva");
+    /* La segunda frase no concuerda con nada a propósito: el aviso sirve
+       igual para «3 documentos nuevos» que para «una exógena nueva», y
+       una frase que hay que conjugar según el caso se rompe sola. */
+    textoVieja.textContent = "Hay " + partes.join(" y ")
+      + " desde esta propuesta. La propuesta de abajo es anterior.";
+  }
 
   if (conteoPestana) {
     conteoPestana.textContent = hay ? String(informe.propuestos) : "";
@@ -839,6 +867,45 @@ async function cargar() {
 
 botonProponer.addEventListener("click", proponer);
 botonReproponer.addEventListener("click", proponer);
+if (botonReproponerAviso) {
+  botonReproponerAviso.addEventListener("click", proponer);
+}
+
+if (marcaAutomatico) {
+  marcaAutomatico.addEventListener("change", async function () {
+    try {
+      const respuesta = await fetch("/api/pasada/automatico", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prendido: marcaAutomatico.checked })
+      });
+      if (!respuesta.ok) throw new Error(await textoDelError(respuesta));
+      const datos = await respuesta.json();
+      marcaAutomatico.checked = datos.automatico;
+      avisar(datos.automatico
+        ? "Al confirmar una carga se pedirá la propuesta sola. Recuerde"
+          + " que eso gasta."
+        : "La propuesta se pedirá solo cuando usted lo diga.", "exito");
+    } catch (e) {
+      /* Se devuelve la marca a como estaba: no quedó guardado. */
+      marcaAutomatico.checked = !marcaAutomatico.checked;
+      avisar(e.message || "No se pudo guardar el ajuste.");
+    }
+  });
+}
+
+/* Al confirmar una carga, cliente-subir.js avisa. Si el interruptor
+   está prendido, la propuesta se pide desde AQUÍ y no desde el
+   servidor: así el contador ve que está trabajando en vez de quedarse
+   mirando un botón trabado un minuto. */
+document.addEventListener("carga-confirmada", function (evento) {
+  if (evento.detail && evento.detail.proponer_ahora) {
+    proponer();
+    return;
+  }
+  /* Aunque no se pida sola, la propuesta que había quedó vieja. */
+  cargar();
+});
 botonBloque.addEventListener("click", function () {
   const escogidos = marcados();
   if (escogidos.length) {
