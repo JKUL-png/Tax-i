@@ -18,7 +18,7 @@ Lo que estas direcciones NO hacen, y no es un detalle:
 
 from pathlib import Path
 
-from app import comparacion, db, documentos, formulario, pasada
+from app import comparacion, cruce, db, documentos, formulario, pasada
 from app.api.base import app, cliente_o_404
 from app.escribir_210 import EscrituraBloqueada
 from app.servidor import ErrorHttp
@@ -183,6 +183,19 @@ def api_casilla(peticion, id_cliente, **partes):
         )
     except pasada.PasadaFallida as error:
         raise ErrorHttp(400, str(error))
+
+
+@app.get("/api/clientes/{id_cliente}/cruce")
+def api_cruce(peticion, id_cliente):
+    """Lo que dicen sus papeles contra lo que reportó la DIAN.
+
+    Sin IA y sin costo: son dos listas de números que ya están en la
+    base y una resta. Se compara por RENGLÓN, que es lo único que se
+    puede afirmar sin suponer cuál fila de la exógena corresponde a cuál
+    papel. Ver app/cruce.py.
+    """
+    cliente_o_404(id_cliente)
+    return cruce.revisar(id_cliente)
 
 
 # ----------------------------------------------------------

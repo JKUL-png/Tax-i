@@ -5204,3 +5204,73 @@ code {
 }
 
 .exogena-buscar .ayuda { white-space: nowrap; }
+
+/* ---------- El cruce: sus papeles contra la DIAN ----------
+   Va arriba de la propuesta porque es lo primero que él mira cuando ya
+   tiene las dos cosas cargadas. Los colores son los de siempre: el ocre
+   de «esto le toca a usted» para lo que hay que revisar, neutro para lo
+   que solo hay que saber. Nada en rojo: una diferencia no es un error,
+   es algo que hay que mirar. */
+
+.cruce-lista {
+  margin-top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.cruce-fila {
+  border: 1px solid var(--borde);
+  border-left: 3px solid var(--n4);
+  border-radius: 8px;
+  padding: 10px 12px;
+}
+
+.cruce-diferencia {
+  border-left-color: var(--alerta-texto);
+  background: #FDF8EE;
+}
+
+.cruce-sin_soporte { border-left-color: var(--n5); }
+.cruce-sin_reportar { border-left-color: var(--n3); }
+
+.cruce-cabecera {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.cruce-renglon { font-weight: 600; color: var(--texto); }
+
+.cruce-etiqueta-diferencia {
+  color: var(--alerta-texto);
+  border-color: rgba(138, 90, 18, 0.34);
+}
+.cruce-etiqueta-sin_soporte,
+.cruce-etiqueta-sin_reportar {
+  color: var(--texto-tenue);
+  border-color: var(--n4);
+}
+
+.cruce-frase {
+  margin: 6px 0 0;
+  color: var(--texto-secundario);
+  font-size: 0.9rem;
+}
+
+.cruce-lado {
+  margin-top: 8px;
+  font-size: 0.86rem;
+}
+
+.cruce-quien {
+  color: var(--texto-tenue);
+  font-weight: 600;
+}
+
+.cruce-lado ul {
+  margin: 3px 0 0;
+  padding-left: 18px;
+  color: var(--texto-secundario);
+}

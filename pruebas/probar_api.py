@@ -651,6 +651,12 @@ def probar_pasada(identificador):
               "aproximado" in (gasto.get("aviso") or ""),
               gasto.get("aviso"))
 
+    codigo, cruce, _ = pedir("GET", "/api/clientes/%d/cruce" % identificador)
+    comprobar("el cruce contesta aunque no haya nada que cruzar",
+              codigo == 200 and cruce["hay_cruce"] is False
+              and cruce["hallazgos"] == [],
+              "código %s: %s" % (codigo, cruce))
+
     codigo, comparacion, _ = pedir(
         "GET", "/api/clientes/%d/comparacion" % identificador)
     comprobar("sin comparación previa lo dice sin romperse",

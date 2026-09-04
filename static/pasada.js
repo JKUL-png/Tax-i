@@ -37,6 +37,7 @@ const conteoPestana = document.getElementById("conteo-propuesta");
 const botonComparar = document.getElementById("boton-comparar");
 const campoComparar = document.getElementById("campo-comparar");
 const cajaComparacion = document.getElementById("comparacion-resultado");
+const cajaCruce = document.getElementById("cruce");
 
 let cliente = null;
 let ultimo = null;
@@ -365,6 +366,7 @@ async function proponer() {
   try {
     const informe = await pedir("/pasada", { method: "POST" });
     mostrar(informe);
+    await cargarElCruce();
     avisar("Listo. Nada entró al formulario todavía: revise y apruebe.",
            "exito");
   } catch (e) {
@@ -553,6 +555,185 @@ lista.addEventListener("change", function (evento) {
 
 
 /* ----------------------------------------------------------
+   El cruce: sus papeles contra lo que reportó la DIAN
+
+   Sin IA y sin costo: dos listas de números que ya están en la base y
+   una resta. Va arriba de la propuesta porque es lo primero que él
+   mira cuando ya tiene las dos cosas cargadas.
+
+   «Diferencia» significa REVÍSELO. Nunca «está mal» ni «hay un error»:
+   la cifra de la DIAN puede estar desactualizada —ella misma lo
+   advierte— y el certificado puede estar incompleto. Quién tiene la
+   razón lo decide él.
+   ---------------------------------------------------------- */
+
+const CRUCE = {
+  diferencia: {
+    etiqueta: "Diferencia",
+    frase: function (h) {
+      return "La DIAN reporta " + pesos(h.dian) + " y sus documentos dicen "
+           + pesos(h.papeles) + ". Se diferencian en "
+           + pesos(Math.abs(h.diferencia)) + ".";
+    }
+  },
+  sin_soporte: {
+    etiqueta: "Sin soporte",
+    frase: function (h) {
+      return "La DIAN reporta " + pesos(h.dian)
+           + " y todavía no hay ningún documento que lo respalde.";
+    }
+  },
+  sin_reportar: {
+    etiqueta: "Sin reportar",
+    frase: function (h) {
+      return "Sus documentos dicen " + pesos(h.papeles)
+           + " y ningún tercero le reportó eso a la DIAN. Es normal: no"
+           + " todo se reporta.";
+    }
+  },
+  coincide: {
+    etiqueta: "Coincide",
+    frase: function (h) {
+      return "La DIAN y sus documentos dicen lo mismo: " + pesos(h.dian) + ".";
+    }
+  }
+};
+
+/* Qué se muestra abierto de entrada. Lo que coincide no: son las que no
+   hay que mirar, y ocuparían la pantalla entera. */
+const CRUCE_A_LA_VISTA = ["diferencia", "sin_soporte", "sin_reportar"];
+
+function dibujarCruce(informe) {
+  cajaCruce.innerHTML = "";
+  if (!informe || !informe.hay_exogena) {
+    cajaCruce.classList.add("oculto");
+    return;
+  }
+  cajaCruce.classList.remove("oculto");
+
+  const caja = document.createElement("div");
+  caja.className = "tarjeta";
+
+  const titulo = document.createElement("p");
+  titulo.className = "propuesta-conteo";
+  if (!informe.hay_propuesta) {
+    titulo.textContent = "Sus papeles contra lo que reportó la DIAN";
+    caja.appendChild(titulo);
+    const espera = document.createElement("p");
+    espera.className = "ayuda";
+    espera.textContent = "La exógena ya está cargada. Pida la propuesta del"
+                       + " formulario y aquí aparece, renglón por renglón,"
+                       + " en qué se diferencian sus documentos de lo que"
+                       + " los terceros le reportaron a la DIAN.";
+    caja.appendChild(espera);
+    cajaCruce.appendChild(caja);
+    return;
+  }
+
+  const partes = [];
+  if (informe.diferencias) {
+    partes.push(contar(informe.diferencias, "renglón se diferencia",
+                       "renglones se diferencian"));
+  }
+  if (informe.sin_soporte) {
+    partes.push(contar(informe.sin_soporte, "sin soporte", "sin soporte"));
+  }
+  if (informe.sin_reportar) {
+    partes.push(contar(informe.sin_reportar, "que nadie reportó",
+                       "que nadie reportó"));
+  }
+  titulo.textContent = partes.length
+    ? "Sus papeles y la DIAN: " + partes.join(" · ")
+    : "Sus papeles y la DIAN dicen lo mismo en todos los renglones.";
+  caja.appendChild(titulo);
+
+  const explica = document.createElement("p");
+  explica.className = "ayuda";
+  explica.textContent = "Se compara por renglón, que es lo único que se puede"
+                      + " afirmar sin suponer cuál fila de la exógena"
+                      + " corresponde a cuál papel. Una diferencia no dice"
+                      + " quién tiene la razón: dice que hay que mirarla.";
+  caja.appendChild(explica);
+
+  const lista = document.createElement("div");
+  lista.className = "cruce-lista";
+  informe.hallazgos
+    .filter(function (h) { return CRUCE_A_LA_VISTA.indexOf(h.estado) !== -1; })
+    .forEach(function (h) { lista.appendChild(dibujarHallazgo(h)); });
+  if (lista.children.length) caja.appendChild(lista);
+
+  if (informe.requieren_decision.length) {
+    const aparte = document.createElement("p");
+    aparte.className = "ayuda";
+    aparte.textContent = contar(informe.requieren_decision.length,
+      "registro de la exógena no entra en el cruce",
+      "registros de la exógena no entran en el cruce")
+      + " porque la DIAN propone más de un renglón para ellos. Elegir es"
+      + " criterio suyo: están en la pestaña Exógena.";
+    caja.appendChild(aparte);
+  }
+
+  cajaCruce.appendChild(caja);
+}
+
+function dibujarHallazgo(h) {
+  const fila = document.createElement("div");
+  fila.className = "cruce-fila cruce-" + h.estado;
+
+  const cabecera = document.createElement("div");
+  cabecera.className = "cruce-cabecera";
+
+  const etiqueta = document.createElement("span");
+  etiqueta.className = "etiqueta cruce-etiqueta-" + h.estado;
+  etiqueta.textContent = CRUCE[h.estado].etiqueta;
+  cabecera.appendChild(etiqueta);
+
+  const cual = document.createElement("span");
+  cual.className = "cruce-renglon";
+  cual.textContent = h.renglon + (h.nombre ? " — " + h.nombre : "");
+  cabecera.appendChild(cual);
+  fila.appendChild(cabecera);
+
+  const frase = document.createElement("p");
+  frase.className = "cruce-frase";
+  frase.textContent = CRUCE[h.estado].frase(h);
+  fila.appendChild(frase);
+
+  /* Quién reportó qué, y con cuál papel. Sin esto el aviso obliga a
+     irse a otra pestaña a averiguar de dónde salió cada lado. */
+  if (h.filas.length) {
+    fila.appendChild(dibujarLado("La DIAN", h.filas.map(function (f) {
+      return pesos(f.valor) + "  " + (f.tercero || "") + " — " + f.detalle;
+    })));
+  }
+  if (h.documentos.length) {
+    fila.appendChild(dibujarLado("Sus documentos",
+      h.documentos.map(function (d) {
+        return pesos(d.valor) + "  " + (d.nombre || "");
+      })));
+  }
+  return fila;
+}
+
+function dibujarLado(quien, lineas) {
+  const caja = document.createElement("div");
+  caja.className = "cruce-lado";
+  const nombre = document.createElement("span");
+  nombre.className = "cruce-quien";
+  nombre.textContent = quien + ":";
+  caja.appendChild(nombre);
+  const lista = document.createElement("ul");
+  lineas.forEach(function (texto) {
+    const uno = document.createElement("li");
+    uno.textContent = texto;
+    lista.appendChild(uno);
+  });
+  caja.appendChild(lista);
+  return caja;
+}
+
+
+/* ----------------------------------------------------------
    Modo comparación
    ---------------------------------------------------------- */
 
@@ -633,12 +814,21 @@ async function comparar(archivo) {
    Encender
    ---------------------------------------------------------- */
 
+async function cargarElCruce() {
+  try {
+    dibujarCruce(await pedir("/cruce"));
+  } catch (e) {
+    /* Sin exógena no hay nada que cruzar, y eso no es un error. */
+  }
+}
+
 async function cargar() {
   try {
     mostrar(await pedir("/pasada"));
   } catch (e) {
     avisar(e.message || "No se pudo cargar la propuesta.");
   }
+  await cargarElCruce();
   try {
     const guardada = await pedir("/comparacion");
     if (guardada && guardada.renglones) dibujarComparacion(guardada);

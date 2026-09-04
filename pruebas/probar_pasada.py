@@ -238,7 +238,8 @@ def main():
         db.ARCHIVO_BD = carpeta / "base.db"
         db.crear_tablas()
 
-        from app import comparacion, documentos, exogena_cliente, pasada
+        from app import (comparacion, cruce, documentos, exogena_cliente,
+                         pasada)
         documentos.CARPETA_ARCHIVOS = carpeta / "archivos"
         pasada.CONFIG = _ConIA()
 
@@ -400,6 +401,54 @@ def main():
         comprobar("lo aprobado sí quedó en el Formulario 210",
                   len(anotados) == len({v["celda"] for v in en_bloque}),
                   "%d celdas" % len(anotados))
+
+        # --------------------------------------------------------------
+        titulo("El cruce: sus papeles contra lo que reportó la DIAN")
+        # --------------------------------------------------------------
+        informe_cruce = cruce.revisar(cliente_id)
+
+        comprobar("hay las dos mitades: exógena y propuesta",
+                  informe_cruce["hay_cruce"],
+                  {k: v for k, v in informe_cruce.items()
+                   if not isinstance(v, list)})
+
+        por_renglon = {h["renglon"]: h for h in informe_cruce["hallazgos"]}
+
+        # R32 solo lo dicen los papeles: ningún tercero lo reportó en la
+        # exógena de ejemplo con ese renglón a solas.
+        r32_cruce = por_renglon.get("R32")
+        comprobar("un renglón que solo dicen los papeles se marca",
+                  r32_cruce is not None
+                  and r32_cruce["estado"] in ("sin_reportar", "diferencia"),
+                  r32_cruce and r32_cruce["estado"])
+        comprobar("y con la suma que hizo el código, no el modelo",
+                  r32_cruce and r32_cruce["papeles"] == 74600000,
+                  r32_cruce and r32_cruce["papeles"])
+
+        # Lo que la DIAN reporta y nadie respalda todavía.
+        sin_soporte = [h for h in informe_cruce["hallazgos"]
+                       if h["estado"] == "sin_soporte"]
+        comprobar("lo que la DIAN reporta sin soporte se marca",
+                  len(sin_soporte) > 0, len(sin_soporte))
+        comprobar("y dice quién lo reportó, para no tener que ir a buscarlo",
+                  all(h["filas"] for h in sin_soporte))
+
+        # Elegir es criterio del contador: esas filas no se cruzan.
+        comprobar("las filas que requieren decisión NO se cruzan",
+                  len(informe_cruce["requieren_decision"]) > 0,
+                  len(informe_cruce["requieren_decision"]))
+        codigos_cruzados = set(por_renglon)
+        comprobar("y ninguna se coló en un renglón",
+                  all(len(f["opciones"]) != 1
+                      or f["opciones"][0] not in codigos_cruzados
+                      for f in informe_cruce["requieren_decision"]))
+
+        # Y lo más importante: esto no llama a nadie.
+        antes_de_cruzar = LLAMADAS["cuantas"]
+        cruce.revisar(cliente_id)
+        comprobar("cruzar no llama a ningún servicio ni cuesta un peso",
+                  LLAMADAS["cuantas"] == antes_de_cruzar,
+                  LLAMADAS["cuantas"] - antes_de_cruzar)
 
         # --------------------------------------------------------------
         titulo("E. Las 902 fórmulas siguen idénticas después de escribir")

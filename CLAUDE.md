@@ -78,6 +78,7 @@ asistente-renta/
 │   ├── instrucciones.py  # TODO lo que se le dice a un modelo, en un sitio
 │   ├── pasada.py         # el 210 de un cliente, propuesto de una vez
 │   ├── comparacion.py    # su 210 lleno contra el que propuso Tax-i
+│   ├── cruce.py          # sus papeles contra lo que reportó la DIAN
 │   ├── respaldo.py       # llevarse todo en un ZIP, y traerlo de vuelta
 │   ├── demostracion.py   # el cliente inventado, para mostrar el programa
 │   ├── revision.py       # ¿está todo listo para trabajar?
@@ -290,6 +291,24 @@ que él haya creado. Sale la propuesta completa del formulario.
   DOCUMENTOS, nunca por renglones.** Cada bloque lleva la exógena y los
   renglones completos. Si dos bloques proponen cosas distintas para el
   mismo renglón, se marca el conflicto y no se elige.
+
+**El cruce** (`app/cruce.py`) contesta la pregunta que él se hace apenas
+tiene las dos cosas cargadas: la DIAN dice que le pagaron 47 millones y
+sus certificados suman 45,8 — ¿falta un papel o hay una diferencia? Es
+código, es gratis y no llama a nadie: dos listas de números que ya están
+en la base y una resta.
+
+- **Se compara por RENGLÓN, no fila por fila.** Es lo único que se puede
+  afirmar sin suponer cuál fila de la exógena corresponde a cuál papel.
+  Una suposición mala le pone «diferencia» a algo que estaba bien, y a la
+  tercera vez el contador deja de mirar los avisos.
+- **Las filas que requieren decisión no se cruzan**, y se dice por qué:
+  meterlas en un renglón para poder compararlas sería elegir por él.
+- **«Diferencia» significa revíselo**, nunca «está mal». La cifra de la
+  DIAN puede estar desactualizada —ella misma lo advierte— y el
+  certificado puede estar incompleto.
+- Solo entran los valores cuya cita se verificó. Cruzar contra algo que
+  no se sabe si existe no es cruzar.
 
 **El modo comparación** (`app/comparacion.py`) carga un 210 que él ya
 llenó a mano y lo compara **renglón por renglón** —no celda por celda,
