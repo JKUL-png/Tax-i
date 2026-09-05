@@ -5,6 +5,17 @@
 # Carpeta completa de datos: documentos subidos y base de datos
 datos/
 
+# Las plantillas de Excel del contador. La carpeta entera, sea cual sea
+# la extensión que traiga adentro.
+#
+# Antes esto lo tapaba la regla *.xlsx de más abajo, y tapaba de verdad:
+# nunca se subió nada. Pero decía otra cosa que la regla del proyecto. La
+# regla es «plantillas/ NUNCA a git», y con solo *.xlsx un .xlsm con
+# macros, unas notas en .txt o un PDF de referencia entraban al
+# repositorio PÚBLICO sin que nada los frenara. Lo que se publica queda
+# clonado; no hay marcha atrás.
+plantillas/
+
 # Base de datos SQLite, esté donde esté
 *.db
 *.db-journal
