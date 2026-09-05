@@ -84,8 +84,32 @@ ESPERA_MAXIMA_ACEPTADA = 30
 #
 # Quedarse corto aquí no da error: da una respuesta truncada que no
 # valida, y entonces se reintenta y se paga dos veces.
+#
+# Y el techo NO es solo para la respuesta: lo que el modelo piensa antes
+# de contestar sale del mismo bolsillo. Con 16.000, un cliente de verdad
+# —8 documentos y 36 registros de exógena— hizo que se gastara 15.999
+# pensando y le quedara UNO para escribir. Contestó 200, cobró completo
+# y no trajo ni una letra utilizable.
+#
+# Por eso son dos cosas a la vez y hay que moverlas juntas: este techo
+# sube a 32.000, y ESFUERZO_DE_LA_PASADA le acota cuánto puede pensar.
+# Con esa pareja, ese mismo cliente pensó 7.663, escribió 5.009 y
+# terminó bien (`end_turn`) en dos minutos.
 LARGO_MAXIMO_RESPUESTA = 2000
-LARGO_MAXIMO_DE_LA_PASADA = 16000
+LARGO_MAXIMO_DE_LA_PASADA = 32000
+
+# Cuánto puede pensar el modelo antes de contestar la pasada.
+#
+# Va en "medium" y no en el "high" de fábrica porque aquí pensar más no
+# se traduce en acertar más: lo que sostiene la propuesta no es el
+# cuidado del modelo, es que el código le comprueba cada cita contra el
+# papel, le comprueba el nivel contra la exógena y no deja entrar nada al
+# 210 sin que el contador lo apruebe. Pensar de más solo se llevaba el
+# espacio de la respuesta.
+#
+# Solo lo atiende quien declaró `esfuerzo_acotado`. Los demás lo ignoran
+# y siguen funcionando igual.
+ESFUERZO_DE_LA_PASADA = "medium"
 
 # Cuánto se espera por una pasada. Es una sola llamada con el texto de
 # todos los documentos de un cliente: se demora mucho más que una
@@ -97,19 +121,28 @@ SEGUNDOS_DE_ESPERA_DE_LA_PASADA = 300
 class ErrorDeProveedor(Exception):
     """Algo salió mal hablando con el servicio, con un texto para mostrar.
 
-    Además del texto lleva dos datos que el resto del código necesita
-    para decidir si vale la pena volver a intentar:
+    Además del texto lleva tres datos que el resto del código necesita:
 
       codigo             el número del error HTTP (429, 401, 500…), o 0
                          si ni siquiera se pudo conectar.
       segundos_sugeridos cuánto pidió esperar el propio servicio en la
                          cabecera Retry-After, o None si no dijo nada.
+      uso                lo que ALCANZÓ A GASTAR la llamada que falló, o
+                         None si no llegó a gastar nada.
+
+    Lo del `uso` es una lección cara. Una llamada puede contestar 200,
+    cobrar completo y aun así traer algo que no se puede usar. Antes ese
+    gasto se perdía: el error subía sin la cuenta, la pasada anotaba cero
+    y la pantalla de Cuenta le mostraba al contador que no había gastado
+    nada. Lo que se cobra tiene que aparecer, sobre todo cuando no sirvió
+    de nada.
     """
 
-    def __init__(self, mensaje, codigo=0, segundos_sugeridos=None):
+    def __init__(self, mensaje, codigo=0, segundos_sugeridos=None, uso=None):
         super().__init__(mensaje)
         self.codigo = codigo
         self.segundos_sugeridos = segundos_sugeridos
+        self.uso = uso
 
 
 # La forma en que se cuenta el gasto de una llamada. Siempre la misma,
@@ -140,7 +173,7 @@ def _sin_barra(texto):
 class Proveedor:
     """Lo que todo proveedor sabe hacer.
 
-    Además de la dirección y la llave, cada proveedor declara TRES
+    Además de la dirección y la llave, cada proveedor declara CUATRO
     capacidades. Antes esto no existía y el programa lo averiguaba
     probando: mandaba la petición, y si el servidor la rechazaba, la
     volvía a mandar sin la parte que sobraba. Eso es pagar por
@@ -161,6 +194,18 @@ class Proveedor:
                            verdad; sin eso, se estima y se dice que es
                            una estimación.
 
+      esfuerzo_acotado     se le puede decir CUÁNTO puede pensar antes de
+                           contestar. Solo Anthropic.
+
+                           Hace falta porque los modelos nuevos piensan
+                           por su cuenta y lo que piensan sale del mismo
+                           bolsillo que la respuesta. En la pasada de un
+                           cliente de verdad eso se vio feo: el modelo se
+                           gastó 15.999 de sus 16.000 tokens pensando, le
+                           quedó UNO para contestar, y la respuesta llegó
+                           cortada a la mitad de la primera palabra. Se
+                           pagó completo y no sirvió de nada.
+
     Y los precios, en dólares por millón de tokens, para poder mostrar
     cuánto costó cada cliente. En 0 significa que no se cobra —Ollama
     corre aquí mismo— o que no se sabe.
@@ -175,6 +220,7 @@ class Proveedor:
     salida_estructurada = False
     cache_de_prompt = False
     reporta_tokens = False
+    esfuerzo_acotado = False
     precio_entrada = 0.0
     precio_salida = 0.0
     precio_cache_lectura = 0.0
@@ -198,7 +244,8 @@ class Proveedor:
         raise NotImplementedError
 
     def cuerpo(self, mensajes, modelo, pedir_json=True, esquema=None,
-               largo_maximo=LARGO_MAXIMO_RESPUESTA, cachear=False):
+               largo_maximo=LARGO_MAXIMO_RESPUESTA, cachear=False,
+               esfuerzo=""):
         """Arma el cuerpo de la petición.
 
         `esquema` y `cachear` solo los atiende quien declaró saber
@@ -266,6 +313,7 @@ class Anthropic(Proveedor):
     salida_estructurada = True
     cache_de_prompt = True
     reporta_tokens = True
+    esfuerzo_acotado = True
     # Dólares por millón de tokens de claude-sonnet-5. Leer del caché
     # cuesta la décima parte de la entrada normal; escribirlo, 1,25
     # veces. Si Anthropic cambia la lista, se cambia aquí — y en pantalla
@@ -298,7 +346,8 @@ class Anthropic(Proveedor):
         }
 
     def cuerpo(self, mensajes, modelo, pedir_json=True, esquema=None,
-               largo_maximo=LARGO_MAXIMO_RESPUESTA, cachear=False):
+               largo_maximo=LARGO_MAXIMO_RESPUESTA, cachear=False,
+               esfuerzo=""):
         # Anthropic lleva las instrucciones aparte, en "system", no
         # mezcladas con la conversación como los demás.
         instrucciones = []
@@ -339,6 +388,12 @@ class Anthropic(Proveedor):
                 "format": {"type": "json_schema", "schema": esquema}
             }
 
+        if esfuerzo:
+            # Cuánto puede pensar antes de contestar. Va en el mismo
+            # "output_config" que el esquema, así que se junta con lo de
+            # arriba en vez de reemplazarlo.
+            cuerpo.setdefault("output_config", {})["effort"] = esfuerzo
+
         # Nada de "temperature": los modelos nuevos de Anthropic lo
         # rechazan con un error 400. Y "thinking" no se manda: omitirlo
         # ya deja el modelo pensando de forma adaptativa, que es lo que
@@ -352,7 +407,8 @@ class Anthropic(Proveedor):
         if datos.get("stop_reason") == "refusal":
             raise ErrorDeProveedor(
                 "El modelo se negó a contestar esta petición. Pruebe a"
-                " preguntarlo de otra manera."
+                " preguntarlo de otra manera.",
+                uso=self.leer_uso(datos),
             )
         try:
             for bloque in datos["content"]:
@@ -360,7 +416,39 @@ class Anthropic(Proveedor):
                     return bloque["text"]
         except (KeyError, TypeError):
             pass
-        raise ErrorDeProveedor("El servicio contestó algo que no se entendió.")
+
+        # No vino ni un bloque de texto. Antes de rendirse hay que mirar
+        # POR QUÉ, porque el motivo más común tiene arreglo y el mensaje
+        # genérico no dejaba ni sospecharlo.
+        #
+        # Los modelos nuevos piensan antes de contestar, y lo que piensan
+        # se descuenta del mismo techo que la respuesta. Cuando el techo
+        # se acaba pensando, el servicio contesta 200, cobra todo y
+        # devuelve un bloque de pensamiento y nada más. Visto de afuera
+        # es idéntico a una respuesta corrupta; visto en el
+        # `stop_reason`, dice exactamente qué pasó.
+        if datos.get("stop_reason") == "max_tokens":
+            uso = self.leer_uso(datos)
+            pensados = ((datos.get("usage") or {})
+                        .get("output_tokens_details") or {}).get(
+                            "thinking_tokens") or 0
+            detalle = ""
+            if pensados:
+                detalle = (" Se gastó %s de sus %s tokens pensando y no le"
+                           " quedó espacio para escribir."
+                           % ("{:,}".format(pensados).replace(",", "."),
+                              "{:,}".format(uso["salida"]).replace(",", ".")))
+            raise ErrorDeProveedor(
+                "El modelo se quedó sin espacio para contestar.%s Esa"
+                " llamada se cobró igual. Si vuelve a pasar, hay que"
+                " subirle el techo (LARGO_MAXIMO_DE_LA_PASADA) o bajarle"
+                " el esfuerzo (ESFUERZO_DE_LA_PASADA) en"
+                " app/proveedores.py." % detalle,
+                uso=uso,
+            )
+
+        raise ErrorDeProveedor("El servicio contestó algo que no se entendió.",
+                               uso=self.leer_uso(datos))
 
     def leer_uso(self, datos):
         crudo = datos.get("usage") or {}
@@ -418,7 +506,8 @@ class CompatibleConOpenAI(Proveedor):
         }
 
     def cuerpo(self, mensajes, modelo, pedir_json=True, esquema=None,
-               largo_maximo=LARGO_MAXIMO_RESPUESTA, cachear=False):
+               largo_maximo=LARGO_MAXIMO_RESPUESTA, cachear=False,
+               esfuerzo=""):
         cuerpo = {
             "model": modelo,
             "messages": mensajes,
@@ -493,7 +582,8 @@ class Ollama(Proveedor):
         }
 
     def cuerpo(self, mensajes, modelo, pedir_json=True, esquema=None,
-               largo_maximo=LARGO_MAXIMO_RESPUESTA, cachear=False):
+               largo_maximo=LARGO_MAXIMO_RESPUESTA, cachear=False,
+               esfuerzo=""):
         cuerpo = {
             "model": modelo,
             "messages": mensajes,
@@ -652,6 +742,7 @@ def lista_para_pantalla():
             "salida_estructurada": p.salida_estructurada,
             "cache_de_prompt": p.cache_de_prompt,
             "reporta_tokens": p.reporta_tokens,
+            "esfuerzo_acotado": p.esfuerzo_acotado,
             "precio_entrada": p.precio_entrada,
             "precio_salida": p.precio_salida,
         }
@@ -838,7 +929,8 @@ def _resumen_del_detalle(detalle):
 
 def conversar_detallado(config, mensajes, esquema=None,
                         largo_maximo=LARGO_MAXIMO_RESPUESTA,
-                        segundos=SEGUNDOS_DE_ESPERA, cachear=False):
+                        segundos=SEGUNDOS_DE_ESPERA, cachear=False,
+                        esfuerzo=""):
     """Le manda la conversación al servicio y devuelve texto Y gasto.
 
     Devuelve un diccionario:
@@ -849,11 +941,11 @@ def conversar_detallado(config, mensajes, esquema=None,
     `config` es el objeto Configuracion: de ahí salen el proveedor, la
     dirección, la llave y el modelo.
 
-    `esquema` y `cachear` son PEDIDOS, no exigencias: se le pasan al
-    proveedor y el que no sepa hacerlos los ignora. Quien llama no tiene
-    que preguntar con cuál servicio está hablando — pero si le importa
-    saberlo, ahí están `proveedor.salida_estructurada` y
-    `proveedor.cache_de_prompt`.
+    `esquema`, `cachear` y `esfuerzo` son PEDIDOS, no exigencias: se le
+    pasan al proveedor y el que no sepa hacerlos los ignora. Quien llama
+    no tiene que preguntar con cuál servicio está hablando — pero si le
+    importa saberlo, ahí están `proveedor.salida_estructurada`,
+    `proveedor.cache_de_prompt` y `proveedor.esfuerzo_acotado`.
     """
     proveedor = obtener(config.proveedor)
 
@@ -875,6 +967,7 @@ def conversar_detallado(config, mensajes, esquema=None,
         return proveedor.cuerpo(
             mensajes, config.modelo, pedir_json=pedir_json,
             esquema=esquema, largo_maximo=largo_maximo, cachear=cachear,
+            esfuerzo=esfuerzo,
         )
 
     try:

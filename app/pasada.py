@@ -517,6 +517,10 @@ def _pedir_un_bloque(entrada, bloque, numero_de_bloque, reproche=""):
         largo_maximo=proveedores.LARGO_MAXIMO_DE_LA_PASADA,
         segundos=proveedores.SEGUNDOS_DE_ESPERA_DE_LA_PASADA,
         cachear=True,
+        # Cuánto puede PENSAR antes de contestar. Sin acotarlo, lo que
+        # piensa se come el techo de la respuesta y no queda espacio para
+        # escribirla. Quien no sepa hacerlo lo ignora.
+        esfuerzo=proveedores.ESFUERZO_DE_LA_PASADA,
     )
     return (_entender(respuesta["texto"]), respuesta["uso"],
             respuesta["costo"])
@@ -775,6 +779,19 @@ def correr(cliente):
                 uso = _sumar_uso(uso, uso2)
                 costo += costo2
         except proveedores.ErrorDeProveedor as error:
+            # Una llamada puede fallar DESPUÉS de haberse cobrado: el
+            # servicio contesta 200, cobra los tokens y devuelve algo que
+            # no se puede usar. Ese gasto se anota igual.
+            #
+            # Antes se perdía aquí, y era el peor sitio para perderlo:
+            # justo cuando el contador paga sin recibir nada, la pantalla
+            # de Cuenta le mostraba cero. Un gasto invisible es un gasto
+            # que se repite, porque nada le dice que pare.
+            if getattr(error, "uso", None):
+                uso_total = _sumar_uso(uso_total, error.uso)
+                costo_total += proveedores.obtener(
+                    CONFIG.proveedor
+                ).costo_en_dolares(error.uso)
             fallidos.append("Bloque %d: %s" % (numero, error))
             continue
 

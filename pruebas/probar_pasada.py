@@ -63,6 +63,19 @@ def titulo(texto):
     print("\n" + texto)
 
 
+def _esperar_al_siguiente_segundo():
+    """Espera a que el reloj cambie de segundo.
+
+    Las fechas de la base se guardan al segundo. Cuando una prueba
+    necesita que algo quede DESPUÉS de otra cosa, tiene que caer en el
+    segundo siguiente o las dos marcas salen iguales.
+    """
+    import time
+    arranque = int(time.time())
+    while int(time.time()) == arranque:
+        time.sleep(0.05)
+
+
 # ----------------------------------------------------------
 # El servicio de IA de mentira
 #
@@ -240,7 +253,7 @@ def main():
         db.crear_tablas()
 
         from app import (comparacion, cruce, documentos, exogena_cliente,
-                         pasada)
+                         pasada, proveedores)
         documentos.CARPETA_ARCHIVOS = carpeta / "archivos"
         pasada.CONFIG = _ConIA()
 
@@ -458,6 +471,18 @@ def main():
                   and antes["cambios"]["exogena"] is False,
                   antes["cambios"])
 
+        # Las marcas de tiempo de la base van al SEGUNDO, y «llegó
+        # después» se decide comparándolas. Si el documento entra en el
+        # mismo segundo en que arrancó la pasada, no es posterior a ella
+        # y el aviso no sale — correcto, pero deja la prueba a merced del
+        # reloj: fallaba una de cada tres corridas sin que nada estuviera
+        # roto, y una prueba que falla sola enseña a no mirarlas.
+        #
+        # En el programa de verdad esto no pasa: una pasada tarda
+        # minutos, así que cualquier documento que llegue mientras corre
+        # queda segundos después de que arrancó. Aquí se espera ese
+        # segundo a mano para medir lo que la prueba dice medir.
+        _esperar_al_siguiente_segundo()
         subir("llego_despues.txt", b"Certificado que llego tarde 1.000")
         despues = pasada.resumen(cliente_id)
         comprobar("al subir un documento nuevo, avisa que la propuesta"
@@ -582,6 +607,123 @@ def main():
                   repartidos == grande["documentos"],
                   "%d en los bloques, %d en total"
                   % (repartidos, grande["documentos"]))
+
+        # --------------------------------------------------------------
+        titulo("Pensar no se puede comer el espacio de contestar")
+        # --------------------------------------------------------------
+        # El fallo más caro que ha tenido este programa. Los modelos
+        # nuevos piensan antes de contestar y lo que piensan sale del
+        # MISMO techo que la respuesta. Con un cliente de verdad —8
+        # documentos, 36 registros de exógena— el modelo se gastó 15.999
+        # de sus 16.000 tokens pensando, le quedó UNO para escribir, y
+        # contestó 200 sin una letra utilizable. Se cobró completo.
+        #
+        # Visto desde afuera era idéntico a «la respuesta venía
+        # corrupta», y el mensaje que salía —«el servicio contestó algo
+        # que no se entendió»— no dejaba ni sospechar la causa. Se le
+        # volvía a dar al botón y se volvía a pagar.
+        anthropic = proveedores.obtener("anthropic")
+
+        cuerpo_pasada = anthropic.cuerpo(
+            [{"role": "user", "content": "hola"}], "claude-sonnet-5",
+            esquema={"type": "object"},
+            largo_maximo=proveedores.LARGO_MAXIMO_DE_LA_PASADA,
+            esfuerzo=proveedores.ESFUERZO_DE_LA_PASADA,
+        )
+        comprobar("se le acota cuánto puede pensar",
+                  cuerpo_pasada["output_config"].get("effort")
+                  == proveedores.ESFUERZO_DE_LA_PASADA,
+                  cuerpo_pasada["output_config"].get("effort"))
+        comprobar("sin quitarle el esquema, que va en el mismo sitio",
+                  "format" in cuerpo_pasada["output_config"])
+        comprobar("y con techo de sobra para la respuesta",
+                  cuerpo_pasada["max_tokens"] >= 32000,
+                  cuerpo_pasada["max_tokens"])
+
+        # La regla de la casa: se PIDE, no se exige. El que no sepa
+        # hacerlo lo ignora y sigue funcionando igual.
+        sin_esa_maña = []
+        for clave in ("openai_compatible", "ollama"):
+            otro = proveedores.obtener(clave)
+            if "effort" in str(otro.cuerpo(
+                    [{"role": "user", "content": "hola"}], "m",
+                    esfuerzo="medium")):
+                sin_esa_maña.append(clave)
+        comprobar("el que no sabe acotar el esfuerzo lo ignora, no falla",
+                  not sin_esa_maña, sin_esa_maña)
+
+        # Y cuando pase igual —porque un cliente más grande lo va a
+        # volver a lograr—, que se ENTIENDA y que el gasto no se pierda.
+        cortada = {
+            "stop_reason": "max_tokens",
+            "content": [{"type": "thinking", "thinking": ""}],
+            "usage": {"input_tokens": 14479, "output_tokens": 16000,
+                      "output_tokens_details": {"thinking_tokens": 15999},
+                      "cache_creation_input_tokens": 7466,
+                      "cache_read_input_tokens": 0},
+        }
+        try:
+            anthropic.leer_respuesta(cortada)
+            estallo, aviso, gasto = False, "", None
+        except proveedores.ErrorDeProveedor as error:
+            estallo, aviso, gasto = True, str(error), error.uso
+        comprobar("una respuesta cortada se detecta", estallo)
+        comprobar("y dice el motivo de verdad, no «no se entendió»",
+                  "sin espacio para contestar" in aviso, aviso[:60])
+        comprobar("dice cuánto se fue en pensar",
+                  "15.999" in aviso, aviso[60:130])
+        comprobar("y avisa que esa llamada se cobró igual",
+                  "se cobró igual" in aviso)
+        comprobar("el gasto de la llamada fallida NO se pierde",
+                  gasto and gasto["salida"] == 16000
+                  and gasto["entrada"] == 14479, gasto)
+
+        # Que la pasada lo ANOTE, que es donde el contador lo ve.
+        LLAMADAS["cuantas"] = 0
+        de_verdad = pasada._pedir_un_bloque
+
+        def falla_cobrando(*a, **k):
+            raise proveedores.ErrorDeProveedor(
+                "se quedó sin espacio", uso={
+                    "entrada": 14479, "salida": 16000, "cache_lectura": 0,
+                    "cache_escritura": 7466, "medido": True})
+
+        pasada._pedir_un_bloque = falla_cobrando
+        try:
+            pasada.correr(cliente)
+            se_quejo = False
+        except pasada.PasadaFallida:
+            se_quejo = True
+        finally:
+            pasada._pedir_un_bloque = de_verdad
+
+        with db.conectar() as conexion:
+            fila = dict(conexion.execute(
+                "SELECT * FROM pasadas WHERE cliente_id = ?"
+                " ORDER BY id DESC LIMIT 1", (cliente_id,)).fetchone())
+        comprobar("una pasada que falla cobrando se reporta como fallida",
+                  se_quejo and fila["estado"] == "fallo", fila["estado"])
+        # Este cliente ya quedó con varios bloques —se los metió la
+        # sección de arriba—, y cada bloque es una llamada que se cobra
+        # aparte. Así que lo anotado son todas: el número sale de los
+        # bloques, no de una constante escrita a mano.
+        cuantos_bloques = fila["bloques"]
+        comprobar("y deja anotados los tokens que sí se pagaron, TODOS",
+                  fila["tokens_salida"] == 16000 * cuantos_bloques
+                  and fila["tokens_entrada"] == 14479 * cuantos_bloques,
+                  "%d bloques: entrada=%s salida=%s"
+                  % (cuantos_bloques, fila["tokens_entrada"],
+                     fila["tokens_salida"]))
+
+        # El costo en pesos solo lo puede calcular quien tenga precios.
+        # El proveedor de esta prueba no los tiene —a propósito: con un
+        # servidor compatible con OpenAI uno no sabe qué cobra— y por eso
+        # ahí el costo es 0 y no es un error. Con Anthropic sí se sabe, y
+        # eso es lo que se comprueba.
+        comprobar("con Anthropic, ese gasto perdido sí se puede costear",
+                  anthropic.costo_en_dolares(gasto) > 0,
+                  "US$%.4f la llamada que no sirvió"
+                  % anthropic.costo_en_dolares(gasto))
 
         # --------------------------------------------------------------
         titulo("Dos propuestas a la vez para el mismo cliente: NO")
