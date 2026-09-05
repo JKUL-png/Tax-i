@@ -451,20 +451,32 @@ class _Manejador(BaseHTTPRequestHandler):
 
     def _mandar(self, respuesta, solo_cabeceras=False):
         cuerpo = respuesta.cuerpo or b""
-        self.send_response(respuesta.codigo)
-        if respuesta.tipo:
-            self.send_header("Content-Type", respuesta.tipo)
-        self.send_header("Content-Length", str(len(cuerpo)))
-        for nombre, valor in respuesta.cabeceras.items():
-            self.send_header(nombre, valor)
-        self.end_headers()
-        if not solo_cabeceras and cuerpo:
-            try:
+        try:
+            self.send_response(respuesta.codigo)
+            if respuesta.tipo:
+                self.send_header("Content-Type", respuesta.tipo)
+            self.send_header("Content-Length", str(len(cuerpo)))
+            for nombre, valor in respuesta.cabeceras.items():
+                self.send_header(nombre, valor)
+            self.end_headers()
+            if not solo_cabeceras and cuerpo:
                 self.wfile.write(cuerpo)
-            except (BrokenPipeError, ConnectionResetError):
-                # El navegador cerró la pestaña a mitad de una descarga.
-                # No es un error del programa.
-                pass
+        except ConnectionError:
+            # El navegador se fue antes de que le contestáramos: cerró la
+            # pestaña, recargó con F5 o se le cayó la red. No es un error
+            # del programa, así que no ensucia la ventana negra.
+            #
+            # Se atrapa ConnectionError, que es la madre de las tres, y no
+            # una lista: Mac tira BrokenPipeError, Windows tira
+            # ConnectionAbortedError (el WinError 10053) y cualquiera de
+            # los dos puede tirar ConnectionResetError. Listando solo dos
+            # se colaba justo la de Windows, que es donde vive el contador,
+            # y le llenaba la pantalla de un traceback que no significaba
+            # nada.
+            #
+            # end_headers() también escribe al socket, por eso está
+            # adentro del try y no afuera.
+            self.close_connection = True
 
     def log_message(self, formato, *argumentos):
         """Lo que sale en la ventana negra.

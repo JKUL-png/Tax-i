@@ -228,6 +228,34 @@ PAGINAS_QUE_SE_LEEN = 12
 LETRAS_POR_DOCUMENTO = 6000
 
 
+def _callar_los_avisos_de_pypdf():
+    """Deja que pypdf escriba errores, pero no advertencias.
+
+    pypdf avisa por cada fuente rara de cada página. Un cliente con
+    cuarenta documentos llena la ventana negra de cientos de líneas como
+    esta, que además nadie puede accionar:
+
+        fontTools is required to fully parse the encoding of a CFF Type1
+        font in font dictionary {...}, but is not installed.
+
+    No es un error: cuando le falta fontTools, pypdf usa la codificación
+    estándar, que es la correcta para el texto normal. Lo dice él mismo:
+    «if you encounter encoding problems». Y fontTools NO se puede
+    instalar aquí, porque publica ruedas con código compilado y eso es lo
+    que Windows 11 bloquea (ver requirements.txt).
+
+    El problema de dejar esos avisos no es que estorben: es que TAPAN. Un
+    traceback de verdad, o el aviso de que un PDF venía con contraseña,
+    se pierde entre trescientas líneas de fuentes. Por eso se callan las
+    advertencias y se dejan pasar los errores.
+
+    Al contador esto no le esconde nada: cuando un PDF no se deja leer se
+    le dice con todas las letras, en el «motivo» que devuelve leer_pdf.
+    """
+    import logging
+    logging.getLogger("pypdf").setLevel(logging.ERROR)
+
+
 def leer_pdf(contenido):
     """Saca el texto de un PDF. Devuelve (texto, motivo).
 
@@ -243,6 +271,8 @@ def leer_pdf(contenido):
             "Falta la librería pypdf para leer PDF. Se instala con:"
             " pip install -r requirements.txt"
         )
+
+    _callar_los_avisos_de_pypdf()
 
     from io import BytesIO
 

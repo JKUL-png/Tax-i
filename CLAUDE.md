@@ -46,6 +46,14 @@ los identifica, dice cuáles faltan por cliente y genera un resumen. **No hace i
 Antes de agregar una dependencia nueva, preguntar. Cada librería es una cosa más que puede
 fallar al instalar en el computador del contador.
 
+**Y las versiones van fijas, con `==`.** Sin fijarlas, cada computador instalaba
+lo último que hubiera ese día: el Mac quedó con un pypdf y el PC del contador con
+otro, y Windows empezó a llenar la ventana negra de avisos que en Mac no salían.
+Depurar en Mac algo que solo pasa en Windows ya es difícil; hacerlo cuando además
+no corren el mismo código es imposible. Para subir una versión: se cambia el
+número, se corren las pruebas de abajo y **se prueba en Windows** antes de darlo
+por bueno.
+
 **Y una regla dura: la librería tiene que ser de Python puro.** Si trae archivos `.pyd`
 o `.so` —código compilado— no entra. Windows 11 los bloquea cuando no vienen firmados por
 una empresa que Microsoft ya conoce, y las librerías de Python no vienen firmadas. Cuando
@@ -304,6 +312,22 @@ que él haya creado. Sale la propuesta completa del formulario.
   una vez por confirmación —no una por archivo— y solo si el cliente ya
   tiene exógena. Y la pide la PANTALLA, no el servidor, para que él vea
   que está trabajando en vez de mirar un botón trabado un minuto.
+- **Nunca dos pasadas a la vez para el mismo cliente.**
+  `pasada.pasada_en_curso` mira si ya hay una abierta y `correr` se niega
+  ANTES de armar la entrada, así que no llama al modelo ni gasta. Al
+  recargar, la pantalla dice que está corriendo y desde hace cuánto, y
+  deja los botones bloqueados.
+
+  Es el arreglo de un gasto real: una pasada tarda minutos, no se ve
+  trabajar, y recargar con F5 **no la detiene** —el servidor sigue y paga
+  hasta el final—. Quien encontraba el botón libre le daba otra vez, y
+  cada clic era otra pasada completa cobrando aparte.
+
+  El candado se suelta solo cuando la pasada abierta lleva más de lo que
+  físicamente podría tardar (`_techo_de_una_pasada`, calculado del tiempo
+  de espera del servicio, no inventado): esa se quedó así porque cerraron
+  el programa a la mitad, y se marca fallida. Sin esa parte, un cierre a
+  destiempo dejaría a ese cliente sin poder pedir propuesta nunca más.
 - **Cuando llegan papeles después de una propuesta, se avisa; no se
   vuelve a correr.** `pasada.resumen` cuenta qué entró después
   (`cambios`) y la pantalla lo dice con el botón al lado.

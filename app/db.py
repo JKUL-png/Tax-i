@@ -2201,6 +2201,27 @@ def obtener_pasada(pasada_id):
     return dict(fila) if fila else None
 
 
+def pasada_corriendo(cliente_id):
+    """La pasada que este cliente tiene abierta ahora mismo. O None.
+
+    Es lo contrario de `ultima_pasada`: aquella busca la propuesta ya
+    terminada, para dibujarla; esta busca la que todavía está en el aire,
+    para NO arrancar otra encima.
+
+    Aquí solo se hace la consulta. Decidir si una pasada abierta sigue
+    viva o se quedó colgada es cosa de `pasada.pasada_en_curso`, que es
+    quien conoce los tiempos de espera del servicio.
+    """
+    with conectar() as conexion:
+        fila = conexion.execute(
+            "SELECT * FROM pasadas WHERE cliente_id = ?"
+            " AND estado = 'corriendo'"
+            " ORDER BY id DESC LIMIT 1",
+            (cliente_id,),
+        ).fetchone()
+    return dict(fila) if fila else None
+
+
 def ultima_pasada(cliente_id):
     """La última pasada de un cliente que haya dejado algo. O None.
 

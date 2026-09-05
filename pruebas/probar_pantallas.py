@@ -743,6 +743,57 @@ def main():
                     and pagina.locator("#boton-reproponer-aviso").count() == 1,
                     texto_viejo.replace("\n", " · "))
 
+            # ---------- Ya hay una propuesta corriendo ----------
+            #
+            # Esta es la pantalla que le ahorra plata al contador. Una
+            # propuesta tarda minutos, no se ve trabajar, y recargar con
+            # F5 NO la detiene: el servidor sigue y paga hasta el final.
+            # Si al recargar se encuentra el botón libre, le da otra vez
+            # y paga doble. Así que al recargar tiene que ver que está
+            # corriendo, y el botón NO se puede poder oprimir.
+            #
+            # `crear_pasada` la deja justo en 'corriendo', que es el
+            # estado de verdad — no se simula nada.
+            errores.clear()
+            corriendo_id = base.crear_pasada(
+                id_cliente, proveedor="ninguno", modelo="de-prueba")
+            pagina.reload(wait_until="networkidle")
+            pagina.locator('[data-vista="formulario"]').click()
+            pagina.evaluate(
+                "document.getElementById('plegable-formulario').open = true"
+            )
+            pagina.wait_for_timeout(900)
+
+            aviso_corriendo = pagina.locator("#propuesta-corriendo")
+            revisar("al recargar, dice que ya hay una propuesta corriendo",
+                    "oculto" not in
+                    (aviso_corriendo.get_attribute("class") or ""),
+                    aviso_corriendo.get_attribute("class"))
+            texto_corriendo = aviso_corriendo.inner_text()
+            revisar("y dice desde hace cuánto, y que puede tardar",
+                    "desde hace" in texto_corriendo
+                    and "tardar" in texto_corriendo,
+                    texto_corriendo.replace("\n", " · ")[:80])
+            revisar("el botón de proponer queda bloqueado, que es el punto",
+                    pagina.locator("#boton-proponer").is_disabled()
+                    and pagina.locator("#boton-reproponer").is_disabled(),
+                    "proponer / volver a proponer")
+            revisar("todo eso sin errores de JavaScript", not errores,
+                    errores[:3])
+
+            # Y cuando termina, el aviso se va y el botón vuelve.
+            base.cerrar_pasada(corriendo_id, "fallo", motivo="de prueba")
+            pagina.reload(wait_until="networkidle")
+            pagina.locator('[data-vista="formulario"]').click()
+            pagina.evaluate(
+                "document.getElementById('plegable-formulario').open = true"
+            )
+            pagina.wait_for_timeout(900)
+            revisar("cuando termina, el aviso se va y el botón vuelve",
+                    "oculto" in (pagina.locator("#propuesta-corriendo")
+                                 .get_attribute("class") or "")
+                    and not pagina.locator("#boton-reproponer").is_disabled())
+
             titulo("G. El selector de renglones")
             errores.clear()
             pagina.locator('[data-vista="documentos"]').click()

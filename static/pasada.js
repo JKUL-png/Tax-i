@@ -42,6 +42,8 @@ const cajaVieja = document.getElementById("propuesta-vieja");
 const textoVieja = document.getElementById("propuesta-vieja-texto");
 const botonReproponerAviso = document.getElementById("boton-reproponer-aviso");
 const marcaAutomatico = document.getElementById("propuesta-automatico");
+const cajaCorriendo = document.getElementById("propuesta-corriendo");
+const textoCorriendo = document.getElementById("propuesta-corriendo-texto");
 
 let cliente = null;
 let ultimo = null;
@@ -90,8 +92,35 @@ function pesos(valor) {
   return "$" + Math.round(valor).toLocaleString("es-CO");
 }
 
+/* Hay una propuesta corriendo ahora mismo para este cliente.
+
+   Mientras la haya, los botones de proponer quedan bloqueados. No es por
+   ordenar la pantalla: cada propuesta le cuesta plata al contador, y dos
+   a la vez para el mismo cliente cobran doble y proponen lo mismo. El
+   servidor tampoco la deja (contesta 409), pero el botón bloqueado es lo
+   que evita que se intente. */
+function pintarCorriendo(informe) {
+  const corriendo = (informe || {}).corriendo;
+  if (cajaCorriendo) {
+    cajaCorriendo.classList.toggle("oculto", !corriendo);
+    if (corriendo && textoCorriendo) {
+      textoCorriendo.textContent =
+        "Se está proponiendo el formulario de este cliente desde hace "
+        + corriendo.desde_hace + ". Puede tardar varios minutos. Deje la"
+        + " página abierta o vuelva luego: el trabajo sigue aunque cierre,"
+        + " y la propuesta queda guardada.";
+    }
+  }
+  const bloquear = !!corriendo;
+  botonProponer.disabled = bloquear;
+  if (botonReproponer) botonReproponer.disabled = bloquear;
+  if (botonReproponerAviso) botonReproponerAviso.disabled = bloquear;
+}
+
+
 function mostrar(informe) {
   ultimo = informe;
+  pintarCorriendo(informe);
 
   cajaSinIa.classList.toggle("oculto", !!informe.ia_disponible);
   if (!informe.ia_disponible) {
@@ -387,8 +416,16 @@ async function pedirElEstimado() {
 }
 
 async function proponer() {
+  /* Ya hay una corriendo: ni se pide. El servidor también se niega, pero
+     así ni siquiera sale el viaje. */
+  if (ultimo && ultimo.corriendo) {
+    pintarCorriendo(ultimo);
+    return;
+  }
+
   botonProponer.disabled = true;
   if (botonReproponer) botonReproponer.disabled = true;
+  if (botonReproponerAviso) botonReproponerAviso.disabled = true;
   const antes = botonProponer.textContent;
   botonProponer.textContent = "Leyendo todo y proponiendo…";
   try {
@@ -399,10 +436,20 @@ async function proponer() {
            "exito");
   } catch (e) {
     avisar(e.message || "No se pudo proponer el formulario.");
+    /* Puede que se haya negado porque ya hay una corriendo —arrancada en
+       otra pestaña, o antes de recargar—. Se vuelve a preguntar el estado
+       para que el aviso aparezca y los botones queden bloqueados. Es un
+       GET: no llama al modelo ni cuesta nada. */
+    try {
+      mostrar(await pedir("/pasada"));
+    } catch (e2) {
+      /* Si ni eso responde, no se insiste. */
+    }
   } finally {
-    botonProponer.disabled = false;
     botonProponer.textContent = antes;
-    if (botonReproponer) botonReproponer.disabled = false;
+    /* Quién puede volver a darle al botón lo decide el estado, no este
+       bloque: si quedó una pasada corriendo, siguen bloqueados. */
+    pintarCorriendo(ultimo);
   }
 }
 

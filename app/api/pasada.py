@@ -89,6 +89,10 @@ def api_correr(peticion, id_cliente, **partes):
         return pasada.correr(cliente)
     except pasada.SinIA as error:
         raise ErrorHttp(409, str(error))
+    except pasada.PasadaEnCurso as error:
+        # 409: el pedido está bien hecho, pero ahora mismo no cabe. Lo
+        # importante es que aquí NO se llamó al modelo y no se gastó nada.
+        raise ErrorHttp(409, str(error))
     except pasada.PasadaFallida as error:
         raise ErrorHttp(502, str(error))
 

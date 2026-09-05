@@ -52,6 +52,7 @@ el modelo: ver `instrucciones.comprobar_nivel`, que solo puede bajarlo.
 """
 
 import json
+from datetime import datetime
 
 from app import (bitacora, clasificacion, db, documentos,
                  exogena_cliente, formulario, instrucciones, lectura,
@@ -90,6 +91,89 @@ class SinIA(Exception):
 
 class PasadaFallida(Exception):
     """No se pudo completar la pasada. El texto se le muestra al contador."""
+
+
+class PasadaEnCurso(Exception):
+    """Ese cliente ya tiene una pasada corriendo. No se arranca otra."""
+
+
+# Cuánto margen se le da a una pasada por encima de lo que el servicio
+# podría tardar, para lo que hace este computador: abrir los PDF, sacarles
+# el texto y escribir en la base.
+MARGEN_DEL_TECHO = 120
+
+
+def _techo_de_una_pasada(bloques):
+    """Cuánto puede tardar una pasada, como máximo, sin estar colgada.
+
+    Se calcula, no se inventa: por bloque caben dos peticiones —la buena
+    y el único reintento— de hasta SEGUNDOS_DE_ESPERA_DE_LA_PASADA cada
+    una, más las esperas por cupo. Si mañana se cambia el tiempo de
+    espera del servicio, este techo se mueve solo.
+    """
+    por_bloque = (proveedores.SEGUNDOS_DE_ESPERA_DE_LA_PASADA * 2
+                  + sum(proveedores.ESPERAS_POR_CUPO))
+    return por_bloque * max(1, int(bloques or 1)) + MARGEN_DEL_TECHO
+
+
+def _segundos_desde(marca):
+    """Cuántos segundos pasaron desde una fecha de la base. O None."""
+    try:
+        return (datetime.now() - datetime.fromisoformat(marca)).total_seconds()
+    except (TypeError, ValueError):
+        return None
+
+
+def hace_cuanto(segundos):
+    """«unos segundos», «40 segundos», «3 minutos».
+
+    Concuerda el singular a propósito: un «hace 1 segundos» en pantalla
+    hace dudar de todo lo demás que diga el programa.
+    """
+    segundos = int(segundos or 0)
+    if segundos < 10:
+        return "unos segundos"
+    if segundos < 90:
+        return "%d segundos" % segundos
+    minutos = round(segundos / 60)
+    return "%d minuto%s" % (minutos, "" if minutos == 1 else "s")
+
+
+def pasada_en_curso(cliente_id):
+    """La pasada que este cliente tiene corriendo de verdad. O None.
+
+    Que una pasada tarde varios minutos es normal —el servicio tiene
+    cinco minutos por bloque y puede haber varios—, así que no se puede
+    dar por muerta a la primera. Lo que no es normal es una que lleva más
+    de lo que físicamente podría tardar: esa se quedó abierta porque
+    cerraron el programa a la mitad, y se cierra aquí.
+
+    Sin esa parte, un solo cierre a destiempo dejaría a ese cliente sin
+    poder pedir propuesta nunca más, que es un daño peor que el que se
+    está evitando.
+
+    Se marca como fallida y no como terminada, para que `ultima_pasada`
+    la salte y no le tape al contador la propuesta buena que ya tenía.
+    """
+    fila = db.pasada_corriendo(cliente_id)
+    if fila is None:
+        return None
+
+    segundos = _segundos_desde(fila["corrida_en"])
+    if segundos is None or segundos > _techo_de_una_pasada(fila["bloques"]):
+        db.cerrar_pasada(
+            fila["id"], "fallo",
+            motivo="Se interrumpió: el programa se cerró mientras corría."
+                   " Lo que alcanzara a gastar no quedó anotado.",
+        )
+        return None
+
+    return {
+        "id": fila["id"],
+        "segundos": int(segundos),
+        "desde_hace": hace_cuanto(segundos),
+        "bloques": fila["bloques"],
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -636,6 +720,23 @@ def correr(cliente):
         raise SinIA(CONFIG.motivo)
 
     cliente_id = cliente["id"]
+
+    # El candado. Va ANTES de armar la entrada porque armarla ya cuesta:
+    # abre todos los PDF del cliente y les saca el texto.
+    #
+    # Sin esto, cada clic en «proponer» arrancaba otra pasada completa en
+    # paralelo, y todas cobraban. Pasa más fácil de lo que parece: una
+    # pasada larga no se ve trabajar, el contador cree que se trabó,
+    # recarga con F5 —y recargar NO la detiene, el servidor sigue y paga
+    # hasta el final— y vuelve a darle al botón.
+    en_curso = pasada_en_curso(cliente_id)
+    if en_curso:
+        raise PasadaEnCurso(
+            "Ya hay una propuesta corriendo para este cliente, desde hace"
+            " %s. Espere a que termine: pedir otra ahora la cobraría dos"
+            " veces y propondría lo mismo." % en_curso["desde_hace"]
+        )
+
     try:
         entrada = armar_entrada(cliente)
     except formulario.SinPlantilla as error:
@@ -817,6 +918,11 @@ def resumen(cliente_id):
     componentes: si una de tres cifras la interpretó el modelo, ese
     renglón hay que mirarlo.
     """
+    # Si hay una corriendo se dice, y eso es la mitad del arreglo: al
+    # recargar la página el contador ve que SÍ está trabajando, en vez de
+    # un botón libre que lo invita a pagar otra vez.
+    corriendo = pasada_en_curso(cliente_id)
+
     pasada = db.ultima_pasada(cliente_id)
     if pasada is None:
         return {
@@ -825,6 +931,7 @@ def resumen(cliente_id):
             "motivo": CONFIG.motivo,
             "automatico": proponer_al_confirmar(),
             "cambios": {"documentos": 0, "exogena": False},
+            "corriendo": corriendo,
             "renglones": [],
         }
 
@@ -871,6 +978,7 @@ def resumen(cliente_id):
         # Qué llegó después de esta propuesta. La pantalla lo avisa con
         # el botón al lado; volver a correrla la pide él.
         "cambios": _que_cambio_desde_la_pasada(cliente_id, pasada),
+        "corriendo": corriendo,
         "pasada": pasada,
         "renglones": renglones,
         "propuestos": len(cuentan),

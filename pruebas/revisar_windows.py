@@ -537,6 +537,46 @@ def revisar_codigo():
         " | ".join(absolutas) if absolutas else "",
     )
 
+    # 3. El navegador que se va a mitad de una respuesta.
+    #
+    #    Pasa todos los días: el contador recarga con F5, cierra la
+    #    pestaña o se le cae el wifi mientras el servidor le contesta.
+    #    Cada sistema lo reporta con una excepción DISTINTA —Mac tira
+    #    BrokenPipeError, Windows tira ConnectionAbortedError, el
+    #    WinError 10053— y por eso el programa atrapa ConnectionError,
+    #    que es la madre de las tres.
+    #
+    #    Se prueba con las tres a la vez, aquí en el Mac, porque si no la
+    #    de Windows solo se descubre allá: llenaba la ventana negra de un
+    #    traceback que no significaba nada y tapaba los avisos de verdad.
+    from app import servidor
+
+    escaparon = []
+    for excepcion in (BrokenPipeError, ConnectionResetError,
+                      ConnectionAbortedError):
+        class _SocketQueSeCae:
+            def write(self, datos, _e=excepcion):
+                raise _e(10053, "la conexión se cortó")
+
+        manejador = servidor._Manejador.__new__(servidor._Manejador)
+        manejador.wfile = _SocketQueSeCae()
+        manejador.send_response = lambda *a, **k: None
+        manejador.send_header = lambda *a, **k: None
+        manejador.end_headers = lambda *a, **k: manejador.wfile.write(b"")
+        try:
+            manejador._mandar(servidor.Respuesta(
+                b'{"hola":1}', codigo=200, tipo="application/json"))
+        except Exception:
+            escaparon.append(excepcion.__name__)
+
+    comprobar(
+        "si el navegador se va, el servidor no saca un traceback",
+        not escaparon,
+        " | ".join(escaparon) if escaparon else
+        "probadas las tres: BrokenPipe (Mac), ConnectionAborted (Windows)"
+        " y ConnectionReset",
+    )
+
 
 # ==========================================================
 # H. Los programas de afuera y el puerto

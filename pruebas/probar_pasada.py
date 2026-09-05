@@ -42,6 +42,7 @@ import shutil
 import sys
 import tempfile
 import threading
+from datetime import datetime, timedelta
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
@@ -581,6 +582,64 @@ def main():
                   repartidos == grande["documentos"],
                   "%d en los bloques, %d en total"
                   % (repartidos, grande["documentos"]))
+
+        # --------------------------------------------------------------
+        titulo("Dos propuestas a la vez para el mismo cliente: NO")
+        # --------------------------------------------------------------
+        # Esto es lo que le costó plata al dueño del proyecto: una pasada
+        # larga no se ve trabajar, uno cree que se trabó, recarga con F5
+        # —que NO la detiene: el servidor sigue y paga hasta el final— y
+        # vuelve a darle al botón. Cada clic era otra pasada completa
+        # cobrando aparte.
+        LLAMADAS["cuantas"] = 0
+        abierta = db.crear_pasada(cliente_id, proveedor="anthropic",
+                                  modelo="de-mentira", bloques=1)
+
+        comprobar("el candado ve la pasada abierta",
+                  (pasada.pasada_en_curso(cliente_id) or {}).get("id")
+                  == abierta)
+
+        se_nego = False
+        aviso = ""
+        try:
+            pasada.correr(cliente)
+        except pasada.PasadaEnCurso as error:
+            se_nego = True
+            aviso = str(error)
+        comprobar("no arranca una segunda", se_nego, aviso[:70])
+        comprobar("y NO llamó al modelo, que es lo que costaba",
+                  LLAMADAS["cuantas"] == 0, LLAMADAS["cuantas"])
+        comprobar("le dice desde hace cuánto está corriendo",
+                  "desde hace" in aviso, aviso[:70])
+
+        mientras = pasada.resumen(cliente_id)
+        comprobar("la pantalla se entera al recargar",
+                  bool(mientras.get("corriendo")), mientras.get("corriendo"))
+        comprobar("y sigue mostrando la propuesta anterior",
+                  mientras["hay_pasada"] and len(mientras["renglones"]) > 0)
+
+        # Una pasada abierta hace tres horas no está corriendo: quedó así
+        # porque cerraron el programa a la mitad. Si el candado no la
+        # soltara, ese cliente no podría volver a pedir propuesta NUNCA.
+        vieja = datetime.now() - timedelta(
+            seconds=pasada._techo_de_una_pasada(1) + 60
+        )
+        with db.conectar() as conexion:
+            conexion.execute(
+                "UPDATE pasadas SET corrida_en = ? WHERE id = ?",
+                (vieja.isoformat(timespec="seconds"), abierta),
+            )
+
+        comprobar("una pasada colgada deja de bloquear",
+                  pasada.pasada_en_curso(cliente_id) is None)
+        comprobar("y queda marcada como fallida, con el motivo",
+                  db.obtener_pasada(abierta)["estado"] == "fallo"
+                  and "interrumpió" in db.obtener_pasada(abierta)["motivo"],
+                  db.obtener_pasada(abierta)["motivo"][:50])
+        comprobar("sin taparle la propuesta buena que ya tenía",
+                  pasada.resumen(cliente_id)["hay_pasada"])
+        comprobar("y con el candado suelto se puede volver a pedir",
+                  pasada.pasada_en_curso(cliente_id) is None)
 
         # --------------------------------------------------------------
         titulo("F. Sin IA configurada, todo lo demás sigue funcionando")

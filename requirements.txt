@@ -14,6 +14,23 @@
 # ANTES DE AGREGAR UNA LIBRERÍA: revise que no traiga archivos .pyd o .so.
 # Si los trae, es una que puede fallar en el computador del contador.
 
-python-multipart    # separar los archivos que se suben desde el navegador
-openpyxl            # leer y escribir el Excel del Formulario 210
-pypdf               # sacar el texto de los PDF
+# LAS VERSIONES VAN FIJAS, con ==, y eso tampoco es casualidad.
+#
+# Sin fijarlas, cada computador instalaba una versión distinta: este Mac
+# quedó con pypdf 6.16.2 y el PC del contador con una más nueva, porque
+# cada uno resolvió lo último que había el día que instaló. Se descubrió
+# cuando Windows empezó a llenar la ventana negra de avisos de fontTools
+# que en Mac no salían — no porque Mac estuviera mejor, sino porque su
+# pypdf era viejo y ni siquiera tenía ese aviso.
+#
+# Depurar en Mac algo que solo pasa en Windows ya es bastante difícil;
+# hacerlo cuando además no corren el mismo código es imposible. Las tres
+# versiones de abajo son las que están probadas en este proyecto, y las
+# tres sirven de Python 3.9 a 3.14.
+#
+# Para subirlas: se cambia el número, se corren las pruebas de la lista
+# del CLAUDE.md, y se prueba EN WINDOWS antes de darlo por bueno.
+
+python-multipart==0.0.20    # separar los archivos que se suben desde el navegador
+openpyxl==3.1.5             # leer y escribir el Excel del Formulario 210
+pypdf==6.16.2               # sacar el texto de los PDF

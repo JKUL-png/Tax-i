@@ -349,6 +349,15 @@
                 </div>
               </div>
 
+              <!-- Ya hay una propuesta corriendo para este cliente.
+                   Se muestra apenas carga la página, y eso es lo que
+                   importa: recargar NO detiene la pasada del servidor,
+                   así que sin este aviso quien recarga ve el botón libre
+                   y vuelve a pagar por lo mismo. -->
+              <div id="propuesta-corriendo" class="aviso-pendientes oculto">
+                <span id="propuesta-corriendo-texto"></span>
+              </div>
+
               <div id="propuesta-arrancar" class="tarjeta oculto">
                 <h3>Proponer el formulario de este cliente</h3>
                 <p class="ayuda">
